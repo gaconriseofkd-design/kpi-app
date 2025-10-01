@@ -1,106 +1,116 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient"; // 👈 import client
 
 export default function AdminPage() {
-  const [users, setUsers] = useState([]);
+  const emptyRow = { msnv: "", full_name: "", role: "worker", approver_msnv: "", approver_name: "" };
+  const [rows, setRows] = useState([emptyRow]);
   const [loading, setLoading] = useState(false);
 
-  // Load dữ liệu từ Supabase khi vào trang
-  useEffect(() => {
-    loadUsers();
-  }, []);
-
+  // Load danh sách user
   async function loadUsers() {
     setLoading(true);
-    try {
-      const resp = await fetch("/api/kpi/users").then(r => r.json());
-      if (resp.ok) setUsers(resp.rows);
-    } catch (e) {
-      console.error("Load users error:", e);
-    }
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .order("id", { ascending: true });
     setLoading(false);
-  }
 
-  function addRow() {
-    setUsers(u => [...u, { worker_id: "", worker_name: "", role: "worker", approver_id: "", approver_name: "" }]);
-  }
-
-  function update(ri, key, val) {
-    setUsers(u => u.map((r,i)=> i===ri ? { ...r, [key]: val } : r));
-  }
-
-  function removeRow(ri) {
-    setUsers(u => u.filter((_,i) => i!==ri));
-  }
-
-  async function saveAll() {
-    try {
-      const resp = await fetch("/api/kpi/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ users })
-      }).then(r => r.json());
-
-      if (resp.ok) {
-        alert("Lưu thành công!");
-        setUsers(resp.rows);
-      } else {
-        alert("Lỗi lưu: " + resp.error);
-      }
-    } catch (e) {
-      alert("Lỗi kết nối: " + e.message);
+    if (error) {
+      alert("Load users lỗi: " + error.message);
+      return;
     }
+    setRows((data && data.length) ? data : [emptyRow]);
   }
 
+  // Lưu tất cả (upsert theo msnv)
+  async function saveAll() {
+    const toUpsert = rows
+      .map(r => ({
+        msnv: (r.msnv || "").trim(),
+        full_name: (r.full_name || "").trim(),
+        role: r.role || "worker",
+        approver_msnv: (r.approver_msnv || "").trim(),
+        approver_name: (r.approver_name || "").trim(),
+      }))
+      .filter(r => r.msnv); // chỉ lưu dòng có MSNV
+
+    if (!toUpsert.length) {
+      alert("Chưa có dòng nào có MSNV để lưu.");
+      return;
+    }
+
+    setLoading(true);
+    const { error } = await supabase
+      .from("users")
+      .upsert(toUpsert, { onConflict: "msnv" }) // cần unique(msnv)
+      .select();
+    setLoading(false);
+
+    if (error) {
+      alert("Lưu lỗi: " + error.message);
+      return;
+    }
+    alert("Lưu thành công!");
+    loadUsers();
+  }
+
+  // Xoá 1 dòng trên DB (nếu đã có msnv)
+  async function removeRow(idx) {
+    const r = rows[idx];
+    if (r?.msnv) {
+      const { error } = await supabase.from("users").delete().eq("msnv", r.msnv);
+      if (error) {
+        alert("Xoá lỗi: " + error.message);
+        return;
+      }
+    }
+    setRows(prev => prev.filter((_, i) => i !== idx));
+  }
+
+  useEffect(() => { loadUsers(); }, []);
+
+  // ... phần JSX table giữ nguyên layout của bạn, ví dụ:
   return (
-    <div className="space-y-4">
-      <div className="flex items-center">
-        <h2 className="text-xl font-bold">Quản lý người dùng & phân quyền</h2>
-        <button className="ml-auto px-3 py-2 rounded bg-green-600 text-white" onClick={saveAll}>
-          Lưu tất cả
+    <div>
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">Quản lý người dùng & phân quyền</h2>
+        <button onClick={saveAll} disabled={loading} className="btn btn-primary">
+          {loading ? "Đang lưu..." : "Lưu tất cả"}
         </button>
       </div>
 
-      {loading ? (
-        <p>Đang tải...</p>
-      ) : (
-        <div className="overflow-auto border rounded">
-          <table className="min-w-full text-sm">
-            <thead className="bg-neutral-50">
-              <tr>
-                {["MSNV","Họ & tên","Role","Approver MSNV","Approver Họ tên",""].map((h,i)=>
-                  <th key={i} className="text-left px-3 py-2 border-b">{h}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((r,ri)=>(
-                <tr key={ri} className="odd:bg-white even:bg-neutral-50/40">
-                  <td><input className="border rounded px-2 py-1 w-32" value={r.worker_id}
-                    onChange={e=>update(ri,"worker_id",e.target.value)} /></td>
-                  <td><input className="border rounded px-2 py-1 w-40" value={r.worker_name}
-                    onChange={e=>update(ri,"worker_name",e.target.value)} /></td>
-                  <td>
-                    <select className="border rounded px-2 py-1" value={r.role}
-                      onChange={e=>update(ri,"role",e.target.value)}>
-                      <option value="worker">worker</option>
-                      <option value="approver">approver</option>
-                      <option value="admin">admin</option>
-                    </select>
-                  </td>
-                  <td><input className="border rounded px-2 py-1 w-32" value={r.approver_id}
-                    onChange={e=>update(ri,"approver_id",e.target.value)} /></td>
-                  <td><input className="border rounded px-2 py-1 w-40" value={r.approver_name}
-                    onChange={e=>update(ri,"approver_name",e.target.value)} /></td>
-                  <td><button className="text-red-600" onClick={()=>removeRow(ri)}>Xóa</button></td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      <button className="px-3 py-2 rounded bg-white border" onClick={addRow}>
-        + Thêm dòng
-      </button>
+      {/* table đơn giản; bạn giữ nguyên UI, chỉ đổi onChange setRows */}
+      <div className="mt-4">
+        {rows.map((r, i) => (
+          <div key={i} className="grid grid-cols-5 gap-2 mb-2">
+            <input value={r.msnv} onChange={e => {
+              const v = e.target.value; setRows(p => p.map((x, idx) => idx===i ? {...x, msnv:v} : x));
+            }} placeholder="MSNV" className="input" />
+            <input value={r.full_name} onChange={e => {
+              const v = e.target.value; setRows(p => p.map((x, idx) => idx===i ? {...x, full_name:v} : x));
+            }} placeholder="Họ & tên" className="input" />
+            <select value={r.role} onChange={e => {
+              const v = e.target.value; setRows(p => p.map((x, idx) => idx===i ? {...x, role:v} : x));
+            }} className="input">
+              <option value="worker">worker</option>
+              <option value="approver">approver</option>
+              <option value="admin">admin</option>
+            </select>
+            <input value={r.approver_msnv} onChange={e => {
+              const v = e.target.value; setRows(p => p.map((x, idx) => idx===i ? {...x, approver_msnv:v} : x));
+            }} placeholder="Approver MSNV" className="input" />
+            <div className="flex gap-2">
+              <input value={r.approver_name} onChange={e => {
+                const v = e.target.value; setRows(p => p.map((x, idx) => idx===i ? {...x, approver_name:v} : x));
+              }} placeholder="Approver Họ tên" className="input flex-1" />
+              <button onClick={() => removeRow(i)} className="text-red-500">Xoá</button>
+            </div>
+          </div>
+        ))}
+        <button onClick={() => setRows(p => [...p, { ...emptyRow }])} className="btn mt-2">
+          + Thêm dòng
+        </button>
+      </div>
     </div>
   );
 }
