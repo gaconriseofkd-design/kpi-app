@@ -176,7 +176,7 @@ function ReportContent() {
     [rows, page]
   );
 
-  /* ----- Xuất CSV ----- */
+  /* ----- Xuất XLSX ----- */
  
   function exportXLSX() {
     if (!rows.length) return alert("Không có dữ liệu để xuất.");
@@ -229,7 +229,7 @@ function ReportContent() {
         </label>
         <div className="flex items-end gap-2">
           <button className="btn btn-primary" onClick={runQuery}>{loading ? "Đang tải..." : "Xem báo cáo"}</button>
-          <button className="btn" onClick={exportCSV} disabled={!rows.length}>Xuất CSV</button>
+          <button className="btn" onClick={exportXLSX} disabled={!rows.length}>Xuất XLSX</button>
         </div>
       </div>
 
