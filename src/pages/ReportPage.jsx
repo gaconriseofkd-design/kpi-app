@@ -1,6 +1,7 @@
 // src/pages/ReportPage.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import * as XLSX from "xlsx";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer
@@ -32,7 +33,7 @@ export default function ReportPage() {
             className="input w-full"
             value={pwd}
             onChange={(e) => setPwd(e.target.value)}
-            placeholder="davidtu"
+            placeholder="..."
           />
           <button className="btn btn-primary mt-4 w-full" type="submit">Đăng nhập</button>
         </form>
@@ -176,27 +177,33 @@ function ReportContent() {
   );
 
   /* ----- Xuất CSV ----- */
-  function exportCSV() {
+ 
+  function exportXLSX() {
     if (!rows.length) return alert("Không có dữ liệu để xuất.");
-    const headers = [
-      "date","worker_id","worker_name","approver_id","approver_name",
-      "line","ca","work_hours","stop_hours","defects","oe",
-      "p_score","q_score","day_score","overflow","compliance_code",
-      "violations","status","approved_at","created_at","updated_at"
-    ];
-    const csv = [
-      headers.join(","),
-      ...rows.map(r => headers.map(h => `"${String(r[h] ?? "").replace(/"/g,'""')}"`).join(","))
-    ].join("\n");
 
-    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `kpi_report_${dateFrom}_to_${dateTo}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    // Đảm bảo ID là string để giữ 0 đầu
+    const data = rows.map(r => ({
+      date: r.date,
+      worker_id: String(r.worker_id),       // 👈 string
+      worker_name: r.worker_name,
+      approver_id: String(r.approver_id),   // 👈 string
+      approver_name: r.approver_name,
+      line: r.line, ca: r.ca,
+      work_hours: r.work_hours,
+      stop_hours: r.stop_hours,
+      defects: r.defects, oe: r.oe,
+      p_score: r.p_score, q_score: r.q_score, day_score: r.day_score,
+      overflow: r.overflow, compliance_code: r.compliance_code,
+      violations: r.violations, status: r.status,
+      approved_at: r.approved_at, created_at: r.created_at, updated_at: r.updated_at,
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "KPI");
+    XLSX.writeFile(wb, `kpi_report_${dateFrom}_to_${dateTo}.xlsx`);
   }
+
 
   return (
     <div className="p-4 space-y-6">
