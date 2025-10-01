@@ -33,6 +33,7 @@ function Layout({ children }) {
             <NavItem to="/quick">Nhập KPI nhanh</NavItem> {/* 👈 Thêm vào menu */}
             <NavItem to="/pending">Chờ duyệt</NavItem>
             <NavItem to="/approve">Xét duyệt</NavItem>
+            <NavItem to="/report">Báo cáo KPI</NavItem> {/* 👈 thêm */}
             <NavItem to="/admin">Quản lý User</NavItem>
           </nav>
         </div>
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="/pending" element={<Pending />} />
           <Route path="/approve" element={<ApprovePage />} />
           <Route path="/admin" element={<AdminPage />} />
+          <Route path="/report" element={<ReportPage />} /> {/* 👈 thêm */}
           <Route path="*" element={<div>404 - Không tìm thấy trang</div>} />
         </Routes>
       </Layout>
