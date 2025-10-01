@@ -5,21 +5,45 @@ import { supabase } from "../lib/supabaseClient";
 
 const ALLOWED_ROLES = ["worker", "approver", "admin"];
 
+// Bỏ dấu + thường hoá để map header linh hoạt
 function normalizeHeader(s = "") {
   return s
-    .normalize("NFD").replace(/[\u0300-\u036f]/g, "") // bỏ dấu
+    .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
     .replace(/[^a-zA-Z0-9/& ]+/g, " ")
     .toLowerCase()
     .trim();
 }
 
+// Map nhiều biến thể tên cột -> field DB
 function mapHeaderToField(h) {
   const n = normalizeHeader(h);
+
   if (["msnv"].includes(n)) return "msnv";
-  if (["ho ten","ho & ten","ho va ten","full_name","hoten"].includes(n)) return "full_name";
+  if (["ho ten","ho & ten","ho va ten","full_name","hoten","ho ten nhan vien","ho va ten nhan vien"].includes(n))
+    return "full_name";
   if (["role","vai tro"].includes(n)) return "role";
-  if (["approver msnv","msnv nguoi duyet","msnv duyet"].includes(n)) return "approver_msnv";
-  if (["approver ho ten","approver ho & ten","ten nguoi duyet"].includes(n)) return "approver_name";
+
+  // 👇 Thêm đầy đủ biến thể cho người duyệt
+  if ([
+    "approver msnv",
+    "msnv nguoi duyet",
+    "msnv duyet",
+    "nguoi duyet msnv",
+    "ma so nguoi duyet",
+    "msnv approver",
+    "msnv approve"
+  ].includes(n)) return "approver_msnv";
+
+  if ([
+    "approver ho ten",
+    "approver ho & ten",
+    "ten nguoi duyet",
+    "ho ten nguoi duyet",
+    "ho va ten nguoi duyet",
+    "nguoi duyet ho ten",
+    "nguoi duyet ho & ten",
+  ].includes(n)) return "approver_name";
+
   return null;
 }
 
@@ -28,6 +52,14 @@ const emptyRow = { msnv: "", full_name: "", role: "worker", approver_msnv: "", a
 export default function AdminPage() {
   const [rows, setRows] = useState([emptyRow]);
   const [loading, setLoading] = useState(false);
+
+  // 🔹 Phân trang
+  const [page, setPage] = useState(1);
+  const pageSize = 100; // đổi nếu muốn
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const pageRows = rows.slice((page - 1) * pageSize, page * pageSize);
+  useEffect(() => { if (page > totalPages) setPage(totalPages); }, [rows, totalPages, page]);
+
   const fileRef = useRef(null);
 
   async function loadUsers() {
@@ -36,13 +68,11 @@ export default function AdminPage() {
     setLoading(false);
     if (error) return alert("Load users lỗi: " + error.message);
     setRows((data && data.length) ? data : [emptyRow]);
+    setPage(1);
   }
 
-  function triggerImport() {
-    fileRef.current?.click();
-  }
+  function triggerImport() { fileRef.current?.click(); }
 
-  // Upsert theo chunks để tránh payload lớn
   async function upsertInChunks(list, size = 500) {
     for (let i = 0; i < list.length; i += size) {
       const chunk = list.slice(i, i + size);
@@ -58,10 +88,8 @@ export default function AdminPage() {
 
     try {
       setLoading(true);
-
-      // 1) Đọc file
-      const buf = await file.arrayBuffer();
-      const wb = XLSX.read(buf, { type: "array" });
+      const data = await file.arrayBuffer();
+      const wb = XLSX.read(data, { type: "array" });
       const ws = wb.Sheets[wb.SheetNames[0]];
       const raw = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
       if (!raw.length) throw new Error("File rỗng.");
@@ -73,20 +101,23 @@ export default function AdminPage() {
         if (f) fieldIdx[i] = f;
       });
 
-      // Cần tối thiểu 2 cột
-      const required = ["msnv", "full_name"];
-      const haveAll = required.every(req => Object.values(fieldIdx).includes(req));
-      if (!haveAll) throw new Error("Thiếu cột bắt buộc (ít nhất MSNV và Họ & tên).");
+      // Cảnh báo nếu thiếu cột quan trọng
+      const wanted = ["msnv", "full_name", "role", "approver_msnv", "approver_name"];
+      const missing = wanted.filter(k => !Object.values(fieldIdx).includes(k));
+      if (missing.length) {
+        // Không chặn, chỉ cảnh báo
+        console.warn("Thiếu cột:", missing);
+      }
 
-      // 2) Parse dòng
+      // Parse
       const parsed = [];
       for (let r = 1; r < raw.length; r++) {
-        const rowArr = raw[r];
-        if (!rowArr || !rowArr.length) continue;
+        const arr = raw[r];
+        if (!arr || !arr.length) continue;
 
         const obj = { ...emptyRow };
         for (const [idx, field] of Object.entries(fieldIdx)) {
-          const v = String(rowArr[idx] ?? "").trim();
+          const v = String(arr[idx] ?? "").trim();
           obj[field] = v;
         }
         if (!obj.msnv) continue;
@@ -95,31 +126,21 @@ export default function AdminPage() {
       }
       if (!parsed.length) throw new Error("Không có dòng hợp lệ để nhập.");
 
-      // 3) Loại trùng trong chính file (giữ bản cuối)
-      const mapByMSNV = new Map();
-      parsed.forEach(u => mapByMSNV.set(u.msnv, u));
-      const dedup = Array.from(mapByMSNV.values());
-      const dupInFile = parsed.length - dedup.length;
+      // Loại trùng trong file theo MSNV, giữ bản cuối
+      const dedup = Array.from(new Map(parsed.map(u => [u.msnv, u])).values());
 
-      // 4) Lấy MSNV hiện có trong DB để tính overlap
-      const { data: existing, error: e0 } = await supabase.from("users").select("msnv");
+      // Đếm overlap với DB để báo lại
+      const { data: ex, error: e0 } = await supabase.from("users").select("msnv");
       if (e0) throw e0;
-      const existingSet = new Set((existing || []).map(x => String(x.msnv)));
+      const setEx = new Set((ex || []).map(x => String(x.msnv)));
+      const overlap = dedup.reduce((c, u) => c + (setEx.has(u.msnv) ? 1 : 0), 0);
 
-      const overlapWithDB = dedup.reduce((cnt, u) => cnt + (existingSet.has(u.msnv) ? 1 : 0), 0);
-      const willInsert = dedup.length - overlapWithDB;
-
-      // 5) Upsert
       await upsertInChunks(dedup);
-
-      alert(
-        [
-          `Nhập & lưu thành công ${dedup.length} dòng.`,
-          `- Trùng trong file (đã gộp): ${dupInFile}`,
-          `- Trùng với DB (đã cập nhật): ${overlapWithDB}`,
-          `- Mới thêm: ${willInsert}`,
-        ].join("\n")
-      );
+      alert([
+        `Nhập & lưu thành công ${dedup.length} dòng.`,
+        `- Cập nhật (MSNV trùng với DB): ${overlap}`,
+        `- Thêm mới: ${dedup.length - overlap}`,
+      ].join("\n"));
 
       await loadUsers();
     } catch (err) {
@@ -145,16 +166,8 @@ export default function AdminPage() {
 
     try {
       setLoading(true);
-
-      // Đếm trùng với DB (để báo cáo)
-      const { data: existing, error: e0 } = await supabase.from("users").select("msnv");
-      if (e0) throw e0;
-      const existingSet = new Set((existing || []).map(x => String(x.msnv)));
-      const overlapWithDB = toUpsert.reduce((cnt, u) => cnt + (existingSet.has(u.msnv) ? 1 : 0), 0);
-      const willInsert = toUpsert.length - overlapWithDB;
-
       await upsertInChunks(toUpsert);
-      alert(`Đã lưu ${toUpsert.length} dòng (cập nhật: ${overlapWithDB}, thêm mới: ${willInsert}).`);
+      alert(`Đã lưu ${toUpsert.length} dòng.`);
       await loadUsers();
     } catch (err) {
       console.error(err);
@@ -164,30 +177,33 @@ export default function AdminPage() {
     }
   }
 
-  async function removeRow(idx) {
-    const r = rows[idx];
-    if (r?.msnv) {
-      const { error } = await supabase.from("users").delete().eq("msnv", r.msnv);
-      if (error) return alert("Xoá lỗi: " + error.message);
-    }
-    setRows(prev => prev.filter((_, i) => i !== idx));
-  }
-
-  // ❗ XÓA TOÀN BỘ
   async function deleteAll() {
     if (!confirm("Bạn chắc chắn muốn XÓA TOÀN BỘ danh sách người dùng?")) return;
     try {
       setLoading(true);
-      const { error } = await supabase.from("users").delete().gt("id", 0); // xóa mọi dòng có id > 0
+      const { error } = await supabase.from("users").delete().gt("id", 0);
       if (error) throw error;
       alert("Đã xoá toàn bộ.");
       setRows([emptyRow]);
+      setPage(1);
     } catch (err) {
       console.error(err);
       alert("Xoá toàn bộ lỗi: " + (err.message || err));
     } finally {
       setLoading(false);
     }
+  }
+
+  function removeRow(idxOnPage) {
+    const idx = (page - 1) * pageSize + idxOnPage;
+    const r = rows[idx];
+    (async () => {
+      if (r?.msnv) {
+        const { error } = await supabase.from("users").delete().eq("msnv", r.msnv);
+        if (error) return alert("Xoá lỗi: " + error.message);
+      }
+      setRows(prev => prev.filter((_, i) => i !== idx));
+    })();
   }
 
   useEffect(() => { loadUsers(); }, []);
@@ -208,39 +224,68 @@ export default function AdminPage() {
         </div>
       </div>
 
+      {/* Thanh phân trang */}
+      <div className="mt-3 flex items-center gap-3">
+        <span>Tổng: {rows.length} dòng</span>
+        <button className="btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>‹ Trước</button>
+        <span>Trang {page}/{totalPages}</span>
+        <button className="btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Sau ›</button>
+      </div>
+
+      {/* Bảng */}
       <div className="mt-4">
         <div className="grid grid-cols-5 gap-2 font-medium mb-2">
           <div>MSNV</div><div>Họ & tên</div><div>Role</div><div>Approver MSNV</div><div>Approver Họ tên</div>
         </div>
 
-        {rows.map((r, i) => (
+        {pageRows.map((r, i) => (
           <div key={i} className="grid grid-cols-5 gap-2 mb-2">
             <input value={r.msnv} onChange={e => {
-              const v = e.target.value; setRows(p => p.map((x, idx) => idx===i ? {...x, msnv:v} : x));
+              const v = e.target.value;
+              setRows(prev => {
+                const idx = (page - 1) * pageSize + i;
+                const arr = [...prev]; arr[idx] = { ...arr[idx], msnv: v }; return arr;
+              });
             }} placeholder="MSNV" className="input" />
+
             <input value={r.full_name} onChange={e => {
-              const v = e.target.value; setRows(p => p.map((x, idx) => idx===i ? {...x, full_name:v} : x));
+              const v = e.target.value;
+              setRows(prev => {
+                const idx = (page - 1) * pageSize + i;
+                const arr = [...prev]; arr[idx] = { ...arr[idx], full_name: v }; return arr;
+              });
             }} placeholder="Họ & tên" className="input" />
+
             <select value={r.role} onChange={e => {
-              const v = e.target.value; setRows(p => p.map((x, idx) => idx===i ? {...x, role:v} : x));
+              const v = e.target.value;
+              setRows(prev => {
+                const idx = (page - 1) * pageSize + i;
+                const arr = [...prev]; arr[idx] = { ...arr[idx], role: v }; return arr;
+              });
             }} className="input">
               {ALLOWED_ROLES.map(x => <option key={x} value={x}>{x}</option>)}
             </select>
-            <input value={r.approver_msnv} onChange={e => {
-              const v = e.target.value; setRows(p => p.map((x, idx) => idx===i ? {...x, approver_msnv:v} : x));
+
+            <input value={r.approver_msnv || ""} onChange={e => {
+              const v = e.target.value;
+              setRows(prev => {
+                const idx = (page - 1) * pageSize + i;
+                const arr = [...prev]; arr[idx] = { ...arr[idx], approver_msnv: v }; return arr;
+              });
             }} placeholder="Approver MSNV" className="input" />
+
             <div className="flex gap-2">
-              <input value={r.approver_name} onChange={e => {
-                const v = e.target.value; setRows(p => p.map((x, idx) => idx===i ? {...x, approver_name:v} : x));
+              <input value={r.approver_name || ""} onChange={e => {
+                const v = e.target.value;
+                setRows(prev => {
+                  const idx = (page - 1) * pageSize + i;
+                  const arr = [...prev]; arr[idx] = { ...arr[idx], approver_name: v }; return arr;
+                });
               }} placeholder="Approver Họ tên" className="input flex-1" />
-              <button onClick={() => removeRow(i)} className="text-red-500">Xoá</button>
+              <button onClick={() => removeRow(i)} className="text-red-600">Xoá</button>
             </div>
           </div>
         ))}
-
-        <button onClick={() => setRows(p => [...p, { ...emptyRow }])} className="btn mt-2">
-          + Thêm dòng
-        </button>
       </div>
     </div>
   );
