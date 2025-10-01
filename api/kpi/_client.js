@@ -1,8 +1,12 @@
-import { createClient } from '@supabase/supabase-js';
+// api/kpi/_client.js
+import { createClient } from '@supabase/supabase-js'
 
-export function adminClient() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY; // server-only
-  if (!url || !key) throw new Error('Missing Supabase env');
-  return createClient(url, key, { auth: { persistSession: false } });
+// Lấy biến môi trường từ Vite
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
+const supabaseKey = import.meta.env.VITE_SUPABASE_KEY
+
+if (!supabaseUrl || !supabaseKey) {
+  throw new Error("❌ Missing Supabase env: VITE_SUPABASE_URL hoặc VITE_SUPABASE_KEY")
 }
+
+export const supabase = createClient(supabaseUrl, supabaseKey)
