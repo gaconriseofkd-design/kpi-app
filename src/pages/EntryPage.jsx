@@ -142,6 +142,10 @@ export default function EntryPage() {
           <select className="inp" value={form.line} onChange={e => handleChange("line", e.target.value)}>
             <option value="LEAN-D1">LEAN-D1</option>
             <option value="LEAN-D2">LEAN-D2</option>
+            <option value="LEAN-D3">LEAN-D2</option>
+            <option value="LEAN-D4">LEAN-D2</option>
+            <option value="LEAN-H1">LEAN-D2</option>
+            <option value="LEAN-H2">LEAN-D2</option>
           </select>
         </label>
 
@@ -150,6 +154,7 @@ export default function EntryPage() {
             <option value="Ca 1">Ca 1</option>
             <option value="Ca 2">Ca 2</option>
             <option value="Ca 3">Ca 3</option>
+            <option value="Ca HC">Ca 3</option>
           </select>
         </label>
 
@@ -172,9 +177,11 @@ export default function EntryPage() {
         <label>Vi phạm:
           <select className="inp" value={form.compliance} onChange={e => handleChange("compliance", e.target.value)}>
             <option value="NONE">Không vi phạm</option>
-            <option value="LATE">Đi trễ / Về sớm</option>
-            <option value="PPE">Vi phạm PPE</option>
-            <option value="5S">Vi phạm 5S</option>
+            <option value="LATE">Ký mẫu đầu chuyền trước khi sử dụng</option>
+            <option value="PPE">Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất</option>
+            <option value="5S">Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất</option>
+            <option value="5S">Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất</option>
+            <option value="5S">Vi phạm nội quy bộ phận/công ty</option>
           </select>
         </label>
       </div>

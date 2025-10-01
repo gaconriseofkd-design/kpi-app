@@ -6,7 +6,7 @@ import { supabase } from "../lib/supabaseClient";
 const ALLOWED_ROLES = ["worker", "approver", "admin"];
 const emptyRow = { msnv: "", full_name: "", role: "worker", approver_msnv: "", approver_name: "" };
 
-/* ───────────── Helpers: map tiêu đề Excel → field DB ───────────── */
+/* Helpers: map tiêu đề Excel → field DB */
 function normalizeHeader(s = "") {
   return s
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -32,14 +32,10 @@ function mapHeaderToField(h) {
   return null;
 }
 
-/* ───────────── Component chính (login gate) ───────────── */
+/* ───────── Gate đăng nhập ───────── */
 export default function AdminPage() {
-  const [authed, setAuthed] = useState(false);
+  const [authed, setAuthed] = useState(() => sessionStorage.getItem("admin_authed") === "1");
   const [pwd, setPwd] = useState("");
-
-  useEffect(() => {
-    if (sessionStorage.getItem("admin_authed") === "1") setAuthed(true);
-  }, []);
 
   function tryLogin(e) {
     e.preventDefault();
@@ -70,20 +66,24 @@ export default function AdminPage() {
     );
   }
 
-  // Đã đăng nhập → render module quản lý
   return <AdminMain />;
 }
 
-/* ───────────── Màn hình quản lý người dùng ───────────── */
+/* ───────── Trang quản lý ───────── */
 function AdminMain() {
   const [rows, setRows] = useState([emptyRow]);
   const [loading, setLoading] = useState(false);
 
-  // Phân trang
+  // tìm kiếm
+  const [qWorker, setQWorker] = useState("");       // tìm theo msnv
+  const [qApprover, setQApprover] = useState("");   // tìm theo approver_msnv
+  useEffect(() => { setPage(1); }, [qWorker, qApprover]); // đổi filter → về trang 1
+
+  // phân trang
   const [page, setPage] = useState(1);
   const pageSize = 100;
 
-  // Sắp xếp
+  // sắp xếp
   const [sortKey, setSortKey] = useState("msnv");
   const [sortDir, setSortDir] = useState("asc"); // asc|desc
   function handleSort(key) {
@@ -103,6 +103,7 @@ function AdminMain() {
     setRows((data && data.length) ? data : [emptyRow]);
     setPage(1);
   }
+  useEffect(() => { loadUsers(); }, []);
 
   async function upsertInChunks(list, size = 500) {
     for (let i = 0; i < list.length; i += size) {
@@ -150,18 +151,8 @@ function AdminMain() {
       // Dedupe theo MSNV (giữ bản cuối)
       const dedup = Array.from(new Map(parsed.map(u => [u.msnv, u])).values());
 
-      const { data: ex, error: e0 } = await supabase.from("users").select("msnv");
-      if (e0) throw e0;
-      const exSet = new Set((ex || []).map(x => String(x.msnv)));
-      const overlapped = dedup.reduce((c, u) => c + (exSet.has(u.msnv) ? 1 : 0), 0);
-
       await upsertInChunks(dedup);
-      alert([
-        `Nhập & lưu thành công ${dedup.length} dòng.`,
-        `- Cập nhật (MSNV trùng): ${overlapped}`,
-        `- Thêm mới: ${dedup.length - overlapped}`,
-      ].join("\n"));
-
+      alert(`Nhập & lưu thành công ${dedup.length} dòng.`);
       await loadUsers();
     } catch (err) {
       console.error(err);
@@ -226,11 +217,20 @@ function AdminMain() {
     })();
   }
 
-  useEffect(() => { loadUsers(); }, []);
+  /* Lọc → Sắp xếp → Phân trang */
+  const filteredRows = useMemo(() => {
+    const w = qWorker.trim().toLowerCase();
+    const a = qApprover.trim().toLowerCase();
+    if (!w && !a) return rows;
+    return rows.filter(r => {
+      const workerOk = !w || (r.msnv || "").toString().toLowerCase().includes(w);
+      const approverOk = !a || (r.approver_msnv || "").toString().toLowerCase().includes(a);
+      return workerOk && approverOk;
+    });
+  }, [rows, qWorker, qApprover]);
 
-  // Sort + paginate (sort toàn bộ rồi mới cắt trang)
   const sortedRows = useMemo(() => {
-    const data = [...rows];
+    const data = [...filteredRows];
     const dir = sortDir === "asc" ? 1 : -1;
     data.sort((a, b) => {
       const va = (a?.[sortKey] ?? "").toString().toLowerCase();
@@ -239,11 +239,10 @@ function AdminMain() {
       return va.localeCompare(vb, "vi") * dir;
     });
     return data;
-  }, [rows, sortKey, sortDir]);
+  }, [filteredRows, sortKey, sortDir]);
 
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
   const pageRows = sortedRows.slice((page - 1) * pageSize, page * pageSize);
-
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [totalPages, page]);
 
   const SortHeader = ({ title, k }) => (
@@ -264,6 +263,23 @@ function AdminMain() {
     <div className="p-4">
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-xl font-semibold">Quản lý người dùng & phân quyền</h2>
+
+        {/* Ô tìm kiếm */}
+        <div className="flex items-center gap-2">
+          <input
+            className="input w-40"
+            placeholder="Tìm MSNV"
+            value={qWorker}
+            onChange={(e) => setQWorker(e.target.value)}
+          />
+          <input
+            className="input w-52"
+            placeholder="Tìm Approver MSNV"
+            value={qApprover}
+            onChange={(e) => setQApprover(e.target.value)}
+          />
+        </div>
+
         <div className="flex gap-2">
           <button onClick={triggerImport} disabled={loading} className="btn">Nhập Excel</button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
@@ -278,7 +294,7 @@ function AdminMain() {
 
       {/* Paging */}
       <div className="mt-3 flex items-center gap-3">
-        <span>Tổng: {sortedRows.length} dòng</span>
+        <span>Kết quả: {sortedRows.length} dòng</span>
         <button className="btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>‹ Trước</button>
         <span>Trang {page}/{totalPages}</span>
         <button className="btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Sau ›</button>
@@ -298,45 +314,30 @@ function AdminMain() {
           <div key={i} className="grid grid-cols-5 gap-2 mb-2">
             <input value={r.msnv} onChange={e => {
               const v = e.target.value;
-              setRows(prev => {
-                const idx = (page - 1) * pageSize + i;
-                const arr = [...prev]; arr[idx] = { ...arr[idx], msnv: v }; return arr;
-              });
+              setRows(prev => { const idx = (page - 1) * pageSize + i; const arr = [...prev]; arr[idx] = { ...arr[idx], msnv: v }; return arr; });
             }} placeholder="MSNV" className="input" />
 
             <input value={r.full_name} onChange={e => {
               const v = e.target.value;
-              setRows(prev => {
-                const idx = (page - 1) * pageSize + i;
-                const arr = [...prev]; arr[idx] = { ...arr[idx], full_name: v }; return arr;
-              });
+              setRows(prev => { const idx = (page - 1) * pageSize + i; const arr = [...prev]; arr[idx] = { ...arr[idx], full_name: v }; return arr; });
             }} placeholder="Họ & tên" className="input" />
 
             <select value={r.role} onChange={e => {
               const v = e.target.value;
-              setRows(prev => {
-                const idx = (page - 1) * pageSize + i;
-                const arr = [...prev]; arr[idx] = { ...arr[idx], role: v }; return arr;
-              });
+              setRows(prev => { const idx = (page - 1) * pageSize + i; const arr = [...prev]; arr[idx] = { ...arr[idx], role: v }; return arr; });
             }} className="input">
               {ALLOWED_ROLES.map(x => <option key={x} value={x}>{x}</option>)}
             </select>
 
             <input value={r.approver_msnv || ""} onChange={e => {
               const v = e.target.value;
-              setRows(prev => {
-                const idx = (page - 1) * pageSize + i;
-                const arr = [...prev]; arr[idx] = { ...arr[idx], approver_msnv: v }; return arr;
-              });
+              setRows(prev => { const idx = (page - 1) * pageSize + i; const arr = [...prev]; arr[idx] = { ...arr[idx], approver_msnv: v }; return arr; });
             }} placeholder="Approver MSNV" className="input" />
 
             <div className="flex gap-2">
               <input value={r.approver_name || ""} onChange={e => {
                 const v = e.target.value;
-                setRows(prev => {
-                  const idx = (page - 1) * pageSize + i;
-                  const arr = [...prev]; arr[idx] = { ...arr[idx], approver_name: v }; return arr;
-                });
+                setRows(prev => { const idx = (page - 1) * pageSize + i; const arr = [...prev]; arr[idx] = { ...arr[idx], approver_name: v }; return arr; });
               }} placeholder="Approver Họ tên" className="input flex-1" />
               <button onClick={() => removeRow(i)} className="text-red-600">Xoá</button>
             </div>
