@@ -1,10 +1,9 @@
-// /api/kpi/submit.js
-import { adminClient } from './_client.js';
+// api/kpi/submit.js
+import { supabase } from './_client.js'
 
-function scoreProductivity(oe, table) {
-  const x = Number(oe || 0);
-  // bảng đơn giản — bạn có thể dời sang DB nếu muốn
-  const t = table || [
+function scoreProductivity(oe) {
+  const x = Number(oe || 0)
+  const t = [
     { threshold: 112, score: 10 },
     { threshold: 108, score: 9 },
     { threshold: 104, score: 8 },
@@ -13,51 +12,47 @@ function scoreProductivity(oe, table) {
     { threshold: 96,  score: 4 },
     { threshold: 94,  score: 2 },
     { threshold: 92,  score: 0 },
-  ];
-  for (const r of t) if (x >= r.threshold) return r.score;
-  return t.at(-1).score;
+  ]
+  for (const r of t) if (x >= r.threshold) return r.score
+  return t.at(-1).score
 }
 
-function scoreQuality(defects, ranges) {
-  const d = Number(defects || 0);
-  const rs = ranges || [
-    { min: 0, max: 0, score: 10, bonus: 2 },
+function scoreQuality(defects) {
+  const d = Number(defects || 0)
+  const rs = [
+    { min: 0, max: 0, score: 10 },
     { min: 1, max: 2, score: 8 },
     { min: 3, max: 4, score: 6 },
     { min: 5, max: 6, score: 4 },
     { min: 7, max: null, score: 0 },
-  ];
+  ]
   for (const r of rs) {
-    const min = Number(r.min);
-    const max = r.max == null ? Infinity : Number(r.max);
-    if (d >= min && d <= max) return r.score;
+    const max = r.max == null ? Infinity : r.max
+    if (d >= r.min && d <= max) return r.score
   }
-  return 0;
+  return 0
 }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
-    res.status(405).json({ error: 'Method not allowed' }); return;
+    return res.status(405).json({ error: 'Method not allowed' })
   }
   try {
-    const supabase = adminClient();
-    const payload = req.body || {};
-
-    // Lấy từ body:
+    const payload = req.body || {}
     const {
       date, workerId, workerName,
       approverId, approverName,
       area, line, ca,
       workHours, stopHours, lineTargetPerHour,
       defects, oe, compliance
-    } = payload;
+    } = payload
 
-    // Tính điểm server-side (tránh fake)
-    const pScore = scoreProductivity(oe);
-    const qScore = scoreQuality(defects);
-    const raw = Number(pScore) + Number(qScore);
-    const dayScore = Math.min(15, raw);
-    const overflow = Math.max(0, raw - 15);
+    // Tính điểm
+    const pScore = scoreProductivity(oe)
+    const qScore = scoreQuality(defects)
+    const raw = pScore + qScore
+    const dayScore = Math.min(15, raw)
+    const overflow = Math.max(0, raw - 15)
 
     const { data, error } = await supabase
       .from('kpi.kpi_entries')
@@ -82,12 +77,12 @@ export default async function handler(req, res) {
         overflow,
         status: 'pending'
       }])
-      .select('id');
+      .select('id')
 
-    if (error) throw error;
-    res.json({ ok: true, id: data?.[0]?.id });
+    if (error) throw error
+    res.json({ ok: true, id: data?.[0]?.id })
   } catch (e) {
-    console.error(e);
-    res.status(500).json({ ok: false, error: String(e.message || e) });
+    console.error(e)
+    res.status(500).json({ ok: false, error: String(e.message || e) })
   }
 }

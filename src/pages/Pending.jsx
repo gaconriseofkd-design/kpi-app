@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
 
 export default function Pending() {
   const [rows, setRows] = useState([]);
@@ -6,77 +7,96 @@ export default function Pending() {
 
   async function load() {
     setLoading(true);
-    try {
-      const resp = await fetch("/api/kpi/pending").then((r) => r.json());
-      if (resp.ok) {
-        setRows(resp.rows || []);
-      } else {
-        alert("Lỗi load pending: " + resp.error);
-      }
-    } catch (e) {
-      console.error(e);
-      alert("Không kết nối được API pending");
-    }
+    const { data, error } = await supabase
+      .from("kpi.kpi_entries")
+      .select("*")
+      .eq("status", "pending")
+      .order("date", { ascending: false })
+      .order("created_at", { ascending: false });
     setLoading(false);
+    if (error) return alert("Load lỗi: " + error.message);
+    setRows(data || []);
   }
 
-  useEffect(() => {
-    load();
-  }, []);
+  async function approve(row) {
+    const note = prompt("Ghi chú (tuỳ chọn):", "");
+    const violations = row?.compliance_code === "NONE" ? 0 : 1;
+    const { error } = await supabase
+      .from("kpi.kpi_entries")
+      .update({
+        status: "approved",
+        violations,
+        approver_note: note || null,
+        approved_at: new Date().toISOString(),
+      })
+      .eq("id", row.id);
+    if (error) return alert("Duyệt lỗi: " + error.message);
+    await load();
+  }
+
+  async function reject(row) {
+    const note = prompt("Lý do từ chối:", "");
+    const { error } = await supabase
+      .from("kpi.kpi_entries")
+      .update({
+        status: "rejected",
+        approver_note: note || null,
+        approved_at: new Date().toISOString(),
+      })
+      .eq("id", row.id);
+    if (error) return alert("Từ chối lỗi: " + error.message);
+    await load();
+  }
+
+  useEffect(() => { load(); }, []);
 
   return (
-    <div className="p-4 space-y-4">
-      <h2 className="text-xl font-bold">Danh sách KPI chờ duyệt</h2>
+    <div className="p-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">Danh sách chờ duyệt</h2>
+        <button onClick={load} className="btn">{loading ? "Đang tải..." : "Tải lại"}</button>
+      </div>
 
-      {loading && <p className="text-neutral-500">Đang tải...</p>}
-
-      <div className="overflow-auto border rounded bg-white shadow">
+      <div className="mt-4 overflow-auto">
         <table className="min-w-full text-sm">
-          <thead className="bg-neutral-50">
-            <tr>
-              <th className="px-3 py-2 border-b text-left">Ngày</th>
-              <th className="px-3 py-2 border-b text-left">MSNV</th>
-              <th className="px-3 py-2 border-b text-left">Họ và tên</th>
-              <th className="px-3 py-2 border-b text-left">Line</th>
-              <th className="px-3 py-2 border-b text-left">Ca</th>
-              <th className="px-3 py-2 border-b text-left">%OE</th>
-              <th className="px-3 py-2 border-b text-left">Số đôi phế</th>
-              <th className="px-3 py-2 border-b text-left">Trạng thái</th>
+          <thead>
+            <tr className="text-left border-b">
+              <th className="p-2">Ngày</th>
+              <th className="p-2">MSNV</th>
+              <th className="p-2">Họ tên</th>
+              <th className="p-2">%OE</th>
+              <th className="p-2">Phế</th>
+              <th className="p-2">P</th>
+              <th className="p-2">Q</th>
+              <th className="p-2">KPI</th>
+              <th className="p-2">Vi phạm</th>
+              <th className="p-2">Thao tác</th>
             </tr>
           </thead>
           <tbody>
-            {rows.length === 0 && !loading && (
-              <tr>
-                <td colSpan="8" className="px-3 py-2 text-center">
-                  Không có KPI nào đang chờ duyệt
+            {rows.map(r => (
+              <tr key={r.id} className="border-b">
+                <td className="p-2">{r.date}</td>
+                <td className="p-2">{r.worker_id}</td>
+                <td className="p-2">{r.worker_name}</td>
+                <td className="p-2">{r.oe}</td>
+                <td className="p-2">{r.defects}</td>
+                <td className="p-2">{r.p_score}</td>
+                <td className="p-2">{r.q_score}</td>
+                <td className="p-2 font-semibold">{r.day_score}</td>
+                <td className="p-2">{r.compliance_code}</td>
+                <td className="p-2 flex gap-2">
+                  <button onClick={() => approve(r)} className="btn btn-primary">Duyệt</button>
+                  <button onClick={() => reject(r)} className="btn bg-red-600 text-white hover:bg-red-700">Từ chối</button>
                 </td>
               </tr>
-            )}
-            {rows.map((r) => (
-              <tr
-                key={r.id}
-                className="odd:bg-white even:bg-neutral-50/40"
-              >
-                <td className="px-3 py-2 border-t">{r.date}</td>
-                <td className="px-3 py-2 border-t">{r.worker_id}</td>
-                <td className="px-3 py-2 border-t">{r.worker_name}</td>
-                <td className="px-3 py-2 border-t">{r.line}</td>
-                <td className="px-3 py-2 border-t">{r.ca}</td>
-                <td className="px-3 py-2 border-t">{r.oe}</td>
-                <td className="px-3 py-2 border-t">{r.defects}</td>
-                <td className="px-3 py-2 border-t">{r.status}</td>
-              </tr>
             ))}
+            {!rows.length && (
+              <tr><td colSpan={10} className="p-4 text-center text-gray-500">Chưa có bản ghi chờ duyệt</td></tr>
+            )}
           </tbody>
         </table>
       </div>
-
-      <button
-        className="px-3 py-2 rounded bg-blue-600 text-white"
-        onClick={load}
-      >
-        🔄 Tải lại
-      </button>
     </div>
   );
 }
