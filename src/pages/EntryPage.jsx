@@ -142,10 +142,10 @@ export default function EntryPage() {
           <select className="inp" value={form.line} onChange={e => handleChange("line", e.target.value)}>
             <option value="LEAN-D1">LEAN-D1</option>
             <option value="LEAN-D2">LEAN-D2</option>
-            <option value="LEAN-D3">LEAN-D2</option>
-            <option value="LEAN-D4">LEAN-D2</option>
-            <option value="LEAN-H1">LEAN-D2</option>
-            <option value="LEAN-H2">LEAN-D2</option>
+            <option value="LEAN-D3">LEAN-D3</option>
+            <option value="LEAN-D4">LEAN-D4</option>
+            <option value="LEAN-H1">LEAN-H1</option>
+            <option value="LEAN-H2">LEAN-H2</option>
           </select>
         </label>
 
