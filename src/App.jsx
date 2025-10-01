@@ -1,43 +1,63 @@
-import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-import Sidebar from "./components/Sidebar.jsx";
-import Topbar from "./components/Topbar.jsx";
+// src/App.jsx
+import { BrowserRouter as Router, Routes, Route, NavLink, Navigate } from "react-router-dom";
 
-// Pages
-import Home from "./pages/HomePage.jsx";
-import Entry from "./pages/EntryPage.jsx";
-import Approve from "./pages/ApprovePage.jsx";
-import Pending from "./pages/Pending.jsx";
-import Report from "./pages/Report.jsx";
-import Summary from "./pages/Summarypage.jsx";
-import Admin from "./pages/AdminPage.jsx";
+// Các trang hiện có
+import EntryPage from "./pages/EntryPage";
+import QuickEntry from "./pages/QuickEntry";      // 👈 Trang mới
+import Pending from "./pages/Pending";
+import ApprovePage from "./pages/ApprovePage";
+import AdminPage from "./pages/AdminPage";
 
+function NavItem({ to, children }) {
+  return (
+    <NavLink
+      to={to}
+      className={({ isActive }) =>
+        `px-3 py-2 rounded hover:bg-gray-100 ${isActive ? "font-semibold text-blue-600" : "text-gray-700"}`
+      }
+    >
+      {children}
+    </NavLink>
+  );
+}
+
+function Layout({ children }) {
+  return (
+    <div className="min-h-screen flex flex-col">
+      {/* Top menu */}
+      <header className="border-b bg-white">
+        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center gap-2 flex-wrap">
+          <div className="text-lg font-bold mr-3">APP KPI</div>
+          <nav className="flex items-center gap-1">
+            <NavItem to="/entry">Nhập KPI</NavItem>
+            <NavItem to="/quick">Nhập KPI nhanh</NavItem> {/* 👈 Thêm vào menu */}
+            <NavItem to="/pending">Chờ duyệt</NavItem>
+            <NavItem to="/approve">Xét duyệt</NavItem>
+            <NavItem to="/admin">Quản lý User</NavItem>
+          </nav>
+        </div>
+      </header>
+
+      {/* Nội dung */}
+      <main className="flex-1 max-w-6xl mx-auto px-4 py-4">{children}</main>
+    </div>
+  );
+}
 
 export default function App() {
   return (
     <Router>
-      <div className="flex h-screen bg-neutral-100">
-        {/* Sidebar */}
-        <Sidebar />
-
-        {/* Main Content */}
-        <div className="flex flex-col flex-1">
-          {/* Topbar */}
-          <Topbar />
-
-          {/* Routes */}
-          <main className="flex-1 overflow-y-auto p-4">
-            <Routes>
-              <Route path="/" element={<Home />} />
-              <Route path="/entry" element={<Entry />} />
-              <Route path="/approve" element={<Approve />} />
-              <Route path="/pending" element={<Pending />} />
-              <Route path="/report" element={<Report />} />
-              <Route path="/summary" element={<Summary />} />
-              <Route path="/admin" element={<Admin />} />
-            </Routes>
-          </main>
-        </div>
-      </div>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<Navigate to="/entry" replace />} />
+          <Route path="/entry" element={<EntryPage />} />
+          <Route path="/quick" element={<QuickEntry />} />     {/* 👈 Route mới */}
+          <Route path="/pending" element={<Pending />} />
+          <Route path="/approve" element={<ApprovePage />} />
+          <Route path="/admin" element={<AdminPage />} />
+          <Route path="*" element={<div>404 - Không tìm thấy trang</div>} />
+        </Routes>
+      </Layout>
     </Router>
   );
 }
