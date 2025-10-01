@@ -97,8 +97,8 @@ export default function EntryPage() {
         overflow,
         status: "pending",
       };
-      + const { data, error } = await supabase
-+       .from("kpi_entries")
+      const { data, error } = await supabase
+         .from("kpi_entries")
         .insert([payload])
         .select("id");
       if (error) throw error;

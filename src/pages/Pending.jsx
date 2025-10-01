@@ -8,7 +8,7 @@ export default function Pending() {
   async function load() {
     setLoading(true);
     const { data, error } = await supabase
-      .from("kpi.kpi_entries")
+      .from("kpi_entries")
       .select("*")
       .eq("status", "pending")
       .order("date", { ascending: false })
@@ -22,7 +22,7 @@ export default function Pending() {
     const note = prompt("Ghi chú (tuỳ chọn):", "");
     const violations = row?.compliance_code === "NONE" ? 0 : 1;
     const { error } = await supabase
-      .from("kpi.kpi_entries")
+      .from("kpi_entries")
       .update({
         status: "approved",
         violations,
@@ -37,7 +37,7 @@ export default function Pending() {
   async function reject(row) {
     const note = prompt("Lý do từ chối:", "");
     const { error } = await supabase
-      .from("kpi.kpi_entries")
+      .from("kpi_entries")
       .update({
         status: "rejected",
         approver_note: note || null,
