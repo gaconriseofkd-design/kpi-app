@@ -165,31 +165,47 @@ function QuickEntryContent() {
     if (!entries.length) return alert("Không có dữ liệu để lưu.");
     try {
       setSaving(true);
+      const now = new Date().toISOString();
+
+      // Batch insert (500 dòng/lần) — LƯU THẲNG Ở TRẠNG THÁI 'approved'
       const size = 500;
       for (let i = 0; i < entries.length; i += size) {
-        const chunk = entries.slice(i, i + size).map((e) => ({
-          date: e.date,
-          worker_id: e.worker_id,
-          worker_name: e.worker_name,
-          approver_id: e.approver_id,
-          approver_name: e.approver_name,
-          line: e.line,
-          ca: e.ca,
-          work_hours: Number(e.work_hours || 0),
-          stop_hours: Number(e.stop_hours || 0),
-          defects: Number(e.defects || 0),
-          oe: Number(e.oe || 0),
-          compliance_code: e.compliance_code,
-          p_score: e.p_score,
-          q_score: e.q_score,
-          day_score: e.day_score,
-          overflow: e.overflow,
-          status: "pending",
-        }));
+        const chunk = entries.slice(i, i + size).map((e) => {
+          const violations = e.compliance_code === "NONE" ? 0 : 1;
+          return {
+            date: e.date,
+            worker_id: e.worker_id,
+            worker_name: e.worker_name,
+            approver_id: e.approver_id,
+            approver_name: e.approver_name,
+            line: e.line,
+            ca: e.ca,
+            work_hours: Number(e.work_hours || 0),
+            stop_hours: Number(e.stop_hours || 0),
+            defects: Number(e.defects || 0),
+            oe: Number(e.oe || 0),
+            compliance_code: e.compliance_code,
+            p_score: e.p_score,
+            q_score: e.q_score,
+            day_score: e.day_score,
+            overflow: e.overflow,
+
+            // 👇 Lưu thẳng đã duyệt
+            status: "approved",
+            violations,
+            approver_note: "Fast entry",
+            approved_at: now,
+          };
+        });
+
+        // Nếu bạn có UNIQUE (worker_id,date) trên kpi_entries, có thể dùng upsert:
+        // const { error } = await supabase.from("kpi_entries").upsert(chunk, { onConflict: "worker_id,date" });
         const { error } = await supabase.from("kpi_entries").insert(chunk);
         if (error) throw error;
       }
-      alert(`Đã lưu ${entries.length} bản ghi KPI (pending).`);
+
+      alert(`Đã lưu & duyệt ${entries.length} bản ghi KPI.`);
+      // Quay về bước chọn
       setStep("choose");
       setEntries([]);
       setSelected(new Set());
@@ -200,6 +216,7 @@ function QuickEntryContent() {
       setSaving(false);
     }
   }
+
 
   /* ---------- RENDER ---------- */
   if (step === "template") {
@@ -215,14 +232,21 @@ function QuickEntryContent() {
             <select className="input" value={tpl.line} onChange={(e) => setTpl((s) => ({ ...s, line: e.target.value }))}>
               <option value="LEAN-D1">LEAN-D1</option>
               <option value="LEAN-D2">LEAN-D2</option>
+              <option value="LEAN-D3">LEAN-D3</option>
+              <option value="LEAN-D4">LEAN-D4</option>
+              <option value="LEAN-H1">LEAN-H1</option>
+              <option value="LEAN-H2">LEAN-H2</option>
             </select>
           </label>
           <label>Ca:
-            <select className="input" value={tpl.ca} onChange={(e) => setTpl((s) => ({ ...s, ca: e.target.value }))}>
+            <label>Ca làm việc:
+            <select className="inp" value={form.ca} onChange={e => handleChange("ca", e.target.value)}>
               <option value="Ca 1">Ca 1</option>
               <option value="Ca 2">Ca 2</option>
               <option value="Ca 3">Ca 3</option>
+              <option value="Ca HC">Ca 3</option>
             </select>
+          </label>
           </label>
           <label>Giờ làm việc:
             <input type="number" className="input" value={tpl.work_hours} onChange={(e) => setTpl((s) => ({ ...s, work_hours: Number(e.target.value) }))} />
@@ -237,11 +261,13 @@ function QuickEntryContent() {
             <input type="number" className="input" value={tpl.oe} onChange={(e) => setTpl((s) => ({ ...s, oe: Number(e.target.value) }))} />
           </label>
           <label>Vi phạm:
-            <select className="input" value={tpl.compliance_code} onChange={(e) => setTpl((s) => ({ ...s, compliance_code: e.target.value }))}>
+          <select className="inp" value={form.compliance} onChange={e => handleChange("compliance", e.target.value)}>
               <option value="NONE">Không vi phạm</option>
-              <option value="LATE">Đi trễ / Về sớm</option>
-              <option value="PPE">Vi phạm PPE</option>
-              <option value="5S">Vi phạm 5S</option>
+              <option value="LATE">Ký mẫu đầu chuyền trước khi sử dụng</option>
+              <option value="PPE">Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất</option>
+              <option value="5S">Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất</option>
+              <option value="5S">Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất</option>
+              <option value="5S">Vi phạm nội quy bộ phận/công ty</option>
             </select>
           </label>
         </div>
