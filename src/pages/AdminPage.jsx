@@ -1,11 +1,12 @@
 // src/pages/AdminPage.jsx
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabaseClient";
 
 const ALLOWED_ROLES = ["worker", "approver", "admin"];
+const emptyRow = { msnv: "", full_name: "", role: "worker", approver_msnv: "", approver_name: "" };
 
-// ====== helpers: normalize + map header ======
+/* ───────────── Helpers: map tiêu đề Excel → field DB ───────────── */
 function normalizeHeader(s = "") {
   return s
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -13,7 +14,6 @@ function normalizeHeader(s = "") {
     .toLowerCase()
     .trim();
 }
-
 function mapHeaderToField(h) {
   const n = normalizeHeader(h);
   if (["msnv"].includes(n)) return "msnv";
@@ -32,24 +32,25 @@ function mapHeaderToField(h) {
   return null;
 }
 
-const emptyRow = { msnv: "", full_name: "", role: "worker", approver_msnv: "", approver_name: "" };
-
+/* ───────────── Component chính (login gate) ───────────── */
 export default function AdminPage() {
-  // ====== simple password gate ======
   const [authed, setAuthed] = useState(false);
   const [pwd, setPwd] = useState("");
+
   useEffect(() => {
     if (sessionStorage.getItem("admin_authed") === "1") setAuthed(true);
   }, []);
+
   function tryLogin(e) {
     e.preventDefault();
     if (pwd === "davidtu") {
-      setAuthed(true);
       sessionStorage.setItem("admin_authed", "1");
+      setAuthed(true);
     } else {
       alert("Sai mật khẩu.");
     }
   }
+
   if (!authed) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -69,23 +70,28 @@ export default function AdminPage() {
     );
   }
 
-  // ====== main state ======
+  // Đã đăng nhập → render module quản lý
+  return <AdminMain />;
+}
+
+/* ───────────── Màn hình quản lý người dùng ───────────── */
+function AdminMain() {
   const [rows, setRows] = useState([emptyRow]);
   const [loading, setLoading] = useState(false);
 
-  // paging
+  // Phân trang
   const [page, setPage] = useState(1);
   const pageSize = 100;
 
-  // sorting
+  // Sắp xếp
   const [sortKey, setSortKey] = useState("msnv");
   const [sortDir, setSortDir] = useState("asc"); // asc|desc
   function handleSort(key) {
-    if (sortKey === key) setSortDir(d => (d === "asc" ? "desc" : "asc"));
+    if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortKey(key); setSortDir("asc"); }
   }
 
-  // file input
+  // Import Excel
   const fileRef = useRef(null);
   function triggerImport() { fileRef.current?.click(); }
 
@@ -110,6 +116,7 @@ export default function AdminPage() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+
     try {
       setLoading(true);
       const buf = await file.arrayBuffer();
@@ -140,7 +147,7 @@ export default function AdminPage() {
       }
       if (!parsed.length) throw new Error("Không có dòng hợp lệ để nhập.");
 
-      // dedupe by msnv (keep last)
+      // Dedupe theo MSNV (giữ bản cuối)
       const dedup = Array.from(new Map(parsed.map(u => [u.msnv, u])).values());
 
       const { data: ex, error: e0 } = await supabase.from("users").select("msnv");
@@ -152,7 +159,7 @@ export default function AdminPage() {
       alert([
         `Nhập & lưu thành công ${dedup.length} dòng.`,
         `- Cập nhật (MSNV trùng): ${overlapped}`,
-        `- Thêm mới: ${dedup.length - overlapped}`
+        `- Thêm mới: ${dedup.length - overlapped}`,
       ].join("\n"));
 
       await loadUsers();
@@ -221,16 +228,14 @@ export default function AdminPage() {
 
   useEffect(() => { loadUsers(); }, []);
 
-  // ====== sort + paginate (áp dụng sort trên toàn bộ, rồi mới cắt trang) ======
+  // Sort + paginate (sort toàn bộ rồi mới cắt trang)
   const sortedRows = useMemo(() => {
     const data = [...rows];
     const dir = sortDir === "asc" ? 1 : -1;
     data.sort((a, b) => {
       const va = (a?.[sortKey] ?? "").toString().toLowerCase();
       const vb = (b?.[sortKey] ?? "").toString().toLowerCase();
-      if (!isNaN(Number(va)) && !isNaN(Number(vb))) {
-        return (Number(va) - Number(vb)) * dir;
-      }
+      if (!isNaN(Number(va)) && !isNaN(Number(vb))) return (Number(va) - Number(vb)) * dir;
       return va.localeCompare(vb, "vi") * dir;
     });
     return data;
@@ -238,6 +243,7 @@ export default function AdminPage() {
 
   const totalPages = Math.max(1, Math.ceil(sortedRows.length / pageSize));
   const pageRows = sortedRows.slice((page - 1) * pageSize, page * pageSize);
+
   useEffect(() => { if (page > totalPages) setPage(totalPages); }, [totalPages, page]);
 
   const SortHeader = ({ title, k }) => (
