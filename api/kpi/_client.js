@@ -1,12 +1,12 @@
-// api/kpi/_client.js
 import { createClient } from '@supabase/supabase-js'
 
-// Lấy biến môi trường từ Vite
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-const supabaseKey = import.meta.env.VITE_SUPABASE_KEY
+const supabaseUrl   = import.meta.env.VITE_SUPABASE_URL
+const anonKey       = import.meta.env.VITE_SUPABASE_KEY
+const serviceRole   = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY
 
-if (!supabaseUrl || !supabaseKey) {
-  throw new Error("❌ Missing Supabase env: VITE_SUPABASE_URL hoặc VITE_SUPABASE_KEY")
+export const supabase = createClient(supabaseUrl, anonKey)
+
+export function adminClient() {
+  if (!serviceRole) throw new Error("❌ Missing service role key")
+  return createClient(supabaseUrl, serviceRole)
 }
-
-export const supabase = createClient(supabaseUrl, supabaseKey)

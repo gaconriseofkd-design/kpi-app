@@ -6,19 +6,14 @@ export default async function handler(req, res) {
     const supabase = adminClient()
 
     if (req.method === 'GET') {
-      // Lấy danh sách users
-      const { data, error } = await supabase
-        .from('users')
-        .select('*')
+      const { data, error } = await supabase.from('users').select('*')
       if (error) throw error
       return res.json({ ok: true, rows: data })
     }
 
     if (req.method === 'POST') {
       const body = req.body || {}
-      const { data, error } = await supabase
-        .from('users')
-        .insert([body])
+      const { data, error } = await supabase.from('users').insert([body])
       if (error) throw error
       return res.json({ ok: true, row: data?.[0] })
     }
