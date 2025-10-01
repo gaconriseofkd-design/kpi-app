@@ -1,15 +1,20 @@
 import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabaseClient";
 
-// Giả sử user list sẽ lấy từ trang AdminPage (sau này load từ DB hoặc context)
-const mockUsers = [
-  { workerId: "W001", workerName: "Nguyen Van A", approverId: "A101", approverName: "Tran B" },
-  { workerId: "W002", workerName: "Le Thi B", approverId: "A102", approverName: "Pham C" },
-];
+// debounce để tránh gọi API liên tục khi gõ MSNV
+function useDebounce(value, delay = 350) {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), delay);
+    return () => clearTimeout(t);
+  }, [value, delay]);
+  return v;
+}
 
 export default function EntryPage() {
   const [form, setForm] = useState({
     date: new Date().toISOString().slice(0, 10),
-    workerId: "",
+    workerId: "",        // = users.msnv
     workerName: "",
     approverId: "",
     approverName: "",
@@ -22,21 +27,59 @@ export default function EntryPage() {
     compliance: "NONE",
   });
 
-  // Tự động điền tên và người duyệt khi nhập MSNV
+  const [isLookup, setIsLookup] = useState(false);
+  const [notFound, setNotFound] = useState(false);
+  const debouncedWorkerId = useDebounce((form.workerId || "").trim());
+
+  // Tra tên/approver theo MSNV từ bảng public.users
   useEffect(() => {
-    const found = mockUsers.find(u => u.workerId === form.workerId);
-    if (found) {
-      setForm(f => ({
-        ...f,
-        workerName: found.workerName,
-        approverId: found.approverId,
-        approverName: found.approverName,
-      }));
+    const id = debouncedWorkerId;
+    if (!id) {
+      setNotFound(false);
+      setForm(f => ({ ...f, workerName: "", approverId: "", approverName: "" }));
+      return;
     }
-  }, [form.workerId]);
+    let cancelled = false;
+    (async () => {
+      try {
+        setIsLookup(true);
+        setNotFound(false);
+
+        const { data, error } = await supabase
+          .from("users")
+          .select("msnv, full_name, role, approver_msnv, approver_name")
+          .eq("msnv", id)
+          .maybeSingle(); // trả null nếu không có
+
+        if (cancelled) return;
+        if (error) {
+          console.error("Lookup user error:", error);
+          return;
+        }
+
+        if (data) {
+          setForm(f => ({
+            ...f,
+            workerName: data.full_name || "",
+            approverId: data.approver_msnv || "",
+            approverName: data.approver_name || "",
+          }));
+          setNotFound(false);
+        } else {
+          // không tìm thấy -> clear các ô phụ
+          setForm(f => ({ ...f, workerName: "", approverId: "", approverName: "" }));
+          setNotFound(true);
+        }
+      } finally {
+        if (!cancelled) setIsLookup(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [debouncedWorkerId]);
 
   function handleChange(key, val) {
-    setForm((f) => ({ ...f, [key]: val }));
+    setForm(f => ({ ...f, [key]: val }));
   }
 
   // --- Tính điểm
@@ -65,8 +108,10 @@ export default function EntryPage() {
   const overflow = Math.max(0, pScore + qScore - 15);
 
   function handleSubmit() {
+    if (!form.workerId) return alert("Vui lòng nhập MSNV.");
+    if (notFound) return alert("MSNV không tồn tại trong danh sách nhân viên.");
     alert(`Đã gửi KPI cho ${form.workerId} – Điểm ngày: ${dayScore}`);
-    // sau này fetch POST API /api/kpi/submit
+    // TODO: gọi API lưu KPI hoặc insert thẳng Supabase theo thiết kế của bạn
   }
 
   return (
@@ -75,34 +120,48 @@ export default function EntryPage() {
 
       <div className="grid md:grid-cols-2 gap-4">
         <label>Ngày:
-          <input type="date" className="inp" value={form.date} onChange={e => handleChange("date", e.target.value)} />
+          <input type="date" className="inp" value={form.date}
+                 onChange={e => handleChange("date", e.target.value)} />
         </label>
 
         <label>MSNV:
-          <input className="inp" value={form.workerId} onChange={e => handleChange("workerId", e.target.value)} />
+          <input className="inp" value={form.workerId}
+                 onChange={e => handleChange("workerId", e.target.value)} />
+          {isLookup && <span className="text-sm text-gray-500 ml-2">đang tra…</span>}
+          {notFound && !isLookup && form.workerId && (
+            <span className="text-sm text-red-600 ml-2">không tìm thấy trong danh sách</span>
+          )}
         </label>
 
         <label>Họ tên:
-          <input className="inp" value={form.workerName} readOnly />
+          <input className="inp" value={form.workerName}
+                 onChange={e => handleChange("workerName", e.target.value)}
+                 placeholder="Tự điền theo MSNV hoặc nhập tay" />
         </label>
 
         <label>Người duyệt (MSNV):
-          <input className="inp" value={form.approverId} readOnly />
+          <input className="inp" value={form.approverId}
+                 onChange={e => handleChange("approverId", e.target.value)}
+                 placeholder="Tự điền theo user hoặc nhập tay" />
         </label>
 
         <label>Người duyệt (Họ tên):
-          <input className="inp" value={form.approverName} readOnly />
+          <input className="inp" value={form.approverName}
+                 onChange={e => handleChange("approverName", e.target.value)}
+                 placeholder="Tự điền theo user hoặc nhập tay" />
         </label>
 
         <label>Line làm việc:
-          <select className="inp" value={form.line} onChange={e => handleChange("line", e.target.value)}>
+          <select className="inp" value={form.line}
+                  onChange={e => handleChange("line", e.target.value)}>
             <option value="LEAN-D1">LEAN-D1</option>
             <option value="LEAN-D2">LEAN-D2</option>
           </select>
         </label>
 
         <label>Ca làm việc:
-          <select className="inp" value={form.ca} onChange={e => handleChange("ca", e.target.value)}>
+          <select className="inp" value={form.ca}
+                  onChange={e => handleChange("ca", e.target.value)}>
             <option value="Ca 1">Ca 1</option>
             <option value="Ca 2">Ca 2</option>
             <option value="Ca 3">Ca 3</option>
@@ -110,23 +169,28 @@ export default function EntryPage() {
         </label>
 
         <label>Giờ làm việc:
-          <input type="number" className="inp" value={form.workHours} onChange={e => handleChange("workHours", Number(e.target.value))} />
+          <input type="number" className="inp" value={form.workHours}
+                 onChange={e => handleChange("workHours", Number(e.target.value))} />
         </label>
 
         <label>Giờ dừng máy:
-          <input type="number" className="inp" value={form.stopHours} onChange={e => handleChange("stopHours", Number(e.target.value))} />
+          <input type="number" className="inp" value={form.stopHours}
+                 onChange={e => handleChange("stopHours", Number(e.target.value))} />
         </label>
 
         <label>Số đôi phế:
-          <input type="number" className="inp" value={form.defects} onChange={e => handleChange("defects", Number(e.target.value))} />
+          <input type="number" className="inp" value={form.defects}
+                 onChange={e => handleChange("defects", Number(e.target.value))} />
         </label>
 
         <label>%OE:
-          <input type="number" className="inp" value={form.oe} onChange={e => handleChange("oe", Number(e.target.value))} />
+          <input type="number" className="inp" value={form.oe}
+                 onChange={e => handleChange("oe", Number(e.target.value))} />
         </label>
 
         <label>Vi phạm:
-          <select className="inp" value={form.compliance} onChange={e => handleChange("compliance", e.target.value)}>
+          <select className="inp" value={form.compliance}
+                  onChange={e => handleChange("compliance", e.target.value)}>
             <option value="NONE">Không vi phạm</option>
             <option value="LATE">Đi trễ / Về sớm</option>
             <option value="PPE">Vi phạm PPE</option>
