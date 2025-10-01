@@ -7,6 +7,7 @@ import QuickEntry from "./pages/QuickEntry";      // 👈 Trang mới
 import Pending from "./pages/Pending";
 import ApprovePage from "./pages/ApprovePage";
 import AdminPage from "./pages/AdminPage";
+import ReportPage from "./pages/ReportPage";
 
 function NavItem({ to, children }) {
   return (
