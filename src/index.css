@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Component helpers */
+@layer components {
+  .btn { @apply px-3 py-2 rounded-lg border bg-black text-white hover:opacity-90 text-sm; }
+  .btn-outline { @apply px-3 py-2 rounded-lg border text-sm bg-white hover:bg-neutral-50; }
+  .inp { @apply border rounded-lg px-2 py-2 w-full bg-white; }
+}
