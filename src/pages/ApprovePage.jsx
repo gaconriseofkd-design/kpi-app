@@ -8,7 +8,7 @@ export default function ApprovePage() {
   async function load() {
     setLoading(true);
     const { data, error } = await supabase
-      .from("kpi.kpi_entries")
+      .from("kpi_entries")
       .select("*")
       .eq("status", "approved")
       .order("approved_at", { ascending: false });
