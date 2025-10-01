@@ -1,5 +1,5 @@
 // src/pages/QuickEntry.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 /* ----- Chấm điểm ----- */
@@ -38,13 +38,14 @@ const DEFAULT_TEMPLATE = {
   compliance_code: "NONE",
 };
 
-/* ===================== 1) GATE: Đăng nhập ===================== */
+/* ===================== GATE đăng nhập ===================== */
 export default function QuickEntry() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("qe_authed") === "1");
   const [pwd, setPwd] = useState("");
 
   function tryLogin(e) {
     e?.preventDefault();
+    // pass theo yêu cầu: davitu
     if (pwd === "davidtu") {
       sessionStorage.setItem("qe_authed", "1");
       setAuthed(true);
@@ -64,7 +65,7 @@ export default function QuickEntry() {
             className="input w-full"
             value={pwd}
             onChange={(e) => setPwd(e.target.value)}
-            placeholder="davidtu"
+            
           />
           <button className="btn btn-primary mt-4 w-full" type="submit">Đăng nhập</button>
         </form>
@@ -75,31 +76,24 @@ export default function QuickEntry() {
   return <QuickEntryContent />;
 }
 
-/* ===================== 2) CONTENT: Toàn bộ logic trang ===================== */
+/* ===================== CONTENT ===================== */
 function QuickEntryContent() {
-  // Wizard
   const [step, setStep] = useState("choose"); // choose -> template -> review
-
-  // B1: chọn người duyệt & nhân viên
   const [approverId, setApproverId] = useState("");
   const [approverName, setApproverName] = useState("");
   const [users, setUsers] = useState([]);
   const [selected, setSelected] = useState(() => new Set());
 
-  // B2: template KPI
   const [tpl, setTpl] = useState({ ...DEFAULT_TEMPLATE });
-
-  // B3: review & lưu
   const [entries, setEntries] = useState([]);
   const [saving, setSaving] = useState(false);
 
-  /* ---- hooks KHÔNG được đặt sau return có điều kiện ---- */
   const allSelected = useMemo(
     () => (users.length ? users.every((u) => selected.has(u.msnv)) : false),
     [users, selected]
   );
 
-  /* ---------- STEP 1 ---------- */
+  /* ----- B1: tải danh sách nhân viên theo approver ----- */
   async function loadUsersByApprover() {
     const id = approverId.trim();
     if (!id) return alert("Nhập MSNV người duyệt trước.");
@@ -114,18 +108,16 @@ function QuickEntryContent() {
     setSelected(new Set());
     setStep("choose");
   }
+
   function toggleRow(msnv) {
-    setSelected((prev) => {
+    setSelected(prev => {
       const n = new Set(prev);
       n.has(msnv) ? n.delete(msnv) : n.add(msnv);
       return n;
     });
   }
   function toggleAll() {
-    setSelected((prev) => {
-      if (allSelected) return new Set();
-      return new Set(users.map((u) => u.msnv));
-    });
+    setSelected(() => (allSelected ? new Set() : new Set(users.map(u => u.msnv))));
   }
   function gotoTemplate() {
     if (!selected.size) return alert("Chưa chọn nhân viên nào.");
@@ -133,11 +125,11 @@ function QuickEntryContent() {
     setStep("template");
   }
 
-  /* ---------- STEP 2 ---------- */
+  /* ----- B2: xác nhận template → tạo danh sách nhập ----- */
   function confirmTemplate() {
     const list = users
-      .filter((u) => selected.has(u.msnv))
-      .map((u) => {
+      .filter(u => selected.has(u.msnv))
+      .map(u => {
         const base = {
           worker_id: u.msnv,
           worker_name: u.full_name || "",
@@ -151,26 +143,25 @@ function QuickEntryContent() {
     setStep("review");
   }
 
-  /* ---------- STEP 3 ---------- */
+  /* ----- B3: chỉnh từng người & lưu thẳng đã duyệt ----- */
   function updateEntry(idx, key, val) {
-    setEntries((prev) => {
+    setEntries(prev => {
       const arr = [...prev];
       const row = { ...arr[idx], [key]: val };
-      const recalced = { ...row, ...deriveScores(row) };
-      arr[idx] = recalced;
+      arr[idx] = { ...row, ...deriveScores(row) };
       return arr;
     });
   }
+
   async function saveAll() {
     if (!entries.length) return alert("Không có dữ liệu để lưu.");
     try {
       setSaving(true);
       const now = new Date().toISOString();
-
-      // Batch insert (500 dòng/lần) — LƯU THẲNG Ở TRẠNG THÁI 'approved'
       const size = 500;
+
       for (let i = 0; i < entries.length; i += size) {
-        const chunk = entries.slice(i, i + size).map((e) => {
+        const chunk = entries.slice(i, i + size).map(e => {
           const violations = e.compliance_code === "NONE" ? 0 : 1;
           return {
             date: e.date,
@@ -189,23 +180,20 @@ function QuickEntryContent() {
             q_score: e.q_score,
             day_score: e.day_score,
             overflow: e.overflow,
-
-            // 👇 Lưu thẳng đã duyệt
-            status: "approved",
+            status: "approved",            // lưu thẳng đã duyệt
             violations,
             approver_note: "Fast entry",
             approved_at: now,
           };
         });
 
-        // Nếu bạn có UNIQUE (worker_id,date) trên kpi_entries, có thể dùng upsert:
+        // Nếu có unique (worker_id,date) thì dùng upsert:
         // const { error } = await supabase.from("kpi_entries").upsert(chunk, { onConflict: "worker_id,date" });
         const { error } = await supabase.from("kpi_entries").insert(chunk);
         if (error) throw error;
       }
 
       alert(`Đã lưu & duyệt ${entries.length} bản ghi KPI.`);
-      // Quay về bước chọn
       setStep("choose");
       setEntries([]);
       setSelected(new Set());
@@ -217,19 +205,23 @@ function QuickEntryContent() {
     }
   }
 
-
-  /* ---------- RENDER ---------- */
+  /* ===================== RENDER ===================== */
   if (step === "template") {
     const scores = deriveScores(tpl);
     return (
       <div className="p-4 space-y-4">
         <h2 className="text-xl font-semibold">Nhập KPI nhanh – Template cho {selected.size} nhân viên</h2>
-        <div className="grid md-grid-cols-2 gap-4">
+
+        {/* Lưu ý: md:grid-cols-2 (có dấu :) */}
+        <div className="grid md:grid-cols-2 gap-4">
           <label>Ngày:
-            <input type="date" className="input" value={tpl.date} onChange={(e) => setTpl((s) => ({ ...s, date: e.target.value }))} />
+            <input type="date" className="input" value={tpl.date}
+                   onChange={e => setTpl(s => ({ ...s, date: e.target.value }))} />
           </label>
+
           <label>Line:
-            <select className="input" value={tpl.line} onChange={(e) => setTpl((s) => ({ ...s, line: e.target.value }))}>
+            <select className="input" value={tpl.line}
+                    onChange={e => setTpl(s => ({ ...s, line: e.target.value }))}>
               <option value="LEAN-D1">LEAN-D1</option>
               <option value="LEAN-D2">LEAN-D2</option>
               <option value="LEAN-D3">LEAN-D3</option>
@@ -238,36 +230,47 @@ function QuickEntryContent() {
               <option value="LEAN-H2">LEAN-H2</option>
             </select>
           </label>
+
           <label>Ca:
-            <label>Ca làm việc:
-            <select className="inp" value={form.ca} onChange={e => handleChange("ca", e.target.value)}>
+            <select className="input" value={tpl.ca}
+                    onChange={e => setTpl(s => ({ ...s, ca: e.target.value }))}>
               <option value="Ca 1">Ca 1</option>
               <option value="Ca 2">Ca 2</option>
               <option value="Ca 3">Ca 3</option>
-              <option value="Ca HC">Ca 3</option>
+              <option value="Ca HC">Ca HC</option>
             </select>
           </label>
-          </label>
+
           <label>Giờ làm việc:
-            <input type="number" className="input" value={tpl.work_hours} onChange={(e) => setTpl((s) => ({ ...s, work_hours: Number(e.target.value) }))} />
+            <input type="number" className="input" value={tpl.work_hours}
+                   onChange={e => setTpl(s => ({ ...s, work_hours: Number(e.target.value) }))} />
           </label>
+
           <label>Giờ dừng máy:
-            <input type="number" className="input" value={tpl.stop_hours} onChange={(e) => setTpl((s) => ({ ...s, stop_hours: Number(e.target.value) }))} />
+            <input type="number" className="input" value={tpl.stop_hours}
+                   onChange={e => setTpl(s => ({ ...s, stop_hours: Number(e.target.value) }))} />
           </label>
+
           <label>Số đôi phế:
-            <input type="number" className="input" value={tpl.defects} onChange={(e) => setTpl((s) => ({ ...s, defects: Number(e.target.value) }))} />
+            <input type="number" className="input" value={tpl.defects}
+                   onChange={e => setTpl(s => ({ ...s, defects: Number(e.target.value) }))} />
           </label>
+
           <label>%OE:
-            <input type="number" className="input" value={tpl.oe} onChange={(e) => setTpl((s) => ({ ...s, oe: Number(e.target.value) }))} />
+            <input type="number" className="input" value={tpl.oe}
+                   onChange={e => setTpl(s => ({ ...s, oe: Number(e.target.value) }))} />
           </label>
+
           <label>Vi phạm:
-          <select className="inp" value={form.compliance} onChange={e => handleChange("compliance", e.target.value)}>
+            <select className="input" value={tpl.compliance_code}
+                    onChange={e => setTpl(s => ({ ...s, compliance_code: e.target.value }))}>
               <option value="NONE">Không vi phạm</option>
+              {/* giữ code ngắn gọn để lưu DB, mô tả để đọc */}
               <option value="LATE">Ký mẫu đầu chuyền trước khi sử dụng</option>
-              <option value="PPE">Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất</option>
-              <option value="5S">Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất</option>
-              <option value="5S">Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất</option>
-              <option value="5S">Vi phạm nội quy bộ phận/công ty</option>
+              <option value="PPE">Kiểm tra điều kiện máy</option>
+              <option value="MAT">Kiểm tra nguyên liệu</option>
+              <option value="SPEC">Kiểm tra tiêu chuẩn sản phẩm</option>
+              <option value="RULE">Vi phạm nội quy</option>
             </select>
           </label>
         </div>
@@ -294,7 +297,9 @@ function QuickEntryContent() {
         <div className="mb-3 flex gap-2">
           <button className="btn" onClick={() => setStep("template")}>Sửa template</button>
           <button className="btn" onClick={() => setStep("choose")}>Chọn lại nhân viên</button>
-          <button className="btn btn-primary" onClick={saveAll} disabled={saving}>{saving ? "Đang lưu..." : "Hoàn thành nhập KPI"}</button>
+          <button className="btn btn-primary" onClick={saveAll} disabled={saving}>
+            {saving ? "Đang lưu..." : "Hoàn thành & LƯU (đã duyệt)"}
+          </button>
         </div>
 
         <div className="overflow-auto">
@@ -322,39 +327,54 @@ function QuickEntryContent() {
                   <td className="p-2">{r.worker_id}</td>
                   <td className="p-2">{r.worker_name}</td>
                   <td className="p-2">
-                    <input type="date" className="input" value={r.date} onChange={(e) => updateEntry(idx, "date", e.target.value)} />
+                    <input type="date" className="input" value={r.date}
+                           onChange={(e) => updateEntry(idx, "date", e.target.value)} />
                   </td>
                   <td className="p-2">
-                    <select className="input" value={r.line} onChange={(e) => updateEntry(idx, "line", e.target.value)}>
+                    <select className="input" value={r.line}
+                            onChange={(e) => updateEntry(idx, "line", e.target.value)}>
                       <option value="LEAN-D1">LEAN-D1</option>
                       <option value="LEAN-D2">LEAN-D2</option>
+                      <option value="LEAN-D3">LEAN-D3</option>
+                      <option value="LEAN-D4">LEAN-D4</option>
+                      <option value="LEAN-H1">LEAN-H1</option>
+                      <option value="LEAN-H2">LEAN-H2</option>
                     </select>
                   </td>
                   <td className="p-2">
-                    <select className="input" value={r.ca} onChange={(e) => updateEntry(idx, "ca", e.target.value)}>
+                    <select className="input" value={r.ca}
+                            onChange={(e) => updateEntry(idx, "ca", e.target.value)}>
                       <option value="Ca 1">Ca 1</option>
                       <option value="Ca 2">Ca 2</option>
                       <option value="Ca 3">Ca 3</option>
+                      <option value="Ca HC">Ca HC</option>
                     </select>
                   </td>
                   <td className="p-2">
-                    <input type="number" className="input w-24" value={r.work_hours} onChange={(e) => updateEntry(idx, "work_hours", Number(e.target.value))} />
+                    <input type="number" className="input w-24" value={r.work_hours}
+                           onChange={(e) => updateEntry(idx, "work_hours", Number(e.target.value))} />
                   </td>
                   <td className="p-2">
-                    <input type="number" className="input w-20" value={r.stop_hours} onChange={(e) => updateEntry(idx, "stop_hours", Number(e.target.value))} />
+                    <input type="number" className="input w-20" value={r.stop_hours}
+                           onChange={(e) => updateEntry(idx, "stop_hours", Number(e.target.value))} />
                   </td>
                   <td className="p-2">
-                    <input type="number" className="input w-20" value={r.defects} onChange={(e) => updateEntry(idx, "defects", Number(e.target.value))} />
+                    <input type="number" className="input w-20" value={r.defects}
+                           onChange={(e) => updateEntry(idx, "defects", Number(e.target.value))} />
                   </td>
                   <td className="p-2">
-                    <input type="number" className="input w-24" value={r.oe} onChange={(e) => updateEntry(idx, "oe", Number(e.target.value))} />
+                    <input type="number" className="input w-24" value={r.oe}
+                           onChange={(e) => updateEntry(idx, "oe", Number(e.target.value))} />
                   </td>
                   <td className="p-2">
-                    <select className="input" value={r.compliance_code} onChange={(e) => updateEntry(idx, "compliance_code", e.target.value)}>
+                    <select className="input" value={r.compliance_code}
+                            onChange={(e) => updateEntry(idx, "compliance_code", e.target.value)}>
                       <option value="NONE">NONE</option>
                       <option value="LATE">LATE</option>
                       <option value="PPE">PPE</option>
-                      <option value="5S">5S</option>
+                      <option value="MAT">MAT</option>
+                      <option value="SPEC">SPEC</option>
+                      <option value="RULE">RULE</option>
                     </select>
                   </td>
                   <td className="p-2">{r.p_score}</td>
@@ -372,7 +392,7 @@ function QuickEntryContent() {
     );
   }
 
-  /* ---------- STEP 1 UI ---------- */
+  /* ----- B1 UI ----- */
   return (
     <div className="p-4">
       <h2 className="text-xl font-semibold mb-3">Nhập KPI nhanh – Bước 1: Chọn nhân viên</h2>

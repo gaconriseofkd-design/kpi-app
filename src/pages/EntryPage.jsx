@@ -154,7 +154,7 @@ export default function EntryPage() {
             <option value="Ca 1">Ca 1</option>
             <option value="Ca 2">Ca 2</option>
             <option value="Ca 3">Ca 3</option>
-            <option value="Ca HC">Ca 3</option>
+            <option value="Ca HC">Ca HC</option>
           </select>
         </label>
 
