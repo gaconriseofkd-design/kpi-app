@@ -1,6 +1,7 @@
 // src/pages/QuickEntry.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { useKpiSection } from "../context/KpiSectionContext";
 
 /* =================== Helpers tính điểm =================== */
 // Tính điểm sản lượng theo rule từ DB: mảng [{threshold, score, active}]
@@ -86,6 +87,7 @@ export default function QuickEntry() {
 
 /* =================== Nội dung trang Nhập nhanh =================== */
 function QuickEntryContent() {
+  const { section } = useKpiSection();
   // Steps: chọn NV -> nhập template -> review & lưu
   const [step, setStep] = useState("choose"); // choose | template | review
 
@@ -109,12 +111,13 @@ function QuickEntryContent() {
       .from("kpi_rule_productivity")
       .select("*")
       .eq("active", true)
+      .eq("section", section)
       .order("threshold", { ascending: false })
       .then(({ data, error }) => {
         if (error) console.error("Load rules error:", error);
         setProdRules(data || []);
       });
-  }, []);
+  }, [section]);
 
   const allSelected = useMemo(
     () => (users.length ? users.every((u) => selected.has(u.msnv)) : false),
@@ -210,6 +213,7 @@ function QuickEntryContent() {
             overflow: e.overflow,
 
             // Lưu thẳng là đã duyệt
+            section,
             status: "approved",
             violations,
             approver_note: "Fast entry",

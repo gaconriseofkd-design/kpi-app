@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { scoreByProductivity } from "../lib/scoring";
+import { useKpiSection } from "../context/KpiSectionContext";
 
 export default function RulesPage() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("rules_authed") === "1");
@@ -31,6 +32,7 @@ export default function RulesPage() {
 }
 
 function RulesContent() {
+  const { section, SECTIONS } = useKpiSection();
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -42,6 +44,7 @@ function RulesContent() {
     const { data, error } = await supabase
       .from("kpi_rule_productivity")
       .select("*")
+      .eq("section", section)
       .order("threshold", { ascending: false });
     setLoading(false);
     if (error) return alert(error.message);
@@ -69,6 +72,7 @@ function RulesContent() {
       score: Number(r.score || 0),
       note: r.note || "",
       active: !!r.active,
+      section,  // gắn section khi upsert
     }));
     // không cho trùng threshold?
     const uniq = new Set();
@@ -91,6 +95,9 @@ function RulesContent() {
     <div className="p-4 space-y-4">
       <div className="flex items-center gap-2">
         <h2 className="text-xl font-semibold">Rule điểm sản lượng (%OE → Điểm)</h2>
+        <span className="px-2 py-1 text-xs rounded bg-slate-100">
+            Section: {SECTIONS.find(s => s.key === section)?.label || section}
+        </span>
         <button className="btn" onClick={load} disabled={loading}>{loading ? "Đang tải..." : "Tải lại"}</button>
         <button className="btn" onClick={addRow}>+ Thêm rule</button>
         <button className="btn btn-primary" onClick={saveAll} disabled={saving}>

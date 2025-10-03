@@ -1,6 +1,7 @@
 // src/pages/EntryPage.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { useKpiSection } from "../context/KpiSectionContext";
 
 /* ------------ Helpers chấm điểm ------------ */
 // Điểm sản lượng theo rule trong DB
@@ -52,6 +53,7 @@ const DEFAULT_FORM = {
 };
 
 export default function EntryPage() {
+  const { section } = useKpiSection();
   const [form, setForm] = useState({ ...DEFAULT_FORM });
   const [prodRules, setProdRules] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -62,12 +64,13 @@ export default function EntryPage() {
       .from("kpi_rule_productivity")
       .select("*")
       .eq("active", true)
+      .eq("section", section)
       .order("threshold", { ascending: false })
       .then(({ data, error }) => {
         if (error) console.error("Load rules error:", error);
         setProdRules(data || []);
       });
-  }, []);
+    }, [section]);
 
   // Khi MSNV thay đổi -> tự điền họ tên + approver
   useEffect(() => {
@@ -139,7 +142,8 @@ export default function EntryPage() {
       q_score: scores.q_score,
       day_score: scores.day_score,
       overflow: scores.overflow,
-
+      
+      section, 
       status: "pending",          // ⬅️ nhập thường: chờ duyệt
       violations,
       created_at: now,
