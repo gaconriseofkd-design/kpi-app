@@ -1,21 +1,19 @@
 // src/pages/EntryPage.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useKpiSection } from "../context/KpiSectionContext";
 
-/* ------------ Helpers chấm điểm ------------ */
-// Điểm sản lượng theo rule trong DB
+/* ================= Helpers chấm điểm ================= */
 function scoreByProductivity(oe, rules) {
   const v = Number(oe ?? 0);
   const list = (rules || [])
-    .filter(r => r.active !== false)
+    .filter((r) => r.active !== false)
     .sort((a, b) => Number(b.threshold) - Number(a.threshold));
   for (const r of list) {
     if (v >= Number(r.threshold)) return Number(r.score || 0);
   }
   return 0;
 }
-// Điểm chất lượng (nếu muốn, có thể tách ra bảng rule tương tự)
 function scoreByQuality(defects) {
   const d = Number(defects || 0);
   if (d === 0) return 10;
@@ -36,7 +34,7 @@ function deriveDayScores({ oe, defects }, prodRules) {
   };
 }
 
-/* ------------ Mặc định form ------------ */
+/* ================= Form mặc định ================= */
 const DEFAULT_FORM = {
   date: new Date().toISOString().slice(0, 10),
   workerId: "",
@@ -53,59 +51,91 @@ const DEFAULT_FORM = {
 };
 
 export default function EntryPage() {
-  const { section } = useKpiSection();
+  const { section } = useKpiSection(); // <<— dùng section hiện tại
   const [form, setForm] = useState({ ...DEFAULT_FORM });
+
   const [prodRules, setProdRules] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Tải rule điểm sản lượng
+  // ====== tải rule theo section ======
   useEffect(() => {
-    supabase
-      .from("kpi_rule_productivity")
-      .select("*")
-      .eq("active", true)
-      .eq("section", section)
-      .order("threshold", { ascending: false })
-      .then(({ data, error }) => {
-        if (error) console.error("Load rules error:", error);
-        setProdRules(data || []);
-      });
-    }, [section]);
-
-  // Khi MSNV thay đổi -> tự điền họ tên + approver
-  useEffect(() => {
-    const id = form.workerId.trim();
-    if (!id) {
-      setForm(f => ({ ...f, workerName: "", approverId: "", approverName: "" }));
-      return;
-    }
     let cancelled = false;
     (async () => {
+      const { data, error } = await supabase
+        .from("kpi_rule_productivity")
+        .select("*")
+        .eq("active", true)
+        .eq("section", section) // rule riêng theo section
+        .order("threshold", { ascending: false });
+      if (!cancelled) {
+        if (error) console.error("Load rules error:", error);
+        setProdRules(data || []);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [section]);
+
+  // ====== auto fill họ tên + approver từ bảng users ======
+  const userCache = useRef(new Map());
+  useEffect(() => {
+    const id = (form.workerId || "").trim();
+    if (!id) {
+      setForm((f) => ({
+        ...f,
+        workerName: "",
+        approverId: "",
+        approverName: "",
+      }));
+      return;
+    }
+
+    const cached = userCache.current.get(id);
+    if (cached) {
+      setForm((f) => ({
+        ...f,
+        workerName: cached.full_name || "",
+        approverId: cached.approver_msnv || "",
+        approverName: cached.approver_name || "",
+      }));
+      return;
+    }
+
+    const t = setTimeout(async () => {
+      // Nếu users có cột section, bạn có thể thêm .eq('section', section) vào dưới
       const { data, error } = await supabase
         .from("users")
         .select("msnv, full_name, approver_msnv, approver_name")
         .eq("msnv", id)
         .maybeSingle();
-      if (cancelled) return;
-      if (error) {
-        console.error(error);
+
+      if (error && error.code !== "PGRST116") {
+        console.error("Lookup user error:", error);
         return;
       }
       if (data) {
-        setForm(f => ({
+        userCache.current.set(id, data);
+        setForm((f) => ({
           ...f,
           workerName: data.full_name || "",
           approverId: data.approver_msnv || "",
           approverName: data.approver_name || "",
         }));
       } else {
-        setForm(f => ({ ...f, workerName: "", approverId: "", approverName: "" }));
+        setForm((f) => ({
+          ...f,
+          workerName: "",
+          approverId: "",
+          approverName: "",
+        }));
       }
-    })();
-    return () => { cancelled = true; };
+    }, 250);
+
+    return () => clearTimeout(t);
   }, [form.workerId]);
 
-  // Tính điểm động
+  // ====== tính điểm động ======
   const scores = useMemo(
     () => deriveDayScores({ oe: form.oe, defects: form.defects }, prodRules),
     [form.oe, form.defects, prodRules]
@@ -115,8 +145,20 @@ export default function EntryPage() {
     setForm((f) => ({ ...f, [key]: val }));
   }
 
+  // ====== kiểm tra trùng (worker_id, date, section) ======
+  async function findExisting(workerId, date, sectionKey) {
+    const { data, error } = await supabase
+      .from("kpi_entries")
+      .select("id, status, approved_at")
+      .eq("worker_id", workerId)
+      .eq("date", date)
+      .eq("section", sectionKey)
+      .maybeSingle();
+    if (error && error.code !== "PGRST116") throw error;
+    return data || null;
+  }
+
   async function handleSubmit() {
-    // Validate cơ bản
     if (!form.workerId) return alert("Nhập MSNV.");
     if (!form.approverId) return alert("Không tìm thấy Người duyệt cho MSNV này.");
     if (!form.date) return alert("Chọn ngày.");
@@ -142,20 +184,51 @@ export default function EntryPage() {
       q_score: scores.q_score,
       day_score: scores.day_score,
       overflow: scores.overflow,
-      
-      section, 
-      status: "pending",          // ⬅️ nhập thường: chờ duyệt
+
+      section,                 // <<— lưu section
+      status: "pending",       // nhập thường: chờ duyệt
       violations,
       created_at: now,
     };
 
     try {
       setLoading(true);
-      const { error } = await supabase.from("kpi_entries").insert([payload]);
-      if (error) throw error;
-      alert(`Đã gửi KPI cho ${form.workerId} – điểm ngày: ${scores.day_score}.`);
-      // Giữ ngày + line/ca, reset số liệu
-      setForm(f => ({
+
+      // Kiểm tra trùng
+      const existing = await findExisting(form.workerId, form.date, section);
+      if (existing) {
+        const isApproved = existing.status === "approved";
+        const msg = isApproved
+          ? "Ngày này đã có bản ghi ĐÃ DUYỆT.\nGhi đè sẽ đưa bản ghi về trạng thái CHỜ DUYỆT lại. Tiếp tục?"
+          : "Ngày này đã có bản ghi CHỜ DUYỆT.\nBạn có muốn CẬP NHẬT bản ghi đó không?";
+        if (!confirm(msg)) {
+          setLoading(false);
+          return;
+        }
+
+        const patch = { ...payload };
+        if (isApproved) {
+          patch.status = "pending";
+          patch.approved_at = null;
+          patch.approver_note = null;
+        }
+
+        const { error: upErr } = await supabase
+          .from("kpi_entries")
+          .update(patch)
+          .eq("id", existing.id);
+        if (upErr) throw upErr;
+
+        alert("Đã cập nhật bản ghi.");
+      } else {
+        // Insert mới
+        const { error } = await supabase.from("kpi_entries").insert([payload]);
+        if (error) throw error;
+        alert(`Đã gửi KPI cho ${form.workerId} – điểm ngày: ${scores.day_score}.`);
+      }
+
+      // Reset số liệu, giữ ngày/line/ca
+      setForm((f) => ({
         ...f,
         workHours: 8,
         stopHours: 0,
@@ -181,7 +254,7 @@ export default function EntryPage() {
             type="date"
             className="input"
             value={form.date}
-            onChange={e => handleChange("date", e.target.value)}
+            onChange={(e) => handleChange("date", e.target.value)}
           />
         </label>
 
@@ -189,7 +262,7 @@ export default function EntryPage() {
           <input
             className="input"
             value={form.workerId}
-            onChange={e => handleChange("workerId", e.target.value.trim())}
+            onChange={(e) => handleChange("workerId", e.target.value.trim())}
             placeholder="vd: 04126"
           />
         </label>
@@ -207,7 +280,11 @@ export default function EntryPage() {
         </label>
 
         <label>Line làm việc:
-          <select className="input" value={form.line} onChange={e => handleChange("line", e.target.value)}>
+          <select
+            className="input"
+            value={form.line}
+            onChange={(e) => handleChange("line", e.target.value)}
+          >
             <option value="LEAN-D1">LEAN-D1</option>
             <option value="LEAN-D2">LEAN-D2</option>
             <option value="LEAN-D3">LEAN-D3</option>
@@ -218,7 +295,11 @@ export default function EntryPage() {
         </label>
 
         <label>Ca làm việc:
-          <select className="input" value={form.ca} onChange={e => handleChange("ca", e.target.value)}>
+          <select
+            className="input"
+            value={form.ca}
+            onChange={(e) => handleChange("ca", e.target.value)}
+          >
             <option value="Ca 1">Ca 1</option>
             <option value="Ca 2">Ca 2</option>
             <option value="Ca 3">Ca 3</option>
@@ -231,7 +312,7 @@ export default function EntryPage() {
             type="number"
             className="input"
             value={form.workHours}
-            onChange={e => handleChange("workHours", Number(e.target.value))}
+            onChange={(e) => handleChange("workHours", Number(e.target.value))}
           />
         </label>
 
@@ -240,7 +321,7 @@ export default function EntryPage() {
             type="number"
             className="input"
             value={form.stopHours}
-            onChange={e => handleChange("stopHours", Number(e.target.value))}
+            onChange={(e) => handleChange("stopHours", Number(e.target.value))}
           />
         </label>
 
@@ -249,7 +330,7 @@ export default function EntryPage() {
             type="number"
             className="input"
             value={form.defects}
-            onChange={e => handleChange("defects", Number(e.target.value))}
+            onChange={(e) => handleChange("defects", Number(e.target.value))}
           />
         </label>
 
@@ -258,7 +339,7 @@ export default function EntryPage() {
             type="number"
             className="input"
             value={form.oe}
-            onChange={e => handleChange("oe", Number(e.target.value))}
+            onChange={(e) => handleChange("oe", Number(e.target.value))}
           />
         </label>
 
@@ -266,14 +347,14 @@ export default function EntryPage() {
           <select
             className="input"
             value={form.compliance}
-            onChange={e => handleChange("compliance", e.target.value)}
+            onChange={(e) => handleChange("compliance", e.target.value)}
           >
             <option value="NONE">Không vi phạm</option>
-            <option value="LATE">Ký mẫu đầu chuyền trước khi sử dụng</option>
-            <option value="PPE">Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất</option>
-            <option value="MAT">Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất</option>
-            <option value="SPEC">Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất</option>
-            <option value="RULE">Vi phạm nội quy bộ phận/công ty</option>
+            <option value="LATE">Đi trễ / Về sớm</option>
+            <option value="PPE">Vi phạm PPE</option>
+            <option value="MAT">Vi phạm nguyên liệu</option>
+            <option value="SPEC">Vi phạm tiêu chuẩn</option>
+            <option value="RULE">Vi phạm nội quy</option>
           </select>
         </label>
       </div>

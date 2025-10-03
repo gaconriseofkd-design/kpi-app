@@ -4,7 +4,6 @@ import { supabase } from "../lib/supabaseClient";
 import { useKpiSection } from "../context/KpiSectionContext";
 
 /* =================== Helpers tính điểm =================== */
-// Tính điểm sản lượng theo rule từ DB: mảng [{threshold, score, active}]
 function scoreByProductivity(oe, rules) {
   const v = Number(oe ?? 0);
   const list = (rules || [])
@@ -15,7 +14,6 @@ function scoreByProductivity(oe, rules) {
   }
   return 0;
 }
-// Chất lượng (có thể tách thành bảng rule riêng sau)
 function scoreByQuality(defects) {
   const d = Number(defects || 0);
   if (d === 0) return 10;
@@ -36,7 +34,6 @@ function deriveDayScores({ oe, defects }, prodRules) {
   };
 }
 
-/* =================== Mặc định template nhập nhanh =================== */
 const DEFAULT_TEMPLATE = {
   date: new Date().toISOString().slice(0, 10),
   line: "LEAN-D1",
@@ -88,24 +85,16 @@ export default function QuickEntry() {
 /* =================== Nội dung trang Nhập nhanh =================== */
 function QuickEntryContent() {
   const { section } = useKpiSection();
-  // Steps: chọn NV -> nhập template -> review & lưu
-  const [step, setStep] = useState("choose"); // choose | template | review
-
-  // Bộ dữ liệu người duyệt & nhân viên
+  const [step, setStep] = useState("choose"); 
   const [approverId, setApproverId] = useState("");
   const [approverName, setApproverName] = useState("");
-  const [users, setUsers] = useState([]);          // [{msnv, full_name, approver_msnv, approver_name}]
+  const [users, setUsers] = useState([]);
   const [selected, setSelected] = useState(() => new Set());
-
-  // Template KPI chung
   const [tpl, setTpl] = useState({ ...DEFAULT_TEMPLATE });
-
-  // Danh sách bản ghi sẽ lưu
   const [entries, setEntries] = useState([]);
   const [saving, setSaving] = useState(false);
-
-  // Rule điểm sản lượng (tải từ Supabase)
   const [prodRules, setProdRules] = useState([]);
+
   useEffect(() => {
     supabase
       .from("kpi_rule_productivity")
@@ -124,7 +113,6 @@ function QuickEntryContent() {
     [users, selected]
   );
 
-  /* ---------- B1: tải NV theo người duyệt ---------- */
   async function loadUsersByApprover() {
     const id = approverId.trim();
     if (!id) return alert("Nhập MSNV người duyệt trước.");
@@ -156,7 +144,6 @@ function QuickEntryContent() {
     setStep("template");
   }
 
-  /* ---------- B2: xác nhận template -> tạo entries ---------- */
   function confirmTemplate() {
     const list = users
       .filter(u => selected.has(u.msnv))
@@ -174,7 +161,6 @@ function QuickEntryContent() {
     setStep("review");
   }
 
-  /* ---------- B3: chỉnh từng dòng & lưu thẳng đã duyệt ---------- */
   function updateEntry(idx, key, val) {
     setEntries(prev => {
       const arr = [...prev];
@@ -189,43 +175,57 @@ function QuickEntryContent() {
     try {
       setSaving(true);
       const now = new Date().toISOString();
-      const size = 500;
 
-      for (let i = 0; i < entries.length; i += size) {
-        const chunk = entries.slice(i, i + size).map(e => {
-          const violations = e.compliance_code === "NONE" ? 0 : 1;
-          return {
-            date: e.date,
-            worker_id: e.worker_id,
-            worker_name: e.worker_name,
-            approver_id: e.approver_id,
-            approver_name: e.approver_name,
-            line: e.line,
-            ca: e.ca,
-            work_hours: Number(e.work_hours || 0),
-            stop_hours: Number(e.stop_hours || 0),
-            defects: Number(e.defects || 0),
-            oe: Number(e.oe || 0),
-            compliance_code: e.compliance_code,
-            p_score: e.p_score,
-            q_score: e.q_score,
-            day_score: e.day_score,
-            overflow: e.overflow,
-
-            // Lưu thẳng là đã duyệt
-            section,
-            status: "approved",
-            violations,
-            approver_note: "Fast entry",
-            approved_at: now,
-          };
-        });
-
-        // Nếu có unique (worker_id,date) thì có thể dùng upsert với onConflict
-        // const { error } = await supabase.from("kpi_entries").upsert(chunk, { onConflict: "worker_id,date" });
-        const { error } = await supabase.from("kpi_entries").insert(chunk);
-        if (error) throw error;
+      // kiểm tra trùng trước
+      for (const e of entries) {
+        const { data: exist, error } = await supabase
+          .from("kpi_entries")
+          .select("id,status")
+          .eq("worker_id", e.worker_id)
+          .eq("date", e.date)
+          .eq("section", section)
+          .maybeSingle();
+        if (error && error.code !== "PGRST116") throw error;
+        if (exist) {
+          const msg = exist.status === "approved"
+            ? `MSNV ${e.worker_id} ngày ${e.date} đã có bản ghi ĐÃ DUYỆT.\nGhi đè sẽ duyệt lại. Tiếp tục?`
+            : `MSNV ${e.worker_id} ngày ${e.date} đã có bản ghi CHỜ DUYỆT.\nCập nhật bản ghi này?`;
+          if (!confirm(msg)) { setSaving(false); return; }
+        }
       }
+
+      // lưu tất cả (upsert)
+      const payload = entries.map(e => {
+        const violations = e.compliance_code === "NONE" ? 0 : 1;
+        return {
+          date: e.date,
+          worker_id: e.worker_id,
+          worker_name: e.worker_name,
+          approver_id: e.approver_id,
+          approver_name: e.approver_name,
+          line: e.line,
+          ca: e.ca,
+          work_hours: Number(e.work_hours || 0),
+          stop_hours: Number(e.stop_hours || 0),
+          defects: Number(e.defects || 0),
+          oe: Number(e.oe || 0),
+          compliance_code: e.compliance_code,
+          p_score: e.p_score,
+          q_score: e.q_score,
+          day_score: e.day_score,
+          overflow: e.overflow,
+          section,
+          status: "approved",
+          violations,
+          approver_note: "Fast entry",
+          approved_at: now,
+        };
+      });
+
+      const { error } = await supabase
+        .from("kpi_entries")
+        .upsert(payload, { onConflict: "worker_id,date,section" });
+      if (error) throw error;
 
       alert(`Đã lưu & duyệt ${entries.length} bản ghi KPI.`);
       setStep("choose");
@@ -489,4 +489,5 @@ function QuickEntryContent() {
       </div>
     </div>
   );
+  
 }
