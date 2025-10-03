@@ -8,6 +8,7 @@ import Pending from "./pages/Pending";
 import ApprovePage from "./pages/ApprovePage";
 import AdminPage from "./pages/AdminPage";
 import ReportPage from "./pages/ReportPage";
+import RulesPage from "./pages/RulesPage";
 
 function NavItem({ to, children }) {
   return (
@@ -19,6 +20,7 @@ function NavItem({ to, children }) {
     >
       {children}
     </NavLink>
+    
   );
 }
 
@@ -36,6 +38,7 @@ function Layout({ children }) {
             <NavItem to="/approve">Xét duyệt</NavItem>
             <NavItem to="/report">Báo cáo KPI</NavItem> {/* 👈 thêm */}
             <NavItem to="/admin">Quản lý User</NavItem>
+            <NavItem to="/rules">Rules điểm SX</NavItem>
           </nav>
         </div>
       </header>
@@ -59,6 +62,7 @@ export default function App() {
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/report" element={<ReportPage />} /> {/* 👈 thêm */}
           <Route path="*" element={<div>404 - Không tìm thấy trang</div>} />
+          <Route path="/rules" element={<RulesPage />} />
         </Routes>
       </Layout>
     </Router>

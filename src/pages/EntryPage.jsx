@@ -1,114 +1,170 @@
-import { useState, useEffect } from "react";
+// src/pages/EntryPage.jsx
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-function useDebounce(value, delay = 350) {
-  const [v, setV] = useState(value);
-  useEffect(() => { const t = setTimeout(() => setV(value), delay); return () => clearTimeout(t); }, [value, delay]);
-  return v;
+/* ------------ Helpers chấm điểm ------------ */
+// Điểm sản lượng theo rule trong DB
+function scoreByProductivity(oe, rules) {
+  const v = Number(oe ?? 0);
+  const list = (rules || [])
+    .filter(r => r.active !== false)
+    .sort((a, b) => Number(b.threshold) - Number(a.threshold));
+  for (const r of list) {
+    if (v >= Number(r.threshold)) return Number(r.score || 0);
+  }
+  return 0;
+}
+// Điểm chất lượng (nếu muốn, có thể tách ra bảng rule tương tự)
+function scoreByQuality(defects) {
+  const d = Number(defects || 0);
+  if (d === 0) return 10;
+  if (d <= 2) return 8;
+  if (d <= 4) return 6;
+  if (d <= 6) return 4;
+  return 0;
+}
+function deriveDayScores({ oe, defects }, prodRules) {
+  const p = scoreByProductivity(oe, prodRules);
+  const q = scoreByQuality(defects);
+  const total = p + q;
+  return {
+    p_score: p,
+    q_score: q,
+    day_score: Math.min(15, total),
+    overflow: Math.max(0, total - 15),
+  };
 }
 
-export default function EntryPage() {
-  const [form, setForm] = useState({
-    date: new Date().toISOString().slice(0, 10),
-    workerId: "", workerName: "",
-    approverId: "", approverName: "",
-    line: "LEAN-D1", ca: "Ca 1",
-    workHours: 8, stopHours: 0,
-    defects: 0, oe: 100,
-    compliance: "NONE",
-  });
-  const [isLookup, setIsLookup] = useState(false);
-  const [notFound, setNotFound] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const debouncedWorkerId = useDebounce((form.workerId || "").trim());
+/* ------------ Mặc định form ------------ */
+const DEFAULT_FORM = {
+  date: new Date().toISOString().slice(0, 10),
+  workerId: "",
+  workerName: "",
+  approverId: "",
+  approverName: "",
+  line: "LEAN-D1",
+  ca: "Ca 1",
+  workHours: 8,
+  stopHours: 0,
+  defects: 0,
+  oe: 100,
+  compliance: "NONE",
+};
 
-  // Tra người dùng theo MSNV (public.users)
+export default function EntryPage() {
+  const [form, setForm] = useState({ ...DEFAULT_FORM });
+  const [prodRules, setProdRules] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  // Tải rule điểm sản lượng
   useEffect(() => {
-    const id = debouncedWorkerId;
-    if (!id) { setNotFound(false); setForm(f => ({ ...f, workerName:"", approverId:"", approverName:"" })); return; }
+    supabase
+      .from("kpi_rule_productivity")
+      .select("*")
+      .eq("active", true)
+      .order("threshold", { ascending: false })
+      .then(({ data, error }) => {
+        if (error) console.error("Load rules error:", error);
+        setProdRules(data || []);
+      });
+  }, []);
+
+  // Khi MSNV thay đổi -> tự điền họ tên + approver
+  useEffect(() => {
+    const id = form.workerId.trim();
+    if (!id) {
+      setForm(f => ({ ...f, workerName: "", approverId: "", approverName: "" }));
+      return;
+    }
     let cancelled = false;
     (async () => {
-      try {
-        setIsLookup(true); setNotFound(false);
-        const { data, error } = await supabase
-          .from("users")
-          .select("msnv, full_name, approver_msnv, approver_name")
-          .eq("msnv", id)
-          .maybeSingle();
-        if (cancelled) return;
-        if (error) { console.error(error); return; }
-        if (data) {
-          setForm(f => ({
-            ...f,
-            workerName: data.full_name || "",
-            approverId: data.approver_msnv || "",
-            approverName: data.approver_name || "",
-          }));
-          setNotFound(false);
-        } else {
-          setForm(f => ({ ...f, workerName:"", approverId:"", approverName:"" }));
-          setNotFound(true);
-        }
-      } finally { if (!cancelled) setIsLookup(false); }
+      const { data, error } = await supabase
+        .from("users")
+        .select("msnv, full_name, approver_msnv, approver_name")
+        .eq("msnv", id)
+        .maybeSingle();
+      if (cancelled) return;
+      if (error) {
+        console.error(error);
+        return;
+      }
+      if (data) {
+        setForm(f => ({
+          ...f,
+          workerName: data.full_name || "",
+          approverId: data.approver_msnv || "",
+          approverName: data.approver_name || "",
+        }));
+      } else {
+        setForm(f => ({ ...f, workerName: "", approverId: "", approverName: "" }));
+      }
     })();
     return () => { cancelled = true; };
-  }, [debouncedWorkerId]);
+  }, [form.workerId]);
 
-  function handleChange(key, val) { setForm(f => ({ ...f, [key]: val })); }
+  // Tính điểm động
+  const scores = useMemo(
+    () => deriveDayScores({ oe: form.oe, defects: form.defects }, prodRules),
+    [form.oe, form.defects, prodRules]
+  );
 
-  // Tính điểm
-  function calcProductivityScore(oe) {
-    if (oe >= 112) return 10; if (oe >= 108) return 9; if (oe >= 104) return 8;
-    if (oe >= 100) return 7;  if (oe >= 98)  return 6; if (oe >= 96)  return 4;
-    if (oe >= 94)  return 2;  return 0;
+  function handleChange(key, val) {
+    setForm((f) => ({ ...f, [key]: val }));
   }
-  function calcQualityScore(defects) {
-    if (defects === 0) return 10; if (defects <= 2) return 8;
-    if (defects <= 4)  return 6;  if (defects <= 6) return 4; return 0;
-  }
-
-  const pScore = calcProductivityScore(form.oe);
-  const qScore = calcQualityScore(form.defects);
-  const raw = pScore + qScore;
-  const dayScore = Math.min(15, raw);
-  const overflow = Math.max(0, raw - 15);
 
   async function handleSubmit() {
-    if (!form.workerId) return alert("Vui lòng nhập MSNV.");
-    if (notFound) return alert("MSNV không tồn tại trong danh sách nhân viên.");
+    // Validate cơ bản
+    if (!form.workerId) return alert("Nhập MSNV.");
+    if (!form.approverId) return alert("Không tìm thấy Người duyệt cho MSNV này.");
+    if (!form.date) return alert("Chọn ngày.");
+
+    const now = new Date().toISOString();
+    const violations = form.compliance === "NONE" ? 0 : 1;
+
+    const payload = {
+      date: form.date,
+      worker_id: form.workerId,
+      worker_name: form.workerName || null,
+      approver_id: form.approverId,
+      approver_name: form.approverName || null,
+      line: form.line,
+      ca: form.ca,
+      work_hours: Number(form.workHours || 0),
+      stop_hours: Number(form.stopHours || 0),
+      defects: Number(form.defects || 0),
+      oe: Number(form.oe || 0),
+      compliance_code: form.compliance,
+
+      p_score: scores.p_score,
+      q_score: scores.q_score,
+      day_score: scores.day_score,
+      overflow: scores.overflow,
+
+      status: "pending",          // ⬅️ nhập thường: chờ duyệt
+      violations,
+      created_at: now,
+    };
+
     try {
-      setSaving(true);
-      const payload = {
-        date: form.date,
-        worker_id: form.workerId,
-        worker_name: form.workerName,
-        approver_id: form.approverId,
-        approver_name: form.approverName,
-        line: form.line,
-        ca: form.ca,
-        work_hours: form.workHours,
-        stop_hours: form.stopHours,
-        defects: form.defects,
-        oe: form.oe,
-        compliance_code: form.compliance,
-        p_score: pScore,
-        q_score: qScore,
-        day_score: dayScore,
-        overflow,
-        status: "pending",
-      };
-      const { data, error } = await supabase
-         .from("kpi_entries")
-        .insert([payload])
-        .select("id");
+      setLoading(true);
+      const { error } = await supabase.from("kpi_entries").insert([payload]);
       if (error) throw error;
-      alert(`Đã gửi KPI cho ${form.workerId} – Điểm ngày: ${dayScore} (ID: ${data?.[0]?.id})`);
-      // Tuỳ ý: reset form về mặc định
-      // setForm(f => ({ ...f, defects:0, oe:100, compliance:"NONE" }));
+      alert(`Đã gửi KPI cho ${form.workerId} – điểm ngày: ${scores.day_score}.`);
+      // Giữ ngày + line/ca, reset số liệu
+      setForm(f => ({
+        ...f,
+        workHours: 8,
+        stopHours: 0,
+        defects: 0,
+        oe: 100,
+        compliance: "NONE",
+      }));
     } catch (e) {
       console.error(e);
       alert("Lưu KPI lỗi: " + (e.message || e));
-    } finally { setSaving(false); }
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (
@@ -117,29 +173,37 @@ export default function EntryPage() {
 
       <div className="grid md:grid-cols-2 gap-4">
         <label>Ngày:
-          <input type="date" className="inp" value={form.date} onChange={e => handleChange("date", e.target.value)} />
+          <input
+            type="date"
+            className="input"
+            value={form.date}
+            onChange={e => handleChange("date", e.target.value)}
+          />
         </label>
 
         <label>MSNV:
-          <input className="inp" value={form.workerId} onChange={e => handleChange("workerId", e.target.value)} />
-          {isLookup && <span className="text-sm text-gray-500 ml-2">đang tra…</span>}
-          {notFound && !isLookup && form.workerId && <span className="text-sm text-red-600 ml-2">không tìm thấy</span>}
+          <input
+            className="input"
+            value={form.workerId}
+            onChange={e => handleChange("workerId", e.target.value.trim())}
+            placeholder="vd: 04126"
+          />
         </label>
 
-        <label>Họ tên:
-          <input className="inp" value={form.workerName} onChange={e => handleChange("workerName", e.target.value)} placeholder="Tự điền theo MSNV hoặc nhập tay" />
+        <label>Họ & tên:
+          <input className="input" value={form.workerName} readOnly />
         </label>
 
         <label>Người duyệt (MSNV):
-          <input className="inp" value={form.approverId} onChange={e => handleChange("approverId", e.target.value)} />
+          <input className="input" value={form.approverId} readOnly />
         </label>
 
         <label>Người duyệt (Họ tên):
-          <input className="inp" value={form.approverName} onChange={e => handleChange("approverName", e.target.value)} />
+          <input className="input" value={form.approverName} readOnly />
         </label>
 
         <label>Line làm việc:
-          <select className="inp" value={form.line} onChange={e => handleChange("line", e.target.value)}>
+          <select className="input" value={form.line} onChange={e => handleChange("line", e.target.value)}>
             <option value="LEAN-D1">LEAN-D1</option>
             <option value="LEAN-D2">LEAN-D2</option>
             <option value="LEAN-D3">LEAN-D3</option>
@@ -150,7 +214,7 @@ export default function EntryPage() {
         </label>
 
         <label>Ca làm việc:
-          <select className="inp" value={form.ca} onChange={e => handleChange("ca", e.target.value)}>
+          <select className="input" value={form.ca} onChange={e => handleChange("ca", e.target.value)}>
             <option value="Ca 1">Ca 1</option>
             <option value="Ca 2">Ca 2</option>
             <option value="Ca 3">Ca 3</option>
@@ -159,42 +223,70 @@ export default function EntryPage() {
         </label>
 
         <label>Giờ làm việc:
-          <input type="number" className="inp" value={form.workHours} onChange={e => handleChange("workHours", Number(e.target.value))} />
+          <input
+            type="number"
+            className="input"
+            value={form.workHours}
+            onChange={e => handleChange("workHours", Number(e.target.value))}
+          />
         </label>
 
         <label>Giờ dừng máy:
-          <input type="number" className="inp" value={form.stopHours} onChange={e => handleChange("stopHours", Number(e.target.value))} />
+          <input
+            type="number"
+            className="input"
+            value={form.stopHours}
+            onChange={e => handleChange("stopHours", Number(e.target.value))}
+          />
         </label>
 
         <label>Số đôi phế:
-          <input type="number" className="inp" value={form.defects} onChange={e => handleChange("defects", Number(e.target.value))} />
+          <input
+            type="number"
+            className="input"
+            value={form.defects}
+            onChange={e => handleChange("defects", Number(e.target.value))}
+          />
         </label>
 
         <label>%OE:
-          <input type="number" className="inp" value={form.oe} onChange={e => handleChange("oe", Number(e.target.value))} />
+          <input
+            type="number"
+            className="input"
+            value={form.oe}
+            onChange={e => handleChange("oe", Number(e.target.value))}
+          />
         </label>
 
         <label>Vi phạm:
-          <select className="inp" value={form.compliance} onChange={e => handleChange("compliance", e.target.value)}>
+          <select
+            className="input"
+            value={form.compliance}
+            onChange={e => handleChange("compliance", e.target.value)}
+          >
             <option value="NONE">Không vi phạm</option>
             <option value="LATE">Ký mẫu đầu chuyền trước khi sử dụng</option>
             <option value="PPE">Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất</option>
-            <option value="5S">Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất</option>
-            <option value="5S">Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất</option>
-            <option value="5S">Vi phạm nội quy bộ phận/công ty</option>
+            <option value="MAT">Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất</option>
+            <option value="SPEC">Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất</option>
+            <option value="RULE">Vi phạm nội quy bộ phận/công ty</option>
           </select>
         </label>
       </div>
 
-      <div className="mt-4">
-        <p>Điểm Sản lượng: {pScore}</p>
-        <p>Điểm Chất lượng: {qScore}</p>
-        <p>Điểm KPI ngày: {dayScore}</p>
-        <p>Điểm dư: {overflow}</p>
+      <div className="mt-3">
+        <p>Điểm Sản lượng: <b>{scores.p_score}</b></p>
+        <p>Điểm Chất lượng: <b>{scores.q_score}</b></p>
+        <p>Điểm KPI ngày: <b>{scores.day_score}</b></p>
+        <p>Điểm dư: <b>{scores.overflow}</b></p>
       </div>
 
-      <button onClick={handleSubmit} disabled={saving} className="mt-4 px-4 py-2 rounded bg-green-600 text-white">
-        {saving ? "Đang lưu..." : "Gửi KPI"}
+      <button
+        onClick={handleSubmit}
+        className="btn btn-primary mt-4"
+        disabled={loading}
+      >
+        {loading ? "Đang lưu..." : "Gửi KPI"}
       </button>
     </div>
   );

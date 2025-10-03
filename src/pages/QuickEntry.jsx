@@ -1,32 +1,41 @@
 // src/pages/QuickEntry.jsx
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 
-/* ----- Chấm điểm ----- */
-function calcP(oe) {
-  if (oe >= 112) return 10;
-  if (oe >= 108) return 9;
-  if (oe >= 104) return 8;
-  if (oe >= 100) return 7;
-  if (oe >= 98) return 6;
-  if (oe >= 96) return 4;
-  if (oe >= 94) return 2;
+/* =================== Helpers tính điểm =================== */
+// Tính điểm sản lượng theo rule từ DB: mảng [{threshold, score, active}]
+function scoreByProductivity(oe, rules) {
+  const v = Number(oe ?? 0);
+  const list = (rules || [])
+    .filter(r => r.active !== false)
+    .sort((a, b) => Number(b.threshold) - Number(a.threshold));
+  for (const r of list) {
+    if (v >= Number(r.threshold)) return Number(r.score || 0);
+  }
   return 0;
 }
-function calcQ(defects) {
-  if (defects === 0) return 10;
-  if (defects <= 2) return 8;
-  if (defects <= 4) return 6;
-  if (defects <= 6) return 4;
+// Chất lượng (có thể tách thành bảng rule riêng sau)
+function scoreByQuality(defects) {
+  const d = Number(defects || 0);
+  if (d === 0) return 10;
+  if (d <= 2) return 8;
+  if (d <= 4) return 6;
+  if (d <= 6) return 4;
   return 0;
 }
-function deriveScores({ oe, defects }) {
-  const p = calcP(Number(oe || 0));
-  const q = calcQ(Number(defects || 0));
+function deriveDayScores({ oe, defects }, prodRules) {
+  const p = scoreByProductivity(oe, prodRules);
+  const q = scoreByQuality(defects);
   const total = p + q;
-  return { p_score: p, q_score: q, day_score: Math.min(15, total), overflow: Math.max(0, total - 15) };
+  return {
+    p_score: p,
+    q_score: q,
+    day_score: Math.min(15, total),
+    overflow: Math.max(0, total - 15),
+  };
 }
 
+/* =================== Mặc định template nhập nhanh =================== */
 const DEFAULT_TEMPLATE = {
   date: new Date().toISOString().slice(0, 10),
   line: "LEAN-D1",
@@ -38,15 +47,14 @@ const DEFAULT_TEMPLATE = {
   compliance_code: "NONE",
 };
 
-/* ===================== GATE đăng nhập ===================== */
+/* =================== Gate đăng nhập (pass: davitu) =================== */
 export default function QuickEntry() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("qe_authed") === "1");
   const [pwd, setPwd] = useState("");
 
   function tryLogin(e) {
     e?.preventDefault();
-    // pass theo yêu cầu: davitu
-    if (pwd === "davidtu") {
+    if (pwd === "davitu") {
       sessionStorage.setItem("qe_authed", "1");
       setAuthed(true);
     } else {
@@ -65,7 +73,7 @@ export default function QuickEntry() {
             className="input w-full"
             value={pwd}
             onChange={(e) => setPwd(e.target.value)}
-            
+            placeholder="davitu"
           />
           <button className="btn btn-primary mt-4 w-full" type="submit">Đăng nhập</button>
         </form>
@@ -76,24 +84,44 @@ export default function QuickEntry() {
   return <QuickEntryContent />;
 }
 
-/* ===================== CONTENT ===================== */
+/* =================== Nội dung trang Nhập nhanh =================== */
 function QuickEntryContent() {
-  const [step, setStep] = useState("choose"); // choose -> template -> review
+  // Steps: chọn NV -> nhập template -> review & lưu
+  const [step, setStep] = useState("choose"); // choose | template | review
+
+  // Bộ dữ liệu người duyệt & nhân viên
   const [approverId, setApproverId] = useState("");
   const [approverName, setApproverName] = useState("");
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState([]);          // [{msnv, full_name, approver_msnv, approver_name}]
   const [selected, setSelected] = useState(() => new Set());
 
+  // Template KPI chung
   const [tpl, setTpl] = useState({ ...DEFAULT_TEMPLATE });
+
+  // Danh sách bản ghi sẽ lưu
   const [entries, setEntries] = useState([]);
   const [saving, setSaving] = useState(false);
+
+  // Rule điểm sản lượng (tải từ Supabase)
+  const [prodRules, setProdRules] = useState([]);
+  useEffect(() => {
+    supabase
+      .from("kpi_rule_productivity")
+      .select("*")
+      .eq("active", true)
+      .order("threshold", { ascending: false })
+      .then(({ data, error }) => {
+        if (error) console.error("Load rules error:", error);
+        setProdRules(data || []);
+      });
+  }, []);
 
   const allSelected = useMemo(
     () => (users.length ? users.every((u) => selected.has(u.msnv)) : false),
     [users, selected]
   );
 
-  /* ----- B1: tải danh sách nhân viên theo approver ----- */
+  /* ---------- B1: tải NV theo người duyệt ---------- */
   async function loadUsersByApprover() {
     const id = approverId.trim();
     if (!id) return alert("Nhập MSNV người duyệt trước.");
@@ -111,9 +139,9 @@ function QuickEntryContent() {
 
   function toggleRow(msnv) {
     setSelected(prev => {
-      const n = new Set(prev);
-      n.has(msnv) ? n.delete(msnv) : n.add(msnv);
-      return n;
+      const s = new Set(prev);
+      s.has(msnv) ? s.delete(msnv) : s.add(msnv);
+      return s;
     });
   }
   function toggleAll() {
@@ -125,7 +153,7 @@ function QuickEntryContent() {
     setStep("template");
   }
 
-  /* ----- B2: xác nhận template → tạo danh sách nhập ----- */
+  /* ---------- B2: xác nhận template -> tạo entries ---------- */
   function confirmTemplate() {
     const list = users
       .filter(u => selected.has(u.msnv))
@@ -137,18 +165,18 @@ function QuickEntryContent() {
           approver_name: u.approver_name || approverName || "",
           ...tpl,
         };
-        return { ...base, ...deriveScores(base) };
+        return { ...base, ...deriveDayScores(base, prodRules) };
       });
     setEntries(list);
     setStep("review");
   }
 
-  /* ----- B3: chỉnh từng người & lưu thẳng đã duyệt ----- */
+  /* ---------- B3: chỉnh từng dòng & lưu thẳng đã duyệt ---------- */
   function updateEntry(idx, key, val) {
     setEntries(prev => {
       const arr = [...prev];
       const row = { ...arr[idx], [key]: val };
-      arr[idx] = { ...row, ...deriveScores(row) };
+      arr[idx] = { ...row, ...deriveDayScores(row, prodRules) };
       return arr;
     });
   }
@@ -180,14 +208,16 @@ function QuickEntryContent() {
             q_score: e.q_score,
             day_score: e.day_score,
             overflow: e.overflow,
-            status: "approved",            // lưu thẳng đã duyệt
+
+            // Lưu thẳng là đã duyệt
+            status: "approved",
             violations,
             approver_note: "Fast entry",
             approved_at: now,
           };
         });
 
-        // Nếu có unique (worker_id,date) thì dùng upsert:
+        // Nếu có unique (worker_id,date) thì có thể dùng upsert với onConflict
         // const { error } = await supabase.from("kpi_entries").upsert(chunk, { onConflict: "worker_id,date" });
         const { error } = await supabase.from("kpi_entries").insert(chunk);
         if (error) throw error;
@@ -205,14 +235,13 @@ function QuickEntryContent() {
     }
   }
 
-  /* ===================== RENDER ===================== */
+  /* =================== RENDER =================== */
   if (step === "template") {
-    const scores = deriveScores(tpl);
+    const scores = deriveDayScores(tpl, prodRules);
     return (
       <div className="p-4 space-y-4">
         <h2 className="text-xl font-semibold">Nhập KPI nhanh – Template cho {selected.size} nhân viên</h2>
 
-        {/* Lưu ý: md:grid-cols-2 (có dấu :) */}
         <div className="grid md:grid-cols-2 gap-4">
           <label>Ngày:
             <input type="date" className="input" value={tpl.date}
@@ -265,11 +294,10 @@ function QuickEntryContent() {
             <select className="input" value={tpl.compliance_code}
                     onChange={e => setTpl(s => ({ ...s, compliance_code: e.target.value }))}>
               <option value="NONE">Không vi phạm</option>
-              {/* giữ code ngắn gọn để lưu DB, mô tả để đọc */}
-              <option value="LATE">Ký mẫu đầu chuyền trước khi sử dụng</option>
-              <option value="PPE">Kiểm tra điều kiện máy</option>
-              <option value="MAT">Kiểm tra nguyên liệu</option>
-              <option value="SPEC">Kiểm tra tiêu chuẩn sản phẩm</option>
+              <option value="LATE">Đi trễ / Về sớm</option>
+              <option value="PPE">Vi phạm PPE</option>
+              <option value="MAT">Vi phạm nguyên liệu</option>
+              <option value="SPEC">Vi phạm tiêu chuẩn</option>
               <option value="RULE">Vi phạm nội quy</option>
             </select>
           </label>
@@ -392,7 +420,7 @@ function QuickEntryContent() {
     );
   }
 
-  /* ----- B1 UI ----- */
+  /* ---------- B1: chọn nhân viên ---------- */
   return (
     <div className="p-4">
       <h2 className="text-xl font-semibold mb-3">Nhập KPI nhanh – Bước 1: Chọn nhân viên</h2>
@@ -400,7 +428,7 @@ function QuickEntryContent() {
       <div className="flex flex-wrap items-center gap-2 mb-3">
         <input
           className="input"
-          placeholder="MSNV người duyệt (VD: A101)"
+          placeholder="MSNV người duyệt (VD: 04126)"
           value={approverId}
           onChange={(e) => setApproverId(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && loadUsersByApprover()}
