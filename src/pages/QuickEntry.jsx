@@ -47,14 +47,14 @@ const DEFAULT_TEMPLATE = {
   compliance_code: "NONE",
 };
 
-/* =================== Gate đăng nhập (pass: davitu) =================== */
+/* =================== Gate đăng nhập (pass: davidtu) =================== */
 export default function QuickEntry() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("qe_authed") === "1");
   const [pwd, setPwd] = useState("");
 
   function tryLogin(e) {
     e?.preventDefault();
-    if (pwd === "davitu") {
+    if (pwd === "davidtu") {
       sessionStorage.setItem("qe_authed", "1");
       setAuthed(true);
     } else {
@@ -73,7 +73,7 @@ export default function QuickEntry() {
             className="input w-full"
             value={pwd}
             onChange={(e) => setPwd(e.target.value)}
-            placeholder="davitu"
+            placeholder="..."
           />
           <button className="btn btn-primary mt-4 w-full" type="submit">Đăng nhập</button>
         </form>
