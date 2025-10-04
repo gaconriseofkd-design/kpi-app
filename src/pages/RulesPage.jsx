@@ -55,7 +55,7 @@ function RulesContent() {
 
   function addRow() {
     const newRow =
-      section === "Molding"
+      section === "MOLDING"
         ? { id: undefined, category: "", threshold: 100, score: 7, note: "", active: true }
         : { id: undefined, threshold: 100, score: 7, note: "", active: true };
     setRows((r) => [newRow, ...r]);
@@ -87,7 +87,7 @@ function RulesContent() {
 
     const uniq = new Set();
     for (const r of cleaned) {
-      const key = section === "Molding" ? `${r.category || ""}|${r.threshold}` : String(r.threshold);
+      const key = section === "MOLDING" ? `${r.category || ""}|${r.threshold}` : String(r.threshold);
       if (uniq.has(key)) return alert("Rule bị trùng: " + key);
       uniq.add(key);
     }
@@ -103,7 +103,7 @@ function RulesContent() {
   }
 
   const testScore = useMemo(() => {
-    if (section === "Molding") {
+    if (section === "MOLDING") {
       const list = rows.filter(r => r.active && r.category === testCat);
       const v = Number(testOE);
       const sorted = [...list].sort((a, b) => b.threshold - a.threshold);
@@ -117,7 +117,7 @@ function RulesContent() {
     <div className="p-4 space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
         <h2 className="text-xl font-semibold">
-          {section === "Molding"
+          {section === "MOLDING"
             ? "Rule điểm sản lượng (Loại hàng → Pair/h → Điểm)"
             : "Rule điểm sản lượng (Số đôi/h → Điểm)"}
         </h2>
@@ -135,7 +135,7 @@ function RulesContent() {
 
       {/* Test nhanh */}
       <div className="p-3 rounded border bg-white inline-flex items-center gap-2 flex-wrap">
-        {section === "Molding" && (
+        {section === "MOLDING" && (
           <select className="input w-36" value={testCat} onChange={e => setTestCat(e.target.value)}>
             <option value="">-- Loại hàng --</option>
             {[...new Set(rows.map(r => r.category).filter(Boolean))].map(c => (
@@ -143,7 +143,7 @@ function RulesContent() {
             ))}
           </select>
         )}
-        <span>{section === "Molding" ? "Số đôi/giờ:" : "Test %OE:"}</span>
+        <span>{section === "MOLDING" ? "Số đôi/giờ:" : "Test %OE:"}</span>
         <input type="number" className="input w-28" value={testOE}
                onChange={e => setTestOE(Number(e.target.value))}/>
         <span>→ Điểm: <b>{testScore}</b></span>
@@ -151,7 +151,7 @@ function RulesContent() {
 
       {/* Bảng Rule */}
       <div className="overflow-auto">
-        {section === "Molding" ? (
+        {section === "MOLDING" ? (
           <table className="min-w-[800px] text-sm">
             <thead>
               <tr className="text-left border-b">
