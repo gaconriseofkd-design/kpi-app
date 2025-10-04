@@ -180,7 +180,7 @@ export default function EntryPageMolding() {
       status: "pending",
     };
 
-    const { error } = await supabase.from("kpi_entries").upsert(payload, {
+    const { error } = await supabase.from("kpi_entries_molding").upsert(payload, {
       onConflict: "worker_id,date,section",
     });
     if (error) return alert("Lưu lỗi: " + error.message);
