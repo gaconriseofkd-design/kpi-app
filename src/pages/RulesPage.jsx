@@ -56,8 +56,8 @@ function RulesContent() {
   function addRow() {
     const newRow =
       section === "MOLDING"
-        ? { id: undefined, category: "", threshold: 100, score: 7, note: "", active: true }
-        : { id: undefined, threshold: 100, score: 7, note: "", active: true };
+        ? { category: "", threshold: 100, score: 7, note: "", active: true }
+        : { threshold: 100, score: 7, note: "", active: true };
     setRows((r) => [newRow, ...r]);
   }
 
@@ -75,15 +75,19 @@ function RulesContent() {
   }
 
   async function saveAll() {
-    const cleaned = rows.map((r) => ({
-      id: r.id,
-      category: r.category || null,
-      threshold: Number(r.threshold || 0),
-      score: Number(r.score || 0),
-      note: r.note || "",
-      active: !!r.active,
-      section,
-    }));
+    const cleaned = rows.map((r) => {
+      const base = {
+        category: r.category || null,
+        threshold: Number(r.threshold || 0),
+        score: Number(r.score || 0),
+        note: r.note || "",
+        active: !!r.active,
+        section,
+      };
+      if (r.id) base.id = r.id;   // chỉ thêm id nếu có
+      return base;
+    });
+
 
     const uniq = new Set();
     for (const r of cleaned) {
