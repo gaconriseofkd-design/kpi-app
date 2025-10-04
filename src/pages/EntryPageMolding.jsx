@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useKpiSection } from "../context/KpiSectionContext";
 
-// Điểm chất lượng (Q)
 function calcQ(defects) {
   if (defects === 0) return 10;
   if (defects <= 2) return 8;
@@ -14,10 +13,14 @@ function calcQ(defects) {
 export default function EntryPageMolding() {
   const { section } = useKpiSection();
 
-  // Form fields
+  // Người nhập
   const [msnv, setMsnv] = useState("");
-  const [employee, setEmployee] = useState(null);
-  const [approver, setApprover] = useState("");
+  const [empName, setEmpName] = useState("");
+
+  // Người duyệt
+  const [approverId, setApproverId] = useState("");
+  const [approverName, setApproverName] = useState("");
+
   const [workDate, setWorkDate] = useState("");
   const [shift, setShift] = useState("");
   const [workingInput, setWorkingInput] = useState(8);
@@ -28,14 +31,13 @@ export default function EntryPageMolding() {
   const [output, setOutput] = useState(0);
   const [compliance, setCompliance] = useState("OK");
 
-  // Results
   const [scoreQ, setScoreQ] = useState(0);
   const [scoreP, setScoreP] = useState(0);
   const [scoreTotal, setScoreTotal] = useState(0);
   const [downtime, setDowntime] = useState(0);
   const [workingExact, setWorkingExact] = useState(0);
 
-  // Load danh sách Category từ rule MOLDING
+  // Lấy danh sách Category
   useEffect(() => {
     supabase
       .from("kpi_rule_productivity")
@@ -47,25 +49,30 @@ export default function EntryPageMolding() {
       });
   }, []);
 
-  // Load nhân viên khi nhập MSNV
+  // Khi nhập MSNV → lấy Họ tên và người duyệt
   useEffect(() => {
     if (!msnv) return;
     supabase
-      .from("employees")
-      .select("name, approver")
+      .from("users")   // bảng quản lý Users (trang AdminPage)
+      .select("msnv, full_name, approver_id, approver_name")
       .eq("msnv", msnv)
       .single()
       .then(({ data }) => {
-        setEmployee(data || null);
-        setApprover(data?.approver || "");
+        if (data) {
+          setEmpName(data.full_name);
+          setApproverId(data.approver_id);
+          setApproverName(data.approver_name);
+        } else {
+          setEmpName("");
+          setApproverId("");
+          setApproverName("");
+        }
       });
   }, [msnv]);
 
-  // Tính toán tự động
+  // Tính toán điểm
   useEffect(() => {
     let workingReal = Number(workingInput) || 0;
-
-    // Downtime
     let dt = (workingReal * 24 - moldHours) / 24;
     if (dt > 1) dt = 1;
     if (dt < 0) dt = 0;
@@ -75,7 +82,6 @@ export default function EntryPageMolding() {
     setWorkingExact(wExact);
 
     let prod = wExact > 0 ? output / wExact : 0;
-
     let q = calcQ(defects);
     setScoreQ(q);
 
@@ -107,8 +113,9 @@ export default function EntryPageMolding() {
     const { error } = await supabase.from("kpi_entries").insert({
       section,
       msnv,
-      hoten: employee?.name || "",
-      approver,
+      hoten: empName,
+      approver_id: approverId,
+      approver_name: approverName,
       shift,
       work_date: workDate,
       working_input: workingInput,
@@ -134,24 +141,27 @@ export default function EntryPageMolding() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label>MSNV</label>
+          <label>MSNV Người nhập</label>
           <input className="input" value={msnv} onChange={e => setMsnv(e.target.value)} />
         </div>
         <div>
-          <label>Họ tên</label>
-          <input className="input" value={employee?.name || ""} disabled />
+          <label>Họ tên Người nhập</label>
+          <input className="input" value={empName} disabled />
         </div>
 
         <div>
-          <label>Người duyệt</label>
-          <input className="input" value={approver} disabled />
+          <label>MSNV Người duyệt</label>
+          <input className="input" value={approverId} disabled />
+        </div>
+        <div>
+          <label>Họ tên Người duyệt</label>
+          <input className="input" value={approverName} disabled />
         </div>
 
         <div>
           <label>Ngày làm việc</label>
           <input type="date" className="input" value={workDate} onChange={e => setWorkDate(e.target.value)} />
         </div>
-
         <div>
           <label>Ca làm việc</label>
           <select className="input" value={shift} onChange={e => setShift(e.target.value)}>
