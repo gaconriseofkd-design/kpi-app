@@ -174,8 +174,7 @@ export default function EntryPageMolding() {
       compliance_code: complianceCode,
       violations: complianceCode === "NONE" ? 0 : 1,
 
-      // các cột chung
-      work_hours: Number(workingExact || 0),  // dùng exact để thống nhất
+    
       
       status: "pending",
     };
