@@ -1,5 +1,6 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
+// src/App.jsx
+import { BrowserRouter, Routes, Route, Link, NavLink } from "react-router-dom";
 import { KpiSectionProvider, useKpiSection } from "./context/KpiSectionContext";
 import SectionGate from "./pages/SectionGate";
 
@@ -11,6 +12,7 @@ import ApprovePage from "./pages/ApprovePage";
 import AdminPage from "./pages/AdminPage";
 import ReportPage from "./pages/ReportPage";
 import RulesPage from "./pages/RulesPage";
+
 
 function Shell() {
   const { section, clearSection, SECTIONS } = useKpiSection();
