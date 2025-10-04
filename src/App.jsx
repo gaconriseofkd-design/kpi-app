@@ -23,20 +23,48 @@ function Shell() {
 
   return (
     <>
-      <nav className="p-3 flex items-center gap-3 border-b">
-        <Link to="/" className="font-semibold">APP KPI</Link>
-        <Link to="/entry">Nhập KPI</Link>
-        <Link to="/quick">Nhập KPI nhanh</Link>
-        <Link to="/pending">Xét duyệt KPI</Link>
-        <Link to="/approve">Tra cứu đơn KPI</Link>
-        <Link to="/report">Báo cáo</Link>
-        <Link to="/admin">Quản lý User</Link>
-        <Link to="/rules">Rules điểm SX</Link>
+      <nav className="p-3 flex items-center gap-4 border-b bg-gray-50">
+        <NavLink
+          to="/"
+          className="font-bold text-lg text-indigo-700"
+        >
+          APP KPI
+        </NavLink>
+
+        {[
+          { to: "/entry", label: "Nhập KPI" },
+          { to: "/quick", label: "Nhập KPI nhanh" },
+          { to: "/pending", label: "Xét duyệt KPI" },
+          { to: "/approve", label: "Tra cứu đơn KPI" },
+          { to: "/report", label: "Báo cáo" },
+          { to: "/admin", label: "Quản lý User" },
+          { to: "/rules", label: "Rules điểm SX" },
+        ].map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={({ isActive }) =>
+              `px-3 py-1 rounded-md transition-colors duration-200 ${
+                isActive
+                  ? "bg-indigo-600 text-white font-semibold shadow-sm"
+                  : "text-gray-700 hover:bg-indigo-100 hover:text-indigo-700"
+              }`
+            }
+          >
+            {item.label}
+          </NavLink>
+        ))}
+
         <div className="ml-auto flex items-center gap-2">
-          <span className="px-2 py-1 text-xs rounded bg-slate-100">{label}</span>
-          <button className="btn" onClick={clearSection}>Đổi section</button>
+          <span className="px-2 py-1 text-xs rounded bg-indigo-50 border text-indigo-700">
+            {label}
+          </span>
+          <button className="px-3 py-1 rounded-md bg-red-100 hover:bg-red-200 text-red-700 font-medium transition" onClick={clearSection}>
+            Đổi section
+          </button>
         </div>
       </nav>
+
 
       <Routes>
         <Route path="/" element={<EntryComponent />} />
