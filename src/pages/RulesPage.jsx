@@ -118,8 +118,8 @@ function RulesContent() {
       <div className="flex items-center gap-2 flex-wrap">
         <h2 className="text-xl font-semibold">
           {section === "Molding"
-            ? "Rule điểm sản lượng (Loại hàng → Năng suất → Điểm)"
-            : "Rule điểm sản lượng (%OE → Điểm)"}
+            ? "Rule điểm sản lượng (Loại hàng → Pair/h → Điểm)"
+            : "Rule điểm sản lượng (Số đôi/h → Điểm)"}
         </h2>
         <span className="px-2 py-1 text-xs rounded bg-slate-100">
           Section: {SECTIONS.find((s) => s.key === section)?.label || section}
@@ -143,7 +143,7 @@ function RulesContent() {
             ))}
           </select>
         )}
-        <span>{section === "Molding" ? "Pair/h:" : "Test OE:"}</span>
+        <span>{section === "Molding" ? "Số đôi/giờ:" : "Test %OE:"}</span>
         <input type="number" className="input w-28" value={testOE}
                onChange={e => setTestOE(Number(e.target.value))}/>
         <span>→ Điểm: <b>{testScore}</b></span>
@@ -156,7 +156,7 @@ function RulesContent() {
             <thead>
               <tr className="text-left border-b">
                 <th className="p-2">Loại hàng</th>
-                <th className="p-2">Pair/h ≥</th>
+                <th className="p-2">Số đôi/h ≥</th>
                 <th className="p-2">Điểm</th>
                 <th className="p-2">Ghi chú</th>
                 <th className="p-2">Active</th>
