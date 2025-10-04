@@ -27,8 +27,8 @@ function Shell() {
         <Link to="/" className="font-semibold">APP KPI</Link>
         <Link to="/entry">Nhập KPI</Link>
         <Link to="/quick">Nhập KPI nhanh</Link>
-        <Link to="/pending">Chờ duyệt</Link>
-        <Link to="/approve">Xét duyệt</Link>
+        <Link to="/pending">Xét duyệt KPI</Link>
+        <Link to="/approve">Tra cứu đơn KPI</Link>
         <Link to="/report">Báo cáo</Link>
         <Link to="/admin">Quản lý User</Link>
         <Link to="/rules">Rules điểm SX</Link>

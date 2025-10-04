@@ -66,26 +66,35 @@ export default function ApprovePage() {
         <table className="min-w-full border text-sm">
           <thead className="bg-gray-100 text-xs uppercase">
             <tr>
-              <th>Ngày</th><th>MSNV</th><th>Họ tên</th><th>Ca</th><th>Loại hàng</th>
-              <th>Sản lượng/ca</th><th>Q</th><th>P</th><th>KPI</th><th>Trạng thái</th><th>Ghi chú duyệt</th>
+              <th className="text-center">Ngày</th>
+              <th className="text-center">MSNV</th>
+              <th className="text-center">Họ tên</th>
+              <th className="text-center">Ca</th>
+              <th className="text-center">Loại hàng</th>
+              <th className="text-center">Sản lượng/ca</th>
+              <th className="text-center">Q</th>
+              <th className="text-center">P</th>
+              <th className="text-center">KPI</th>
+              <th className="text-center">Trạng thái</th>
+              <th className="text-center">Ghi chú duyệt</th>
             </tr>
           </thead>
           <tbody>
             {pageRows.map(r => (
               <tr key={r.id} className="border-b hover:bg-gray-50">
-                <td>{r.date}</td>
-                <td>{r.worker_id}</td>
-                <td>{r.worker_name}</td>
-                <td>{r.ca}</td>
-                <td>{r.category}</td>
-                <td>{r.output}</td>
-                <td>{r.q_score}</td>
-                <td>{r.p_score}</td>
-                <td>{r.day_score}</td>
-                <td className={r.status === "approved" ? "text-green-600" : r.status === "rejected" ? "text-red-600" : "text-gray-600"}>
+                <td className="text-center">{r.date}</td>
+                <td className="text-center">{r.worker_id}</td>
+                <td className="text-center">{r.worker_name}</td>
+                <td className="text-center">{r.ca}</td>
+                <td className="text-center">{r.category}</td>
+                <td className="text-center">{r.output}</td>
+                <td className="text-center">{r.q_score}</td>
+                <td className="text-center">{r.p_score}</td>
+                <td className="text-center font-semibold">{r.day_score}</td>
+                <td className={`text-center ${r.status === "approved" ? "text-green-600" : r.status === "rejected" ? "text-red-600" : ""}`}>
                   {r.status}
                 </td>
-                <td>{r.approver_note || ""}</td>
+                <td className="text-center">{r.approver_note || ""}</td>
               </tr>
             ))}
             {!pageRows.length && (
