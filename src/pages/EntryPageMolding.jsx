@@ -203,11 +203,11 @@ export default function EntryPageMolding() {
 
         <div>
           <label>MSNV người duyệt</label>
-          <input className="input" value={approverId} disabled />
+          <input className="input" value={approver_msnv} disabled />
         </div>
         <div>
           <label>Họ & tên người duyệt</label>
-          <input className="input" value={approverName} disabled />
+          <input className="input" value={approver_name} disabled />
         </div>
 
         <div>
