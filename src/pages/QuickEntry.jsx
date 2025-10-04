@@ -1,493 +1,274 @@
-// src/pages/QuickEntry.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useKpiSection } from "../context/KpiSectionContext";
 
-/* =================== Helpers tính điểm =================== */
-function scoreByProductivity(oe, rules) {
-  const v = Number(oe ?? 0);
-  const list = (rules || [])
-    .filter(r => r.active !== false)
-    .sort((a, b) => Number(b.threshold) - Number(a.threshold));
-  for (const r of list) {
-    if (v >= Number(r.threshold)) return Number(r.score || 0);
-  }
+/* ======= Các hàm tính điểm dùng chung ======= */
+function calcP(oe) {
+  if (oe >= 112) return 10;
+  if (oe >= 108) return 9;
+  if (oe >= 104) return 8;
+  if (oe >= 100) return 7;
+  if (oe >= 98) return 6;
+  if (oe >= 96) return 4;
+  if (oe >= 94) return 2;
   return 0;
 }
-function scoreByQuality(defects) {
-  const d = Number(defects || 0);
-  if (d === 0) return 10;
-  if (d <= 2) return 8;
-  if (d <= 4) return 6;
-  if (d <= 6) return 4;
+function calcQ(defects) {
+  if (defects === 0) return 10;
+  if (defects <= 2) return 8;
+  if (defects <= 4) return 6;
+  if (defects <= 6) return 4;
   return 0;
 }
-function deriveDayScores({ oe, defects }, prodRules) {
-  const p = scoreByProductivity(oe, prodRules);
-  const q = scoreByQuality(defects);
-  const total = p + q;
-  return {
-    p_score: p,
-    q_score: q,
-    day_score: Math.min(15, total),
-    overflow: Math.max(0, total - 15),
-  };
+
+/* ======= Hàm tính giờ thực tế Molding ======= */
+function calcWorkingReal(shift, inputHours) {
+  const h = Number(inputHours || 0);
+  if (h < 8) return h;
+  const BASE = { "Ca 1": 7.17, "Ca 2": 7.17, "Ca 3": 6.92, "Ca HC": 6.67 };
+  const base = BASE[shift] ?? 7.17;
+  if (h < 9) return base;
+  const extra = h - 8;
+  const adj = extra >= 2 ? extra - 0.5 : extra;
+  return base + adj;
 }
 
-const DEFAULT_TEMPLATE = {
-  date: new Date().toISOString().slice(0, 10),
-  line: "LEAN-D1",
-  ca: "Ca 1",
-  work_hours: 8,
-  stop_hours: 0,
-  defects: 0,
-  oe: 100,
-  compliance_code: "NONE",
-};
-
-/* =================== Gate đăng nhập (pass: davidtu) =================== */
+/* ======= Component chính ======= */
 export default function QuickEntry() {
-  const [authed, setAuthed] = useState(() => sessionStorage.getItem("qe_authed") === "1");
-  const [pwd, setPwd] = useState("");
-
-  function tryLogin(e) {
-    e?.preventDefault();
-    if (pwd === "davidtu") {
-      sessionStorage.setItem("qe_authed", "1");
-      setAuthed(true);
-    } else {
-      alert("Sai mật khẩu.");
-    }
-  }
-
-  if (!authed) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <form onSubmit={tryLogin} className="w-full max-w-sm p-6 rounded-xl shadow bg-white">
-          <h2 className="text-xl font-semibold mb-4">Nhập KPI nhanh</h2>
-          <label className="block mb-2">Mật khẩu</label>
-          <input
-            type="password"
-            className="input w-full"
-            value={pwd}
-            onChange={(e) => setPwd(e.target.value)}
-            placeholder="..."
-          />
-          <button className="btn btn-primary mt-4 w-full" type="submit">Đăng nhập</button>
-        </form>
-      </div>
-    );
-  }
-
-  return <QuickEntryContent />;
-}
-
-/* =================== Nội dung trang Nhập nhanh =================== */
-function QuickEntryContent() {
   const { section } = useKpiSection();
-  const [step, setStep] = useState("choose"); 
+  const isMolding = section === "MOLDING";
+
+  // Dữ liệu nhập
+  const [msnv, setMsnv] = useState("");
+  const [empName, setEmpName] = useState("");
   const [approverId, setApproverId] = useState("");
   const [approverName, setApproverName] = useState("");
-  const [users, setUsers] = useState([]);
-  const [selected, setSelected] = useState(() => new Set());
-  const [tpl, setTpl] = useState({ ...DEFAULT_TEMPLATE });
-  const [entries, setEntries] = useState([]);
-  const [saving, setSaving] = useState(false);
-  const [prodRules, setProdRules] = useState([]);
+  const [date, setDate] = useState("");
+  const [shift, setShift] = useState("");
+  const [workingInput, setWorkingInput] = useState(8);
+  const [category, setCategory] = useState("");
+  const [categoryOptions, setCategoryOptions] = useState([]);
+  const [moldHours, setMoldHours] = useState(0);
+  const [defects, setDefects] = useState(0);
+  const [output, setOutput] = useState(0);
+  const [oe, setOe] = useState(100);
+  const [compliance, setCompliance] = useState("NONE");
 
+  // Kết quả tính
+  const [qScore, setQScore] = useState(0);
+  const [pScore, setPScore] = useState(0);
+  const [dayScore, setDayScore] = useState(0);
+  const [downtime, setDowntime] = useState(0);
+  const [workingReal, setWorkingReal] = useState(0);
+  const [workingExact, setWorkingExact] = useState(0);
+
+  /* ==== Lấy category từ rule Molding ==== */
   useEffect(() => {
-    supabase
-      .from("kpi_rule_productivity")
-      .select("*")
+    if (!isMolding) return;
+    supabase.from("kpi_rule_productivity")
+      .select("category")
+      .eq("section", "MOLDING")
       .eq("active", true)
-      .eq("section", section)
-      .order("threshold", { ascending: false })
-      .then(({ data, error }) => {
-        if (error) console.error("Load rules error:", error);
-        setProdRules(data || []);
+      .then(({ data }) => {
+        const list = [...new Set(data?.map(r => r.category).filter(Boolean))];
+        setCategoryOptions(list);
       });
-  }, [section]);
+  }, [isMolding]);
 
-  const allSelected = useMemo(
-    () => (users.length ? users.every((u) => selected.has(u.msnv)) : false),
-    [users, selected]
-  );
-
-  async function loadUsersByApprover() {
-    const id = approverId.trim();
-    if (!id) return alert("Nhập MSNV người duyệt trước.");
-    const { data, error } = await supabase
-      .from("users")
+  /* ==== Lấy tên & người duyệt từ MSNV ==== */
+  useEffect(() => {
+    if (!msnv) return;
+    supabase.from("users")
       .select("msnv, full_name, approver_msnv, approver_name")
-      .eq("approver_msnv", id)
-      .order("msnv");
-    if (error) return alert("Lỗi tải danh sách: " + error.message);
-    setUsers(data || []);
-    setApproverName(data?.[0]?.approver_name || "");
-    setSelected(new Set());
-    setStep("choose");
-  }
-
-  function toggleRow(msnv) {
-    setSelected(prev => {
-      const s = new Set(prev);
-      s.has(msnv) ? s.delete(msnv) : s.add(msnv);
-      return s;
-    });
-  }
-  function toggleAll() {
-    setSelected(() => (allSelected ? new Set() : new Set(users.map(u => u.msnv))));
-  }
-  function gotoTemplate() {
-    if (!selected.size) return alert("Chưa chọn nhân viên nào.");
-    setTpl({ ...DEFAULT_TEMPLATE });
-    setStep("template");
-  }
-
-  function confirmTemplate() {
-    const list = users
-      .filter(u => selected.has(u.msnv))
-      .map(u => {
-        const base = {
-          worker_id: u.msnv,
-          worker_name: u.full_name || "",
-          approver_id: u.approver_msnv || approverId.trim(),
-          approver_name: u.approver_name || approverName || "",
-          ...tpl,
-        };
-        return { ...base, ...deriveDayScores(base, prodRules) };
-      });
-    setEntries(list);
-    setStep("review");
-  }
-
-  function updateEntry(idx, key, val) {
-    setEntries(prev => {
-      const arr = [...prev];
-      const row = { ...arr[idx], [key]: val };
-      arr[idx] = { ...row, ...deriveDayScores(row, prodRules) };
-      return arr;
-    });
-  }
-
-  async function saveAll() {
-    if (!entries.length) return alert("Không có dữ liệu để lưu.");
-    try {
-      setSaving(true);
-      const now = new Date().toISOString();
-
-      // kiểm tra trùng trước
-      for (const e of entries) {
-        const { data: exist, error } = await supabase
-          .from("kpi_entries")
-          .select("id,status")
-          .eq("worker_id", e.worker_id)
-          .eq("date", e.date)
-          .eq("section", section)
-          .maybeSingle();
-        if (error && error.code !== "PGRST116") throw error;
-        if (exist) {
-          const msg = exist.status === "approved"
-            ? `MSNV ${e.worker_id} ngày ${e.date} đã có bản ghi ĐÃ DUYỆT.\nGhi đè sẽ duyệt lại. Tiếp tục?`
-            : `MSNV ${e.worker_id} ngày ${e.date} đã có bản ghi CHỜ DUYỆT.\nCập nhật bản ghi này?`;
-          if (!confirm(msg)) { setSaving(false); return; }
+      .eq("msnv", msnv)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) {
+          setEmpName(data.full_name || "");
+          setApproverId(data.approver_msnv || "");
+          setApproverName(data.approver_name || "");
+        } else {
+          setEmpName(""); setApproverId(""); setApproverName("");
         }
-      }
-
-      // lưu tất cả (upsert)
-      const payload = entries.map(e => {
-        const violations = e.compliance_code === "NONE" ? 0 : 1;
-        return {
-          date: e.date,
-          worker_id: e.worker_id,
-          worker_name: e.worker_name,
-          approver_id: e.approver_id,
-          approver_name: e.approver_name,
-          line: e.line,
-          ca: e.ca,
-          work_hours: Number(e.work_hours || 0),
-          stop_hours: Number(e.stop_hours || 0),
-          defects: Number(e.defects || 0),
-          oe: Number(e.oe || 0),
-          compliance_code: e.compliance_code,
-          p_score: e.p_score,
-          q_score: e.q_score,
-          day_score: e.day_score,
-          overflow: e.overflow,
-          section,
-          status: "approved",
-          violations,
-          approver_note: "Fast entry",
-          approved_at: now,
-        };
       });
+  }, [msnv]);
 
-      const { error } = await supabase
-        .from("kpi_entries")
-        .upsert(payload, { onConflict: "worker_id,date,section" });
-      if (error) throw error;
+  /* ==== Tính điểm ==== */
+  useEffect(() => {
+    if (isMolding) {
+      const wReal = calcWorkingReal(shift, workingInput);
+      setWorkingReal(wReal);
 
-      alert(`Đã lưu & duyệt ${entries.length} bản ghi KPI.`);
-      setStep("choose");
-      setEntries([]);
-      setSelected(new Set());
-    } catch (e) {
-      console.error(e);
-      alert("Lưu KPI lỗi: " + (e.message || e));
-    } finally {
-      setSaving(false);
+      let dt = (wReal * 24 - moldHours) / 24;
+      if (dt > 1) dt = 1; if (dt < 0) dt = 0;
+      setDowntime(dt);
+
+      const wExact = wReal - dt;
+      setWorkingExact(Number(wExact.toFixed(2)));
+
+      const q = calcQ(defects);
+      setQScore(q);
+
+      const prod = wExact > 0 ? output / wExact : 0;
+      if (category && prod > 0) {
+        supabase.from("kpi_rule_productivity")
+          .select("threshold, score")
+          .eq("section", "MOLDING")
+          .eq("category", category)
+          .order("threshold", { ascending: false })
+          .then(({ data }) => {
+            let p = 0;
+            for (const r of data || []) if (prod >= r.threshold) { p = r.score; break; }
+            setPScore(p);
+            setDayScore(p + q);
+          });
+      } else {
+        setPScore(0);
+        setDayScore(q);
+      }
+    } else {
+      const p = calcP(Number(oe || 0));
+      const q = calcQ(Number(defects || 0));
+      setPScore(p); setQScore(q); setDayScore(p + q);
+    }
+  }, [isMolding, oe, defects, workingInput, shift, category, moldHours, output]);
+
+  /* ==== Lưu dữ liệu ==== */
+  async function saveData() {
+    if (!msnv || !date) return alert("Vui lòng nhập đủ MSNV và Ngày.");
+
+    if (isMolding) {
+      const { error } = await supabase.from("kpi_entries_molding").insert({
+        section,
+        date,
+        ca: shift,
+        worker_id: msnv,
+        worker_name: empName,
+        approver_msnv: approverId,
+        approver_name: approverName,
+        category,
+        working_input: workingInput,
+        working_real: workingReal,
+        working_exact: workingExact,
+        downtime,
+        mold_hours: moldHours,
+        output,
+        defects,
+        q_score: qScore,
+        p_score: pScore,
+        day_score: dayScore,
+        compliance_code: compliance,
+        status: "pending",
+      });
+      if (error) alert(error.message);
+      else alert("Đã lưu KPI Molding!");
+    } else {
+      const { error } = await supabase.from("kpi_entries").insert({
+        section,
+        msnv,
+        hoten: empName,
+        approver_id: approverId,
+        approver_name: approverName,
+        work_date: date,
+        shift,
+        oe,
+        defects,
+        p_score: pScore,
+        q_score: qScore,
+        total_score: dayScore,
+        compliance,
+        status: "pending",
+      });
+      if (error) alert(error.message);
+      else alert("Đã lưu KPI!");
     }
   }
 
-  /* =================== RENDER =================== */
-  if (step === "template") {
-    const scores = deriveDayScores(tpl, prodRules);
-    return (
-      <div className="p-4 space-y-4">
-        <h2 className="text-xl font-semibold">Nhập KPI nhanh – Template cho {selected.size} nhân viên</h2>
-
-        <div className="grid md:grid-cols-2 gap-4">
-          <label>Ngày:
-            <input type="date" className="input" value={tpl.date}
-                   onChange={e => setTpl(s => ({ ...s, date: e.target.value }))} />
-          </label>
-
-          <label>Line:
-            <select className="input" value={tpl.line}
-                    onChange={e => setTpl(s => ({ ...s, line: e.target.value }))}>
-              <option value="LEAN-D1">LEAN-D1</option>
-              <option value="LEAN-D2">LEAN-D2</option>
-              <option value="LEAN-D3">LEAN-D3</option>
-              <option value="LEAN-D4">LEAN-D4</option>
-              <option value="LEAN-H1">LEAN-H1</option>
-              <option value="LEAN-H2">LEAN-H2</option>
-            </select>
-          </label>
-
-          <label>Ca:
-            <select className="input" value={tpl.ca}
-                    onChange={e => setTpl(s => ({ ...s, ca: e.target.value }))}>
-              <option value="Ca 1">Ca 1</option>
-              <option value="Ca 2">Ca 2</option>
-              <option value="Ca 3">Ca 3</option>
-              <option value="Ca HC">Ca HC</option>
-            </select>
-          </label>
-
-          <label>Giờ làm việc:
-            <input type="number" className="input" value={tpl.work_hours}
-                   onChange={e => setTpl(s => ({ ...s, work_hours: Number(e.target.value) }))} />
-          </label>
-
-          <label>Giờ dừng máy:
-            <input type="number" className="input" value={tpl.stop_hours}
-                   onChange={e => setTpl(s => ({ ...s, stop_hours: Number(e.target.value) }))} />
-          </label>
-
-          <label>Số đôi phế:
-            <input type="number" className="input" value={tpl.defects}
-                   onChange={e => setTpl(s => ({ ...s, defects: Number(e.target.value) }))} />
-          </label>
-
-          <label>%OE:
-            <input type="number" className="input" value={tpl.oe}
-                   onChange={e => setTpl(s => ({ ...s, oe: Number(e.target.value) }))} />
-          </label>
-
-          <label>Vi phạm:
-            <select className="input" value={tpl.compliance_code}
-                    onChange={e => setTpl(s => ({ ...s, compliance_code: e.target.value }))}>
-              <option value="NONE">Không vi phạm</option>
-              <option value="LATE">Ký mẫu đầu chuyền trước khi sử dụng</option>
-              <option value="PPE">Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất</option>
-              <option value="MAT">Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất</option>
-              <option value="SPEC">Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất</option>
-              <option value="RULE">Vi phạm nội quy bộ phận/công ty</option>
-            </select>
-          </label>
-        </div>
-
-        <div className="mt-2">
-          <p>Điểm Sản lượng: {scores.p_score}</p>
-          <p>Điểm Chất lượng: {scores.q_score}</p>
-          <p>Điểm KPI ngày: {scores.day_score}</p>
-          <p>Điểm dư: {scores.overflow}</p>
-        </div>
-
-        <div className="flex gap-2">
-          <button className="btn" onClick={() => setStep("choose")}>Quay lại</button>
-          <button className="btn btn-primary" onClick={confirmTemplate}>OK</button>
-        </div>
-      </div>
-    );
-  }
-
-  if (step === "review") {
-    return (
-      <div className="p-4">
-        <h2 className="text-xl font-semibold mb-3">Sửa chi tiết & Hoàn thành nhập KPI</h2>
-        <div className="mb-3 flex gap-2">
-          <button className="btn" onClick={() => setStep("template")}>Sửa template</button>
-          <button className="btn" onClick={() => setStep("choose")}>Chọn lại nhân viên</button>
-          <button className="btn btn-primary" onClick={saveAll} disabled={saving}>
-            {saving ? "Đang lưu..." : "Hoàn thành & LƯU (đã duyệt)"}
-          </button>
-        </div>
-
-        <div className="overflow-auto">
-          <table className="min-w-full text-sm">
-            <thead>
-              <tr className="text-left border-b">
-                <th className="p-2">MSNV</th>
-                <th className="p-2">Họ tên</th>
-                <th className="p-2">Ngày</th>
-                <th className="p-2">Line</th>
-                <th className="p-2">Ca</th>
-                <th className="p-2">Giờ LV</th>
-                <th className="p-2">Dừng</th>
-                <th className="p-2">Phế</th>
-                <th className="p-2">%OE</th>
-                <th className="p-2">Vi phạm</th>
-                <th className="p-2">P</th>
-                <th className="p-2">Q</th>
-                <th className="p-2">KPI</th>
-              </tr>
-            </thead>
-            <tbody>
-              {entries.map((r, idx) => (
-                <tr key={r.worker_id} className="border-b">
-                  <td className="p-2">{r.worker_id}</td>
-                  <td className="p-2">{r.worker_name}</td>
-                  <td className="p-2">
-                    <input type="date" className="input" value={r.date}
-                           onChange={(e) => updateEntry(idx, "date", e.target.value)} />
-                  </td>
-                  <td className="p-2">
-                    <select className="input" value={r.line}
-                            onChange={(e) => updateEntry(idx, "line", e.target.value)}>
-                      <option value="LEAN-D1">LEAN-D1</option>
-                      <option value="LEAN-D2">LEAN-D2</option>
-                      <option value="LEAN-D3">LEAN-D3</option>
-                      <option value="LEAN-D4">LEAN-D4</option>
-                      <option value="LEAN-H1">LEAN-H1</option>
-                      <option value="LEAN-H2">LEAN-H2</option>
-                    </select>
-                  </td>
-                  <td className="p-2">
-                    <select className="input" value={r.ca}
-                            onChange={(e) => updateEntry(idx, "ca", e.target.value)}>
-                      <option value="Ca 1">Ca 1</option>
-                      <option value="Ca 2">Ca 2</option>
-                      <option value="Ca 3">Ca 3</option>
-                      <option value="Ca HC">Ca HC</option>
-                    </select>
-                  </td>
-                  <td className="p-2">
-                    <input type="number" className="input w-24" value={r.work_hours}
-                           onChange={(e) => updateEntry(idx, "work_hours", Number(e.target.value))} />
-                  </td>
-                  <td className="p-2">
-                    <input type="number" className="input w-20" value={r.stop_hours}
-                           onChange={(e) => updateEntry(idx, "stop_hours", Number(e.target.value))} />
-                  </td>
-                  <td className="p-2">
-                    <input type="number" className="input w-20" value={r.defects}
-                           onChange={(e) => updateEntry(idx, "defects", Number(e.target.value))} />
-                  </td>
-                  <td className="p-2">
-                    <input type="number" className="input w-24" value={r.oe}
-                           onChange={(e) => updateEntry(idx, "oe", Number(e.target.value))} />
-                  </td>
-                  <td className="p-2">
-                    <select className="input" value={r.compliance_code}
-                            onChange={(e) => updateEntry(idx, "compliance_code", e.target.value)}>
-                      <option value="NONE">NONE</option>
-                      <option value="LATE">LATE</option>
-                      <option value="PPE">PPE</option>
-                      <option value="MAT">MAT</option>
-                      <option value="SPEC">SPEC</option>
-                      <option value="RULE">RULE</option>
-                    </select>
-                  </td>
-                  <td className="p-2">{r.p_score}</td>
-                  <td className="p-2">{r.q_score}</td>
-                  <td className="p-2 font-semibold">{r.day_score}</td>
-                </tr>
-              ))}
-              {!entries.length && (
-                <tr><td colSpan={13} className="p-4 text-center text-gray-500">Chưa có dữ liệu.</td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    );
-  }
-
-  /* ---------- B1: chọn nhân viên ---------- */
+  /* ==== Giao diện ==== */
   return (
-    <div className="p-4">
-      <h2 className="text-xl font-semibold mb-3">Nhập KPI nhanh – Bước 1: Chọn nhân viên</h2>
+    <div className="p-4 space-y-4">
+      <h2 className="text-xl font-semibold">Nhập KPI nhanh ({section})</h2>
 
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        <input
-          className="input"
-          placeholder="MSNV người duyệt (VD: 04126)"
-          value={approverId}
-          onChange={(e) => setApproverId(e.target.value)}
-          onKeyDown={(e) => e.key === "Enter" && loadUsersByApprover()}
-        />
-        <button className="btn" onClick={loadUsersByApprover}>Tải danh sách</button>
-        {approverName && <span className="text-sm opacity-70">Người duyệt: {approverName}</span>}
+      {/* Nhập cơ bản */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div><label>MSNV</label>
+          <input className="input" value={msnv} onChange={e => setMsnv(e.target.value)} />
+        </div>
+        <div><label>Họ tên</label>
+          <input className="input" value={empName} disabled />
+        </div>
+        <div><label>Người duyệt</label>
+          <input className="input" value={approverName} disabled />
+        </div>
+        <div><label>Ngày</label>
+          <input type="date" className="input" value={date} onChange={e => setDate(e.target.value)} />
+        </div>
+        <div><label>Ca</label>
+          <select className="input" value={shift} onChange={e => setShift(e.target.value)}>
+            <option value="">-- Chọn ca --</option>
+            <option value="Ca 1">Ca 1</option>
+            <option value="Ca 2">Ca 2</option>
+            <option value="Ca 3">Ca 3</option>
+            <option value="Ca HC">Ca HC</option>
+          </select>
+        </div>
 
-        <div className="ml-auto flex gap-2">
-          <button className="btn" onClick={toggleAll} disabled={!users.length}>
-            {allSelected ? "Bỏ chọn tất" : "Chọn tất cả"}
-          </button>
-          <button className="btn btn-primary" onClick={gotoTemplate} disabled={!selected.size}>
-            Xác nhận danh sách ({selected.size})
-          </button>
+        {/* Giao diện riêng cho từng section */}
+        {isMolding ? (
+          <>
+            <div><label>Giờ làm việc (nhập)</label>
+              <input type="number" className="input" value={workingInput} onChange={e => setWorkingInput(Number(e.target.value))} />
+            </div>
+            <div><label>Số giờ khuôn chạy thực tế</label>
+              <input type="number" className="input" value={moldHours} onChange={e => setMoldHours(Number(e.target.value))} />
+            </div>
+            <div><label>Loại hàng</label>
+              <select className="input" value={category} onChange={e => setCategory(e.target.value)}>
+                <option value="">-- Chọn loại hàng --</option>
+                {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div><label>Sản lượng / ca</label>
+              <input type="number" className="input" value={output} onChange={e => setOutput(Number(e.target.value))} />
+            </div>
+            <div><label>Số đôi phế</label>
+              <input type="number" className="input" value={defects} onChange={e => setDefects(Number(e.target.value))} />
+            </div>
+          </>
+        ) : (
+          <>
+            <div><label>%OE</label>
+              <input type="number" className="input" value={oe} onChange={e => setOe(Number(e.target.value))} />
+            </div>
+            <div><label>Số đôi phế</label>
+              <input type="number" className="input" value={defects} onChange={e => setDefects(Number(e.target.value))} />
+            </div>
+          </>
+        )}
+
+        <div><label>Tuân thủ</label>
+          <select className="input" value={compliance} onChange={e => setCompliance(e.target.value)}>
+            <option value="NONE">Không vi phạm</option>
+            <option value="PPE">Vi phạm PPE</option>
+            <option value="LATE">Đi trễ</option>
+            <option value="OTHER">Khác</option>
+          </select>
         </div>
       </div>
 
-      <div className="overflow-auto">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="text-left border-b">
-              <th className="p-2"><input type="checkbox" checked={allSelected} onChange={toggleAll} /></th>
-              <th className="p-2">MSNV</th>
-              <th className="p-2">Họ tên</th>
-              <th className="p-2">Approver MSNV</th>
-              <th className="p-2">Approver Họ tên</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map((u) => (
-              <tr key={u.msnv} className="border-b">
-                <td className="p-2">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(u.msnv)}
-                    onChange={() => toggleRow(u.msnv)}
-                  />
-                </td>
-                <td className="p-2">{u.msnv}</td>
-                <td className="p-2">{u.full_name}</td>
-                <td className="p-2">{u.approver_msnv}</td>
-                <td className="p-2">{u.approver_name}</td>
-              </tr>
-            ))}
-            {!users.length && (
-              <tr>
-                <td colSpan={5} className="p-4 text-center text-gray-500">
-                  Nhập MSNV người duyệt rồi bấm “Tải danh sách”.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
+      {/* Hiển thị điểm */}
+      <div className="p-4 rounded bg-gray-50 grid grid-cols-2 md:grid-cols-4 gap-3 text-center">
+        {isMolding && <>
+          <div><strong>Giờ thực tế:</strong><div>{workingReal}</div></div>
+          <div><strong>Downtime:</strong><div>{downtime}</div></div>
+          <div><strong>Giờ chính xác:</strong><div>{workingExact}</div></div>
+        </>}
+        <div><strong>Điểm Q:</strong><div>{qScore}</div></div>
+        <div><strong>Điểm P:</strong><div>{pScore}</div></div>
+        <div><strong>KPI ngày:</strong><div>{dayScore}</div></div>
       </div>
+
+      <button className="btn btn-primary" onClick={saveData}>Lưu KPI nhanh</button>
     </div>
   );
-  
 }
