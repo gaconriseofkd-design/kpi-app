@@ -1,9 +1,10 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route, Link, NavLink } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 import { KpiSectionProvider, useKpiSection } from "./context/KpiSectionContext";
 import SectionGate from "./pages/SectionGate";
 
 import EntryPage from "./pages/EntryPage";
+import EntryPageMolding from "./pages/EntryPageMolding";   // <-- thêm dòng này
 import QuickEntry from "./pages/QuickEntry";
 import Pending from "./pages/Pending";
 import ApprovePage from "./pages/ApprovePage";
@@ -15,8 +16,10 @@ function Shell() {
   const { section, clearSection, SECTIONS } = useKpiSection();
   const label = SECTIONS.find(s => s.key === section)?.label || section;
 
-  // Chưa chọn section thì chặn ở cổng
   if (!section) return <SectionGate />;
+
+  // Chọn EntryPage theo section
+  const EntryComponent = section === "MOLDING" ? EntryPageMolding : EntryPage;
 
   return (
     <>
@@ -36,8 +39,8 @@ function Shell() {
       </nav>
 
       <Routes>
-        <Route path="/" element={<EntryPage />} />
-        <Route path="/entry" element={<EntryPage />} />
+        <Route path="/" element={<EntryComponent />} />
+        <Route path="/entry" element={<EntryComponent />} />
         <Route path="/quick" element={<QuickEntry />} />
         <Route path="/pending" element={<Pending />} />
         <Route path="/approve" element={<ApprovePage />} />
