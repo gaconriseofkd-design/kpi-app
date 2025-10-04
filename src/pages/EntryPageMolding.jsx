@@ -176,7 +176,7 @@ export default function EntryPageMolding() {
 
       // các cột chung
       work_hours: Number(workingExact || 0),  // dùng exact để thống nhất
-      stop_hours: Number(downtime || 0),
+      
       status: "pending",
     };
 
