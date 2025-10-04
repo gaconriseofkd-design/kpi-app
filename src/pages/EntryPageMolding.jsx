@@ -151,7 +151,7 @@ export default function EntryPageMolding() {
       // người nhập & duyệt
       worker_id: workerId,
       worker_name: workerName,
-      approver_id: approverId,
+      approver_msnv: approverId,
       approver_name: approverName,
 
       // molding fields
@@ -203,11 +203,11 @@ export default function EntryPageMolding() {
 
         <div>
           <label>MSNV người duyệt</label>
-          <input className="input" value={approver_msnv} disabled />
+          <input className="input" value={approverId} disabled />
         </div>
         <div>
           <label>Họ & tên người duyệt</label>
-          <input className="input" value={approver_name} disabled />
+          <input className="input" value={approverName} disabled />
         </div>
 
         <div>
