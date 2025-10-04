@@ -156,7 +156,7 @@ export default function EntryPageMolding() {
 
       // molding fields
       category,                            // cột mới
-      line: category,                      // (giữ tương thích chéo nếu nơi khác đang đọc 'line')
+      
       working_input: Number(inputHours || 0),
       working_real: Number(workingReal || 0),
       working_exact: Number(workingExact || 0),
