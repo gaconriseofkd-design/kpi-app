@@ -51,7 +51,7 @@ export default function ApprovePage() {
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center gap-3">
-        <h2 className="text-lg font-semibold">Xét duyệt KPI ({isMolding ? "Molding" : "Leanline"})</h2>
+        <h2 className="text-lg font-semibold">Tra cứu đơn KPI ({isMolding ? "Molding" : "Leanline"})</h2>
         <button className="btn" onClick={load}>{loading ? "Đang tải..." : "Tải lại"}</button>
       </div>
 
