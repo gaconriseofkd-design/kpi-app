@@ -58,8 +58,10 @@ function RulesContent() {
       section === "MOLDING"
         ? { category: "", threshold: 100, score: 7, note: "", active: true }
         : { threshold: 100, score: 7, note: "", active: true };
+
     setRows((r) => [newRow, ...r]);
   }
+
 
   function delRow(id, idx) {
     if (!id) return setRows((r) => r.filter((_, i) => i !== idx));
