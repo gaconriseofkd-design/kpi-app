@@ -1,5 +1,6 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { useKpiSection } from "../context/KpiSectionContext";
 
 function fmt(dt) {
   if (!dt) return "";
@@ -7,6 +8,9 @@ function fmt(dt) {
 }
 
 export default function Pending() {
+  const { section } = useKpiSection(); // "MOLDING" hoặc các section khác
+  const isMolding = section === "MOLDING";
+
   const [approverId, setApproverId] = useState("");
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -14,10 +18,10 @@ export default function Pending() {
   // chọn nhiều
   const [selected, setSelected] = useState(() => new Set());
 
-  // (tuỳ chọn) phân trang đơn giản nếu cần
+  // phân trang đơn giản
   const [page, setPage] = useState(1);
   const pageSize = 100;
-  useEffect(() => { setPage(1); setSelected(new Set()); }, [approverId]); // đổi filter → về trang 1 + clear chọn
+  useEffect(() => { setPage(1); setSelected(new Set()); }, [approverId, section]);
 
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const pageRows = useMemo(
@@ -31,19 +35,24 @@ export default function Pending() {
   }, [pageRows, selected]);
 
   async function load() {
-    if (!approverId.trim()) {
+    const a = approverId.trim();
+    if (!a) {
       setRows([]);
       setSelected(new Set());
       return alert("Nhập MSNV người duyệt để xem các đơn chờ duyệt.");
     }
+
+    const table = isMolding ? "kpi_entries_molding" : "kpi_entries";
+    const approverCol = isMolding ? "approver_msnv" : "approver_id";
     setLoading(true);
     const { data, error } = await supabase
-      .from("kpi_entries")
+      .from(table)
       .select("*")
       .eq("status", "pending")
-      .eq("approver_id", approverId.trim())
+      .eq(approverCol, a)
       .order("date", { ascending: false })
       .order("created_at", { ascending: false });
+
     setLoading(false);
     if (error) return alert("Lỗi tải danh sách: " + error.message);
     setRows(data || []);
@@ -62,11 +71,8 @@ export default function Pending() {
   function toggleSelectAllOnPage() {
     setSelected(prev => {
       const next = new Set(prev);
-      if (allOnPageSelected) {
-        pageRows.forEach(r => next.delete(r.id));
-      } else {
-        pageRows.forEach(r => next.add(r.id));
-      }
+      if (allOnPageSelected) pageRows.forEach(r => next.delete(r.id));
+      else pageRows.forEach(r => next.add(r.id));
       return next;
     });
   }
@@ -74,8 +80,10 @@ export default function Pending() {
   async function approve(row) {
     const note = prompt("Ghi chú (tuỳ chọn):", "");
     const violations = row?.compliance_code === "NONE" ? 0 : 1;
+    const table = isMolding ? "kpi_entries_molding" : "kpi_entries";
+
     const { error } = await supabase
-      .from("kpi_entries")
+      .from(table)
       .update({
         status: "approved",
         violations,
@@ -83,20 +91,24 @@ export default function Pending() {
         approved_at: new Date().toISOString(),
       })
       .eq("id", row.id);
+
     if (error) return alert("Duyệt lỗi: " + error.message);
     await load();
   }
 
   async function reject(row) {
     const note = prompt("Lý do từ chối:", "");
+    const table = isMolding ? "kpi_entries_molding" : "kpi_entries";
+
     const { error } = await supabase
-      .from("kpi_entries")
+      .from(table)
       .update({
         status: "rejected",
         approver_note: note || null,
         approved_at: new Date().toISOString(),
       })
       .eq("id", row.id);
+
     if (error) return alert("Từ chối lỗi: " + error.message);
     await load();
   }
@@ -107,21 +119,22 @@ export default function Pending() {
 
     const note = prompt("Ghi chú chung cho các đơn (tuỳ chọn):", "") || null;
 
-    // tách theo compliance để set violations 0/1
     const idZero = rows.filter(r => selected.has(r.id) && r.compliance_code === "NONE").map(r => r.id);
     const idOne  = rows.filter(r => selected.has(r.id) && r.compliance_code !== "NONE").map(r => r.id);
+
+    const table = isMolding ? "kpi_entries_molding" : "kpi_entries";
 
     setLoading(true);
     if (idZero.length) {
       const { error } = await supabase
-        .from("kpi_entries")
+        .from(table)
         .update({ status: "approved", violations: 0, approver_note: note, approved_at: new Date().toISOString() })
         .in("id", idZero);
       if (error) { setLoading(false); return alert("Duyệt (0) lỗi: " + error.message); }
     }
     if (idOne.length) {
       const { error } = await supabase
-        .from("kpi_entries")
+        .from(table)
         .update({ status: "approved", violations: 1, approver_note: note, approved_at: new Date().toISOString() })
         .in("id", idOne);
       if (error) { setLoading(false); return alert("Duyệt (1) lỗi: " + error.message); }
@@ -131,30 +144,34 @@ export default function Pending() {
   }
 
   async function approveAllFiltered() {
-    if (!approverId.trim()) return alert("Nhập MSNV người duyệt trước.");
+    const a = approverId.trim();
+    if (!a) return alert("Nhập MSNV người duyệt trước.");
     if (!confirm("Duyệt TẤT CẢ đơn đang chờ của người duyệt này?")) return;
 
     const note = prompt("Ghi chú chung cho các đơn (tuỳ chọn):", "") || null;
     const now = new Date().toISOString();
 
+    const table = isMolding ? "kpi_entries_molding" : "kpi_entries";
+    const approverCol = isMolding ? "approver_msnv" : "approver_id";
+
     setLoading(true);
-    // compliance = NONE → violations 0
+    // NONE → violations 0
     {
       const { error } = await supabase
-        .from("kpi_entries")
+        .from(table)
         .update({ status: "approved", violations: 0, approver_note: note, approved_at: now })
         .eq("status", "pending")
-        .eq("approver_id", approverId.trim())
+        .eq(approverCol, a)
         .eq("compliance_code", "NONE");
       if (error) { setLoading(false); return alert("Duyệt tất cả (NONE) lỗi: " + error.message); }
     }
-    // compliance != NONE → violations 1
+    // != NONE → violations 1
     {
       const { error } = await supabase
-        .from("kpi_entries")
+        .from(table)
         .update({ status: "approved", violations: 1, approver_note: note, approved_at: now })
         .eq("status", "pending")
-        .eq("approver_id", approverId.trim())
+        .eq(approverCol, a)
         .neq("compliance_code", "NONE");
       if (error) { setLoading(false); return alert("Duyệt tất cả (!NONE) lỗi: " + error.message); }
     }
@@ -163,23 +180,20 @@ export default function Pending() {
     await load();
   }
 
-  useEffect(() => { /* auto-load khi có approverId? nếu muốn: */ }, []);
-
   return (
     <div className="p-4">
-      <h2 className="text-xl font-semibold mb-3">Chờ duyệt KPI (lọc theo MSNV người duyệt)</h2>
+      <h2 className="text-xl font-semibold mb-3">Chờ duyệt KPI ({isMolding ? "Molding" : "Leanline"})</h2>
 
       <div className="flex flex-wrap gap-2 items-center mb-4">
         <input
           className="input"
-          placeholder="Nhập MSNV người duyệt (VD: A101)"
+          placeholder={`Nhập MSNV người duyệt (${isMolding ? "approver_msnv" : "approver_id"})`}
           value={approverId}
           onChange={(e) => setApproverId(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && load()}
         />
         <button onClick={load} className="btn">{loading ? "Đang tải..." : "Tải danh sách"}</button>
 
-        {/* Bulk actions */}
         <div className="ml-auto flex gap-2">
           <button onClick={approveSelected} className="btn btn-primary" disabled={!selected.size || loading}>
             Duyệt đã chọn ({selected.size})
@@ -201,43 +215,89 @@ export default function Pending() {
       <div className="overflow-auto">
         <table className="min-w-full text-sm">
           <thead>
-            <tr className="text-left border-b">
-              <th className="p-2">
-                <input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAllOnPage} />
-              </th>
-              <th className="p-2">Ngày</th>
-              <th className="p-2">MSNV</th>
-              <th className="p-2">Họ tên</th>
-              <th className="p-2">%OE</th>
-              <th className="p-2">Phế</th>
-              <th className="p-2">P</th>
-              <th className="p-2">Q</th>
-              <th className="p-2">KPI</th>
-              <th className="p-2">Vi phạm</th>
-              <th className="p-2">Thao tác</th>
-              <th className="p-2">Ghi chú duyệt</th>
-              <th className="p-2">Cập nhật</th>
-            </tr>
+            {isMolding ? (
+              <tr className="text-left border-b">
+                <th className="p-2"><input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAllOnPage} /></th>
+                <th className="p-2">Ngày</th>
+                <th className="p-2">MSNV</th>
+                <th className="p-2">Họ tên</th>
+                <th className="p-2">Ca</th>
+                <th className="p-2">Loại hàng</th>
+                <th className="p-2">Giờ nhập</th>
+                <th className="p-2">Giờ thực tế</th>
+                <th className="p-2">Giờ chính xác</th>
+                <th className="p-2">Khuôn chạy</th>
+                <th className="p-2">Downtime</th>
+                <th className="p-2">Sản lượng/ca</th>
+                <th className="p-2">Phế</th>
+                <th className="p-2">P</th>
+                <th className="p-2">Q</th>
+                <th className="p-2">KPI</th>
+                <th className="p-2">Dư</th>
+                <th className="p-2">Tuân thủ</th>
+                <th className="p-2">Thao tác</th>
+                <th className="p-2">Ghi chú duyệt</th>
+                <th className="p-2">Cập nhật</th>
+              </tr>
+            ) : (
+              <tr className="text-left border-b">
+                <th className="p-2"><input type="checkbox" checked={allOnPageSelected} onChange={toggleSelectAllOnPage} /></th>
+                <th className="p-2">Ngày</th>
+                <th className="p-2">MSNV</th>
+                <th className="p-2">Họ tên</th>
+                <th className="p-2">%OE</th>
+                <th className="p-2">Phế</th>
+                <th className="p-2">P</th>
+                <th className="p-2">Q</th>
+                <th className="p-2">KPI</th>
+                <th className="p-2">Vi phạm</th>
+                <th className="p-2">Thao tác</th>
+                <th className="p-2">Ghi chú duyệt</th>
+                <th className="p-2">Cập nhật</th>
+              </tr>
+            )}
           </thead>
+
           <tbody>
-            {pageRows.map(r => (
+            {pageRows.map(r => isMolding ? (
               <tr key={r.id} className="border-b">
-                <td className="p-2">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(r.id)}
-                    onChange={() => toggleRow(r.id)}
-                  />
-                </td>
+                <td className="p-2"><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleRow(r.id)} /></td>
                 <td className="p-2">{r.date}</td>
                 <td className="p-2">{r.worker_id}</td>
                 <td className="p-2">{r.worker_name}</td>
-                <td className="p-2">{r.oe}</td>
+                <td className="p-2">{r.ca}</td>
+                <td className="p-2">{r.category}</td>
+                <td className="p-2">{r.working_input}</td>
+                <td className="p-2">{r.working_real}</td>
+                <td className="p-2">{r.working_exact}</td>
+                <td className="p-2">{r.mold_hours}</td>
+                <td className="p-2">{r.downtime}</td>
+                <td className="p-2">{r.output}</td>
                 <td className="p-2">{r.defects}</td>
                 <td className="p-2">{r.p_score}</td>
                 <td className="p-2">{r.q_score}</td>
                 <td className="p-2 font-semibold">{r.day_score}</td>
+                <td className="p-2">{r.overflow}</td>
                 <td className="p-2">{r.compliance_code}</td>
+                <td className="p-2 flex gap-2">
+                  <button onClick={() => approve(r)} className="btn btn-primary">Duyệt</button>
+                  <button onClick={() => reject(r)} className="btn bg-red-600 text-white hover:bg-red-700">Từ chối</button>
+                </td>
+                <td className="p-2">{r.approver_note || ""}</td>
+                <td className="p-2">{fmt(r.updated_at || r.created_at)}</td>
+              </tr>
+            ) : (
+              <tr key={r.id} className="border-b">
+                <td className="p-2"><input type="checkbox" checked={selected.has(r.id)} onChange={() => toggleRow(r.id)} /></td>
+                <td className="p-2">{r.date}</td>
+                <td className="p-2">{r.worker_id || r.msnv}</td>
+                <td className="p-2">{r.worker_name || r.hoten}</td>
+                <td className="p-2">{r.oe}</td>
+                <td className="p-2">{r.defects}</td>
+                <td className="p-2">{r.p_score || r.productivity}</td>
+                <td className="p-2">{r.q_score || r.quality}</td>
+                <td className="p-2 font-semibold">{r.day_score || r.total_score}</td>
+                <td className="p-2">{r.compliance_code || r.compliance}</td>
                 <td className="p-2 flex gap-2">
                   <button onClick={() => approve(r)} className="btn btn-primary">Duyệt</button>
                   <button onClick={() => reject(r)} className="btn bg-red-600 text-white hover:bg-red-700">Từ chối</button>
@@ -247,7 +307,7 @@ export default function Pending() {
               </tr>
             ))}
             {!pageRows.length && (
-              <tr><td colSpan={13} className="p-4 text-center text-gray-500">
+              <tr><td colSpan={22} className="p-4 text-center text-gray-500">
                 {approverId ? "Không có bản ghi chờ duyệt." : "Nhập MSNV người duyệt để xem danh sách."}
               </td></tr>
             )}

@@ -1,97 +1,146 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
-
-function fmt(dt) {
-  if (!dt) return "";
-  try { return new Date(dt).toLocaleString(); } catch { return String(dt); }
-}
+import { useKpiSection } from "../context/KpiSectionContext";
 
 export default function ApprovePage() {
-  const [workerId, setWorkerId] = useState("");
+  const { section } = useKpiSection();
+  const isMolding = section === "MOLDING";
+
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  async function search() {
-    if (!workerId.trim()) {
-      setRows([]);
-      return alert("Nhập MSNV nhân viên để tra cứu.");
-    }
+  async function load() {
+    const table = isMolding ? "kpi_entries_molding" : "kpi_entries";
     setLoading(true);
     const { data, error } = await supabase
-      .from("kpi_entries")
+      .from(table)
       .select("*")
-      .eq("worker_id", workerId.trim())
+      .eq("status", "pending")
       .order("date", { ascending: false })
       .order("created_at", { ascending: false });
+
     setLoading(false);
-    if (error) return alert("Lỗi tra cứu: " + error.message);
+    if (error) return alert(error.message);
     setRows(data || []);
   }
+  useEffect(() => { load(); }, [section]);
 
-  function onKey(e) { if (e.key === "Enter") search(); }
+  async function approve(row) {
+    const note = prompt("Ghi chú (tuỳ chọn):", "");
+    const violations = row?.compliance_code === "NONE" ? 0 : 1;
+    const table = isMolding ? "kpi_entries_molding" : "kpi_entries";
+    const { error } = await supabase
+      .from(table)
+      .update({ status: "approved", violations, approver_note: note || null, approved_at: new Date().toISOString() })
+      .eq("id", row.id);
+    if (error) return alert("Duyệt lỗi: " + error.message);
+    load();
+  }
+
+  async function reject(row) {
+    const note = prompt("Lý do từ chối:", "");
+    const table = isMolding ? "kpi_entries_molding" : "kpi_entries";
+    const { error } = await supabase
+      .from(table)
+      .update({ status: "rejected", approver_note: note || null, approved_at: new Date().toISOString() })
+      .eq("id", row.id);
+    if (error) return alert("Từ chối lỗi: " + error.message);
+    load();
+  }
 
   return (
-    <div className="p-4">
-      <h2 className="text-xl font-semibold mb-3">Xét duyệt KPI (tra cứu đơn của bạn)</h2>
-
-      <div className="flex gap-2 items-center mb-4">
-        <input
-          className="input"
-          placeholder="Nhập MSNV nhân viên (VD: W001)"
-          value={workerId}
-          onChange={(e) => setWorkerId(e.target.value)}
-          onKeyDown={onKey}
-        />
-        <button onClick={search} className="btn btn-primary">
-          {loading ? "Đang tải..." : "Tìm"}
-        </button>
+    <div className="p-4 space-y-4">
+      <div className="flex items-center gap-3">
+        <h2 className="text-lg font-semibold">Xét duyệt KPI ({isMolding ? "Molding" : "Leanline"})</h2>
+        <button className="btn" onClick={load}>{loading ? "Đang tải..." : "Tải lại"}</button>
       </div>
 
       <div className="overflow-auto">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="text-left border-b">
-              <th className="p-2">Ngày</th>
-              <th className="p-2">MSNV</th>
-              <th className="p-2">Họ tên</th>
-              <th className="p-2">%OE</th>
-              <th className="p-2">Phế</th>
-              <th className="p-2">P</th>
-              <th className="p-2">Q</th>
-              <th className="p-2">KPI</th>
-              <th className="p-2">Trạng thái</th>
-              <th className="p-2">Duyệt lúc</th>
-              <th className="p-2">Ghi chú</th>
-            </tr>
+        <table className="min-w-full border text-sm">
+          <thead className="bg-gray-100 text-xs uppercase">
+            {isMolding ? (
+              <tr>
+                <th>MSNV</th>
+                <th>Họ tên</th>
+                <th>Người duyệt</th>
+                <th>Ngày</th>
+                <th>Ca</th>
+                <th>Loại hàng</th>
+                <th>Giờ nhập</th>
+                <th>Giờ thực tế</th>
+                <th>Giờ chính xác</th>
+                <th>Khuôn chạy</th>
+                <th>Downtime</th>
+                <th>Sản lượng/ca</th>
+                <th>Phế</th>
+                <th>Q</th>
+                <th>P</th>
+                <th>KPI ngày</th>
+                <th>Dư</th>
+                <th>Tuân thủ</th>
+                <th style={{width:120}}>Thao tác</th>
+              </tr>
+            ) : (
+              <tr>
+                <th>MSNV</th>
+                <th>Họ tên</th>
+                <th>Ngày</th>
+                <th>Ca</th>
+                <th>%OE</th>
+                <th>Điểm NS</th>
+                <th>Điểm CL</th>
+                <th>KPI ngày</th>
+                <th>Tuân thủ</th>
+                <th style={{width:120}}>Thao tác</th>
+              </tr>
+            )}
           </thead>
           <tbody>
-            {rows.map(r => (
-              <tr key={r.id} className="border-b">
-                <td className="p-2">{r.date}</td>
-                <td className="p-2">{r.worker_id}</td>
-                <td className="p-2">{r.worker_name}</td>
-                <td className="p-2">{r.oe}</td>
-                <td className="p-2">{r.defects}</td>
-                <td className="p-2">{r.p_score}</td>
-                <td className="p-2">{r.q_score}</td>
-                <td className="p-2 font-semibold">{r.day_score}</td>
-                <td className="p-2">
-                  <span className={
-                    r.status === "approved" ? "text-green-600" :
-                    r.status === "rejected" ? "text-red-600" : "text-yellow-600"
-                  }>
-                    {r.status}
-                  </span>
+            {rows.length === 0 && (
+              <tr><td colSpan={22} className="text-center p-4">Không có dữ liệu</td></tr>
+            )}
+            {rows.map((r) => isMolding ? (
+              <tr key={r.id} className="border-b hover:bg-gray-50">
+                <td>{r.worker_id}</td>
+                <td>{r.worker_name}</td>
+                <td>{r.approver_name}</td>
+                <td>{r.date}</td>
+                <td>{r.ca}</td>
+                <td>{r.category}</td>
+                <td>{r.working_input}</td>
+                <td>{r.working_real}</td>
+                <td>{r.working_exact}</td>
+                <td>{r.mold_hours}</td>
+                <td>{r.downtime}</td>
+                <td>{r.output}</td>
+                <td>{r.defects}</td>
+                <td>{r.q_score}</td>
+                <td>{r.p_score}</td>
+                <td>{r.day_score}</td>
+                <td>{r.overflow}</td>
+                <td>{r.compliance_code}</td>
+                <td className="space-x-2">
+                  <button className="btn btn-primary btn-sm" onClick={() => approve(r)}>Duyệt</button>
+                  <button className="btn bg-red-600 text-white hover:bg-red-700 btn-sm" onClick={() => reject(r)}>Từ chối</button>
                 </td>
-                <td className="p-2">{fmt(r.approved_at)}</td>
-                <td className="p-2">{r.approver_note || ""}</td>
+              </tr>
+            ) : (
+              <tr key={r.id} className="border-b hover:bg-gray-50">
+                <td>{r.msnv || r.worker_id}</td>
+                <td>{r.hoten || r.worker_name}</td>
+                <td>{r.work_date || r.date}</td>
+                <td>{r.shift || r.ca}</td>
+                <td>{r.oe}</td>
+                <td>{r.productivity || r.p_score}</td>
+                <td>{r.quality || r.q_score}</td>
+                <td>{r.total_score || r.day_score}</td>
+                <td>{r.compliance || r.compliance_code}</td>
+                <td className="space-x-2">
+                  <button className="btn btn-primary btn-sm" onClick={() => approve(r)}>Duyệt</button>
+                  <button className="btn bg-red-600 text-white hover:bg-red-700 btn-sm" onClick={() => reject(r)}>Từ chối</button>
+                </td>
               </tr>
             ))}
-            {!rows.length && (
-              <tr><td colSpan={11} className="p-4 text-center text-gray-500">
-                {workerId ? "Không có bản ghi." : "Nhập MSNV để tra cứu."}
-              </td></tr>
-            )}
           </tbody>
         </table>
       </div>
