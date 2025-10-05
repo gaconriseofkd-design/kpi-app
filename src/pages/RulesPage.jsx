@@ -118,8 +118,9 @@ function RulesContent() {
         if (!confirm(`Nhập/ cập nhật ${payload.length} rule vào database?`)) return;
     
         const { error } = await supabase
-          .from("kpi_rule_productivity")
-          .upsert(payload, { onConflict: "section,category,threshold" }); // v2: chuỗi
+        .from("kpi_rule_productivity")
+        .upsert(payload, { onConflict: "kpi_rule_prod_unique" });
+      
     
         if (error) {
           console.error(error);
@@ -154,8 +155,9 @@ function RulesContent() {
         }
       
         const { error } = await supabase
-          .from("kpi_rule_productivity")
-          .upsert(payload, { onConflict: "section,category,threshold" });
+        .from("kpi_rule_productivity")
+        .upsert(payload, { onConflict: "kpi_rule_prod_unique" });
+      
       
         if (error) return alert(error.message);
         await load();
