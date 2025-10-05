@@ -1,6 +1,7 @@
 // src/pages/ReportPage.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { useKpiSection } from "../context/KpiSectionContext";
 import * as XLSX from "xlsx";
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -46,168 +47,196 @@ export default function ReportPage() {
 
 /* =============== Trang báo cáo =============== */
 function ReportContent() {
+  const { section } = useKpiSection();               // <<— lấy section hiện tại
+  const isMolding = section === "MOLDING";
+
   // ----- bộ lọc -----
-  const [dateFrom, setDateFrom] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0,10));
-  const [dateTo, setDateTo]     = useState(() => new Date().toISOString().slice(0,10));
-  const [approverId, setApproverId] = useState("");
+  const today = () => new Date().toISOString().slice(0,10);
+  const firstDayOfMonth = () => {
+    const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1).toISOString().slice(0,10);
+  };
+
+  const [dateFrom, setDateFrom] = useState(firstDayOfMonth());
+  const [dateTo, setDateTo]     = useState(today());
+  const [approverId, setApproverId] = useState(""); // Leanline: approver_id | Molding: approver_msnv
   const [workerId, setWorkerId]     = useState("");
-  const [onlyApproved, setOnlyApproved] = useState(true);
+  const [status, setStatus]         = useState("all"); // all|pending|approved|rejected
+  const [onlyApproved, setOnlyApproved] = useState(false);
+  const [category, setCategory]     = useState(""); // chỉ dùng cho Molding
 
   // ----- dữ liệu -----
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // ----- lựa chọn biểu đồ -----
-  const workerList = useMemo(
-    () => Array.from(new Map(rows.map(r => [r.worker_id, r.worker_name || r.worker_id])).entries()),
-    [rows]
-  ); // [ [id, name] ]
-
-  const [chartWorker, setChartWorker] = useState("");
-  const [teamMode, setTeamMode] = useState("global"); // global|approver
-
+  // ----- options cho Molding -----
+  const [catOptions, setCatOptions] = useState([]);
   useEffect(() => {
-    // nếu chưa chọn thì auto pick worker đầu tiên trong kết quả
-    if (!chartWorker && workerList.length) setChartWorker(workerList[0][0]);
-  }, [workerList, chartWorker]);
+    if (!isMolding) { setCatOptions([]); return; }
+    supabase
+      .from("kpi_rule_productivity")
+      .select("category")
+      .eq("section", "MOLDING")
+      .eq("active", true)
+      .then(({ data, error }) => {
+        if (error) { console.error(error); return; }
+        const opts = [...new Set((data || []).map(r => r.category).filter(Boolean))];
+        setCatOptions(opts);
+      });
+  }, [isMolding]);
 
+  // ----- Load dữ liệu -----
   async function runQuery() {
     if (!dateFrom || !dateTo) return alert("Chọn khoảng ngày trước khi xem báo cáo.");
     if (new Date(dateFrom) > new Date(dateTo)) return alert("Khoảng ngày không hợp lệ.");
 
+    const table = isMolding ? "kpi_entries_molding" : "kpi_entries";
+    let q = supabase.from(table).select("*").gte("date", dateFrom).lte("date", dateTo);
+
+    // lọc theo section nếu cột section có trong bảng (cả 2 bảng đều có)
+    q = q.eq("section", section);
+
+    if (status !== "all") q = q.eq("status", status);
+    if (onlyApproved)     q = q.eq("status", "approved");
+    if (workerId.trim())  q = q.eq("worker_id", workerId.trim());
+    if (approverId.trim()) {
+      q = isMolding ? q.eq("approver_msnv", approverId.trim()) : q.eq("approver_id", approverId.trim());
+    }
+    if (isMolding && category) q = q.eq("category", category);
+
     setLoading(true);
-    let q = supabase
-      .from("kpi_entries")
-      .select("*")
-      .gte("date", dateFrom)
-      .lte("date", dateTo);
-
-    if (onlyApproved) q = q.eq("status", "approved");
-    if (approverId.trim()) q = q.eq("approver_id", approverId.trim());
-    if (workerId.trim())   q = q.eq("worker_id", workerId.trim());
-
-    q = q.order("date", { ascending: true }).order("worker_id", { ascending: true });
-
-    const { data, error } = await q;
+    const { data, error } = await q.order("date", { ascending: true }).order("worker_id", { ascending: true });
     setLoading(false);
     if (error) return alert("Lỗi tải dữ liệu: " + error.message);
     setRows(data || []);
   }
 
-  /* ----- Bảng xếp hạng TOP 5 theo tổng điểm ----- */
+  // reset khi đổi section
+  useEffect(() => {
+    setRows([]); setCategory(""); setWorkerId(""); setApproverId(""); setStatus("all"); setOnlyApproved(false);
+  }, [section]);
+
+  /* ---------- worker list cho chart ---------- */
+  const workerList = useMemo(
+    () => Array.from(new Map(rows.map(r => [r.worker_id, r.worker_name || r.worker_id])).entries()),
+    [rows]
+  ); // [ [id, name] ]
+  const [chartWorker, setChartWorker] = useState("");
+  useEffect(() => { if (!chartWorker && workerList.length) setChartWorker(workerList[0][0]); }, [workerList, chartWorker]);
+
+  /* ---------- TOP 5 & summary ---------- */
   const top5 = useMemo(() => {
-    const map = new Map(); // worker_id -> { name, total, count, avg }
+    const map = new Map();
     for (const r of rows) {
       const cur = map.get(r.worker_id) || { name: r.worker_name || r.worker_id, total: 0, count: 0 };
       cur.total += Number(r.day_score || 0);
       cur.count += 1;
       map.set(r.worker_id, cur);
     }
-    const arr = Array.from(map.entries()).map(([id, v]) => ({
-      worker_id: id,
-      worker_name: v.name,
-      total: v.total,
-      avg: v.count ? (v.total / v.count) : 0,
-      days: v.count,
-    }));
-    arr.sort((a,b) => b.total - a.total);
+    const arr = [...map.entries()].map(([id, v]) => ({
+      worker_id: id, worker_name: v.name, total: v.total, avg: v.count ? v.total/v.count : 0, days: v.count
+    })).sort((a,b) => b.total - a.total);
     return arr.slice(0, 5);
   }, [rows]);
 
-  /* ----- Số liệu tổng hợp nhanh... ----- */
   const summary = useMemo(() => {
     const n = rows.length;
     const total = rows.reduce((s, r) => s + Number(r.day_score || 0), 0);
-    const avg = n ? (total / n) : 0;
+    const avg = n ? total / n : 0;
     const viol = rows.reduce((s, r) => s + Number(r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0)), 0);
     const workers = new Set(rows.map(r => r.worker_id)).size;
     return { records: n, total, avg, violations: viol, workers };
   }, [rows]);
 
-  /* ----- Dữ liệu vẽ chart (nhân viên vs trung bình) ----- */
+  /* ---------- Chart (điểm ngày, baseline TB toàn bộ hoặc theo người duyệt) ---------- */
+  const [teamMode, setTeamMode] = useState("global"); // global|approver
   const chartData = useMemo(() => {
     if (!chartWorker) return [];
-    const byDate = new Map(); // date -> {sum, count}
-    const byDateApprover = new Map(); // date -> {sum, count} chỉ tính theo approver tương ứng
-
-    // Tìm approver của worker được chọn (từ data) — nếu không có, dùng approver filter
+    const byDateAll = new Map();       // date -> {sum,count}
+    const byDateApv = new Map();       // date -> {sum,count}
     const workerRows = rows.filter(r => r.worker_id === chartWorker);
-    const workerApprover = workerRows[0]?.approver_id || (approverId || "");
 
-    // gom toàn bộ (global)
+    // tìm approver id field đúng theo bảng
+    const approverField = isMolding ? "approver_msnv" : "approver_id";
+    const workerApprover = workerRows[0]?.[approverField] || (approverId || "");
+
     for (const r of rows) {
       const k = r.date;
-      const g = byDate.get(k) || { sum: 0, count: 0 };
+      const g = byDateAll.get(k) || { sum: 0, count: 0 };
       g.sum += Number(r.day_score || 0);
       g.count += 1;
-      byDate.set(k, g);
+      byDateAll.set(k, g);
 
-      if (!workerApprover) continue;
-      if (r.approver_id === workerApprover) {
-        const g2 = byDateApprover.get(k) || { sum: 0, count: 0 };
+      if (workerApprover && r[approverField] === workerApprover) {
+        const g2 = byDateApv.get(k) || { sum: 0, count: 0 };
         g2.sum += Number(r.day_score || 0);
         g2.count += 1;
-        byDateApprover.set(k, g2);
+        byDateApv.set(k, g2);
       }
     }
 
     const idx = new Map(); // date -> {date, worker, avg}
     for (const r of workerRows) idx.set(r.date, { date: r.date, worker: Number(r.day_score || 0) });
 
-    // baseline
-    for (const [d, v] of (teamMode === "approver" && workerApprover ? byDateApprover : byDate)) {
+    const base = (teamMode === "approver" && workerApprover) ? byDateApv : byDateAll;
+    for (const [d, v] of base) {
       const row = idx.get(d) || { date: d };
-      row.avg = v.count ? (v.sum / v.count) : 0;
+      row.avg = v.count ? v.sum / v.count : 0;
       idx.set(d, row);
     }
+    return [...idx.values()].sort((a,b) => a.date.localeCompare(b.date));
+  }, [rows, chartWorker, teamMode, approverId, isMolding]);
 
-    // sắp xếp theo ngày
-    return Array.from(idx.values()).sort((a,b) => a.date.localeCompare(b.date));
-  }, [rows, chartWorker, teamMode, approverId]);
-
-  /* ----- Bảng dữ liệu với phân trang đơn giản ----- */
+  /* ---------- Paging bảng ---------- */
   const [page, setPage] = useState(1);
   const pageSize = 100;
   useEffect(() => { setPage(1); }, [rows]);
-
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-  const pageRows = useMemo(
-    () => rows.slice((page - 1) * pageSize, page * pageSize),
-    [rows, page]
-  );
+  const pageRows = useMemo(() => rows.slice((page-1)*pageSize, page*pageSize), [rows, page]);
 
-  /* ----- Xuất XLSX ----- */
- 
+  /* ---------- Export XLSX ---------- */
   function exportXLSX() {
     if (!rows.length) return alert("Không có dữ liệu để xuất.");
-
-    // Đảm bảo ID là string để giữ 0 đầu
-    const data = rows.map(r => ({
-      date: r.date,
-      worker_id: String(r.worker_id),       // 👈 string
-      worker_name: r.worker_name,
-      approver_id: String(r.approver_id),   // 👈 string
-      approver_name: r.approver_name,
-      line: r.line, ca: r.ca,
-      work_hours: r.work_hours,
-      stop_hours: r.stop_hours,
-      defects: r.defects, oe: r.oe,
-      p_score: r.p_score, q_score: r.q_score, day_score: r.day_score,
-      overflow: r.overflow, compliance_code: r.compliance_code,
-      violations: r.violations, status: r.status,
-      approved_at: r.approved_at, created_at: r.created_at, updated_at: r.updated_at,
-    }));
-
+    const data = rows.map((r) => {
+      if (isMolding) {
+        return {
+          date: r.date,
+          worker_id: String(r.worker_id),
+          worker_name: r.worker_name,
+          approver_msnv: String(r.approver_msnv || ""),
+          approver_name: r.approver_name,
+          ca: r.ca,
+          category: r.category,
+          output: r.output,
+          p_score: r.p_score, q_score: r.q_score, day_score: r.day_score,
+          compliance_code: r.compliance_code, violations: r.violations, status: r.status,
+          created_at: r.created_at, approved_at: r.approved_at,
+          working_input: r.working_input, working_real: r.working_real,
+          working_exact: r.working_exact, downtime: r.downtime, mold_hours: r.mold_hours,
+        };
+      }
+      return {
+        date: r.date,
+        worker_id: String(r.worker_id),
+        worker_name: r.worker_name,
+        approver_id: String(r.approver_id || ""),
+        approver_name: r.approver_name,
+        line: r.line, ca: r.ca, oe: r.oe, defects: r.defects,
+        p_score: r.p_score, q_score: r.q_score, day_score: r.day_score,
+        compliance_code: r.compliance_code, violations: r.violations, status: r.status,
+        created_at: r.created_at, approved_at: r.approved_at
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "KPI");
-    XLSX.writeFile(wb, `kpi_report_${dateFrom}_to_${dateTo}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, isMolding ? "KPI_Molding" : "KPI");
+    XLSX.writeFile(wb, `kpi_report_${section}_${dateFrom}_to_${dateTo}.xlsx`);
   }
 
+  const fmt = (n, d=2) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-US",{maximumFractionDigits:d}) : "");
 
   return (
     <div className="p-4 space-y-6">
-      <h2 className="text-xl font-semibold">Báo cáo KPI</h2>
+      <h2 className="text-xl font-semibold">Báo cáo KPI – {isMolding ? "Molding" : "Leanline"}</h2>
 
       {/* Bộ lọc */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -217,16 +246,38 @@ function ReportContent() {
         <label> Đến ngày
           <input type="date" className="input" value={dateTo} onChange={e=>setDateTo(e.target.value)} />
         </label>
+
         <label> MSNV người duyệt (tuỳ chọn)
-          <input className="input" value={approverId} onChange={e=>setApproverId(e.target.value)} placeholder="VD: A101" />
+          <input className="input" value={approverId} onChange={e=>setApproverId(e.target.value)} placeholder={isMolding ? "VD: 04126 (approver_msnv)" : "VD: 04126 (approver_id)"} />
         </label>
-        <label> MSNV worker (tuỳ chọn)
-          <input className="input" value={workerId} onChange={e=>setWorkerId(e.target.value)} placeholder="VD: W001" />
+
+        <label> MSNV nhân viên (tuỳ chọn)
+          <input className="input" value={workerId} onChange={e=>setWorkerId(e.target.value)} placeholder="VD: 04126" />
         </label>
+
+        {isMolding && (
+          <label> Loại hàng
+            <select className="input" value={category} onChange={e=>setCategory(e.target.value)}>
+              <option value="">-- Tất cả --</option>
+              {catOptions.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </label>
+        )}
+
+        <label> Trạng thái
+          <select className="input" value={status} onChange={e=>setStatus(e.target.value)}>
+            <option value="all">Tất cả</option>
+            <option value="pending">pending</option>
+            <option value="approved">approved</option>
+            <option value="rejected">rejected</option>
+          </select>
+        </label>
+
         <label className="flex items-center gap-2">
           <input type="checkbox" checked={onlyApproved} onChange={e=>setOnlyApproved(e.target.checked)} />
           Chỉ xem bản ghi đã duyệt
         </label>
+
         <div className="flex items-end gap-2">
           <button className="btn btn-primary" onClick={runQuery}>{loading ? "Đang tải..." : "Xem báo cáo"}</button>
           <button className="btn" onClick={exportXLSX} disabled={!rows.length}>Xuất XLSX</button>
@@ -236,8 +287,8 @@ function ReportContent() {
       {/* Summary nhanh */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <SummaryCard title="Số bản ghi" value={summary.records} />
-        <SummaryCard title="Điểm tổng" value={summary.total.toFixed(1)} />
-        <SummaryCard title="Điểm TB" value={summary.avg.toFixed(2)} />
+        <SummaryCard title="Điểm tổng"  value={summary.total.toFixed(1)} />
+        <SummaryCard title="Điểm TB"    value={summary.avg.toFixed(2)} />
         <SummaryCard title="Số vi phạm" value={summary.violations} />
         <SummaryCard title="Số nhân viên" value={summary.workers} />
       </div>
@@ -272,7 +323,7 @@ function ReportContent() {
                 <Tooltip />
                 <Legend />
                 <Line type="monotone" dataKey="worker" name="Điểm NV" stroke="#3b82f6" dot={false} />
-                <Line type="monotone" dataKey="avg" name="TB team" stroke="#10b981" dot={false} />
+                <Line type="monotone" dataKey="avg"    name="TB baseline" stroke="#10b981" dot={false} />
               </LineChart>
             </ResponsiveContainer>
           ) : (
@@ -313,7 +364,7 @@ function ReportContent() {
         </div>
       </div>
 
-      {/* Bảng dữ liệu */}
+      {/* Bảng dữ liệu chi tiết */}
       <div>
         <div className="mb-2 flex items-center gap-3">
           <span>Kết quả: {rows.length} dòng</span>
@@ -323,45 +374,81 @@ function ReportContent() {
         </div>
 
         <div className="overflow-auto">
-          <table className="min-w-[900px] text-sm">
-            <thead>
-              <tr className="text-left border-b">
-                <th className="p-2">Ngày</th>
-                <th className="p-2">MSNV</th>
-                <th className="p-2">Họ tên</th>
-                <th className="p-2">Người duyệt</th>
-                <th className="p-2">Line</th>
-                <th className="p-2">Ca</th>
-                <th className="p-2">%OE</th>
-                <th className="p-2">Phế</th>
-                <th className="p-2">P</th>
-                <th className="p-2">Q</th>
-                <th className="p-2">KPI</th>
-                <th className="p-2">Vi phạm</th>
-                <th className="p-2">Trạng thái</th>
-              </tr>
-            </thead>
-            <tbody>
-              {pageRows.map((r, i) => (
-                <tr key={`${r.worker_id}-${r.date}-${i}`} className="border-b">
-                  <td className="p-2">{r.date}</td>
-                  <td className="p-2">{r.worker_id}</td>
-                  <td className="p-2">{r.worker_name}</td>
-                  <td className="p-2">{r.approver_id}</td>
-                  <td className="p-2">{r.line}</td>
-                  <td className="p-2">{r.ca}</td>
-                  <td className="p-2">{r.oe}</td>
-                  <td className="p-2">{r.defects}</td>
-                  <td className="p-2">{r.p_score}</td>
-                  <td className="p-2">{r.q_score}</td>
-                  <td className="p-2 font-semibold">{r.day_score}</td>
-                  <td className="p-2">{r.compliance_code}</td>
-                  <td className="p-2">{r.status}</td>
+          {isMolding ? (
+            <table className="min-w-[1050px] text-sm">
+              <thead className="bg-gray-100 text-xs uppercase">
+                <tr>
+                  <th className="p-2 text-center">Ngày</th>
+                  <th className="p-2 text-center">MSNV</th>
+                  <th className="p-2 text-center">Họ tên</th>
+                  <th className="p-2 text-center">Ca</th>
+                  <th className="p-2 text-center">Loại hàng</th>
+                  <th className="p-2 text-center">Sản lượng/ca</th>
+                  <th className="p-2 text-center">P</th>
+                  <th className="p-2 text-center">Q</th>
+                  <th className="p-2 text-center">KPI</th>
+                  <th className="p-2 text-center">Duyệt</th>
                 </tr>
-              ))}
-              {!pageRows.length && <tr><td colSpan={13} className="p-4 text-center text-gray-500">Chưa có dữ liệu</td></tr>}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {pageRows.map((r, i) => (
+                  <tr key={`${r.worker_id}-${r.date}-${i}`} className="border-b hover:bg-gray-50">
+                    <td className="p-2 text-center">{r.date}</td>
+                    <td className="p-2 text-center">{r.worker_id}</td>
+                    <td className="p-2 text-center">{r.worker_name}</td>
+                    <td className="p-2 text-center">{r.ca}</td>
+                    <td className="p-2 text-center">{r.category}</td>
+                    <td className="p-2 text-center">{fmt(r.output, 0)}</td>
+                    <td className="p-2 text-center">{fmt(r.p_score, 2)}</td>
+                    <td className="p-2 text-center">{fmt(r.q_score, 2)}</td>
+                    <td className="p-2 text-center font-semibold">{fmt(r.day_score, 2)}</td>
+                    <td className="p-2 text-center">{r.status}</td>
+                  </tr>
+                ))}
+                {!pageRows.length && (
+                  <tr><td colSpan={10} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>
+                )}
+              </tbody>
+            </table>
+          ) : (
+            <table className="min-w-[1100px] text-sm">
+              <thead className="bg-gray-100 text-xs uppercase">
+                <tr>
+                  <th className="p-2 text-center">Ngày</th>
+                  <th className="p-2 text-center">MSNV</th>
+                  <th className="p-2 text-center">Họ tên</th>
+                  <th className="p-2 text-center">Line</th>
+                  <th className="p-2 text-center">Ca</th>
+                  <th className="p-2 text-center">%OE</th>
+                  <th className="p-2 text-center">Phế</th>
+                  <th className="p-2 text-center">P</th>
+                  <th className="p-2 text-center">Q</th>
+                  <th className="p-2 text-center">KPI</th>
+                  <th className="p-2 text-center">Duyệt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((r, i) => (
+                  <tr key={`${r.worker_id}-${r.date}-${i}`} className="border-b hover:bg-gray-50">
+                    <td className="p-2 text-center">{r.date}</td>
+                    <td className="p-2 text-center">{r.worker_id}</td>
+                    <td className="p-2 text-center">{r.worker_name}</td>
+                    <td className="p-2 text-center">{r.line}</td>
+                    <td className="p-2 text-center">{r.ca}</td>
+                    <td className="p-2 text-center">{fmt(r.oe, 2)}</td>
+                    <td className="p-2 text-center">{fmt(r.defects, 0)}</td>
+                    <td className="p-2 text-center">{fmt(r.p_score, 2)}</td>
+                    <td className="p-2 text-center">{fmt(r.q_score, 2)}</td>
+                    <td className="p-2 text-center font-semibold">{fmt(r.day_score, 2)}</td>
+                    <td className="p-2 text-center">{r.status}</td>
+                  </tr>
+                ))}
+                {!pageRows.length && (
+                  <tr><td colSpan={11} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>
+                )}
+              </tbody>
+            </table>
+          )}
         </div>
       </div>
     </div>
