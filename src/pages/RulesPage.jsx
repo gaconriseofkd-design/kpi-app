@@ -141,17 +141,21 @@ function RulesContent() {
     }
 
     setSaving(true);
-    const payload = rows.map(r => ({
-      section: r.section?.trim(),
-      category: r.category?.trim(),
-      threshold: Number(r.threshold),
-      score: Number(r.score),
-      active: true
-    }));
+    const payload = rows.map(r => {
+      const x = { ...r };
+      delete x.id;
+      x.section   = (x.section || 'MOLDING').toUpperCase();
+      x.category  = x.category || '';
+      x.threshold = Number(x.threshold || 0);
+      x.score     = Number(x.score || 0);
+      x.active    = String(x.active).toLowerCase() !== 'false';
+      return x;
+    });
+    
     
     const { error } = await supabase
-      .from("kpi_rule_productivity")
-      .upsert(payload, { onConflict: ["section", "category", "threshold"] });
+  .from("kpi_rule_productivity")
+  .upsert(payload, { onConflict: 'section,category,threshold' }); 
 
 
     setSaving(false);
