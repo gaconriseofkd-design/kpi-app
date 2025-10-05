@@ -159,8 +159,8 @@ function RulesContent() {
     }
 
     const { error } = await supabase
-      .from("kpi_rule_productivity")
-      .upsert(payload, { onConflict: 'section,category,threshold' });
+    .from("kpi_rule_productivity")
+    .upsert(payload, { onConflict: 'section,category,threshold' });
 
     if (error) return alert("Lưu lỗi: " + error.message);
     await load();
