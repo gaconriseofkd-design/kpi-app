@@ -119,7 +119,7 @@ function RulesContent() {
     
         const { error } = await supabase
         .from("kpi_rule_productivity")
-        .upsert(payload, { onConflict: "kpi_rule_prod_unique" });
+  .upsert(payload, { onConflict: ["section", "category", "threshold"] });
       
     
         if (error) {
@@ -156,7 +156,7 @@ function RulesContent() {
       
         const { error } = await supabase
         .from("kpi_rule_productivity")
-        .upsert(payload, { onConflict: "kpi_rule_prod_unique" });
+        .upsert(payload, { onConflict: ["section", "category", "threshold"] });
       
       
         if (error) return alert(error.message);
