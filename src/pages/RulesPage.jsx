@@ -100,9 +100,9 @@ function RulesContent() {
 
       if (!json.length) return alert("File không có dữ liệu.");
 
-      // Chuẩn hoá dữ liệu
-      const raw = json.map((r) => ({
-        section: (r.section?.toString().trim().toUpperCase()) || "MOLDING",
+      // Chuẩn hoá
+      const raw = json.map(r => ({
+        section: (r.section?.toString().trim() || section || "MOLDING").toUpperCase(),
         category: (r.category ?? "").toString().trim().replace(/\s+/g, " "),
         threshold: Number(r.threshold || 0),
         score: Number(r.score || 0),
@@ -110,22 +110,19 @@ function RulesContent() {
         active: String(r.active ?? "true").toLowerCase() !== "false",
       }));
 
-      // Loại bỏ trùng trong file
+      // Dedupe đúng theo (section, category, threshold)
       const seen = new Set();
       const payload = [];
       for (const row of raw) {
         const key = `${row.section}|${row.category}|${row.threshold}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          payload.push(row);
-        }
+        if (!seen.has(key)) { seen.add(key); payload.push(row); }
       }
 
       if (!confirm(`Nhập/cập nhật ${payload.length} rule vào database?`)) return;
 
       const { error } = await supabase
         .from("kpi_rule_productivity")
-        .upsert(payload, { onConflict: 'section,category,threshold' }); // ✅ cú pháp đúng
+        .upsert(payload, { onConflict: 'section,category,threshold' });
 
       if (error) {
         console.error(error);
@@ -141,14 +138,14 @@ function RulesContent() {
 
   // 💾 Lưu tất cả rule hiện tại
   async function saveAll() {
-    const payload = rows.map((r) => {
+    const payload = rows.map(r => {
       const x = { ...r };
       delete x.id;
-      x.section = (x.section || section || "MOLDING").toUpperCase();
-      x.category = (x.category || "").toString().trim().replace(/\s+/g, " ");
+      x.section   = (x.section || section || "MOLDING").toUpperCase();
+      x.category  = (x.category || "").toString().trim().replace(/\s+/g, " ");
       x.threshold = Number(x.threshold || 0);
-      x.score = Number(x.score || 0);
-      x.active = !!x.active;
+      x.score     = Number(x.score || 0);
+      x.active    = !!x.active;
       if (!("note" in x)) x.note = "";
       return x;
     });
@@ -163,7 +160,7 @@ function RulesContent() {
 
     const { error } = await supabase
       .from("kpi_rule_productivity")
-      .upsert(payload, { onConflict: 'section,category,threshold' }); // ✅ chuẩn cú pháp
+      .upsert(payload, { onConflict: 'section,category,threshold' });
 
     if (error) return alert("Lưu lỗi: " + error.message);
     await load();
