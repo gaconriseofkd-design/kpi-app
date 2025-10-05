@@ -114,7 +114,7 @@ function ReportContent() {
     return arr.slice(0, 5);
   }, [rows]);
 
-  /* ----- Số liệu tổng hợp nhanh ----- */
+  /* ----- Số liệu tổng hợp nhanh... ----- */
   const summary = useMemo(() => {
     const n = rows.length;
     const total = rows.reduce((s, r) => s + Number(r.day_score || 0), 0);
