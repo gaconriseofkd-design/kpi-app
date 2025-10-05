@@ -106,7 +106,7 @@ function RulesContent() {
   
       const { error } = await supabase
         .from("kpi_rule_productivity")
-        .insert(payload);
+        .upsert(payload, { onConflict: 'section,category,threshold' });
   
       if (error) {
         console.error(error);
