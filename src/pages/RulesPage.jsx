@@ -136,7 +136,7 @@ function RulesContent() {
     reader.readAsArrayBuffer(file);
   }
 
-  // 💾 Lưu tất cả rule hiện tại
+  // 💾 Lưu tất cả rule hiện tại..
   async function saveAll() {
     const payload = rows.map(r => {
       const x = { ...r };
