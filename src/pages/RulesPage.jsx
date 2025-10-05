@@ -77,93 +77,91 @@ function RulesContent() {
       });
   }
   async function handleImportExcel(e) {
-    const file = e.target.files?.[0];
-    if (!file) return;
-  
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      const data = new Uint8Array(evt.target.result);
-      const workbook = XLSX.read(data, { type: "array" });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-  
-      if (!json.length) return alert("File không có dữ liệu.");
-  
-      // Chuẩn hoá dữ liệu
-      const payload = json.map(r => {
-        const row = {
-          section: r.section?.toUpperCase?.() || "MOLDING",
-          category: r.category || "",
+      const file = e.target.files?.[0];
+      if (!file) return;
+    
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        const data = new Uint8Array(evt.target.result);
+        const workbook = XLSX.read(data, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+    
+        if (!json.length) return alert("File không có dữ liệu.");
+    
+        // Chuẩn hoá + loại bỏ cột id nếu có
+        const raw = json.map((r) => ({
+          section: (r.section?.toString().trim().toUpperCase()) || "MOLDING",
+          category: (r.category ?? "").toString().trim().replace(/\s+/g, " "),
           threshold: Number(r.threshold || 0),
           score: Number(r.score || 0),
           note: r.note || "",
           active: String(r.active).toLowerCase() !== "false",
-        };
-        return row;
-      });
-  
-      if (!confirm(`Nhập ${payload.length} rule vào database?`)) return;
-  
-      const { error } = await supabase
-        .from("kpi_rule_productivity")
-        .upsert(payload, { onConflict: 'section,category,threshold' });
-  
-      if (error) {
-        console.error(error);
-        alert("Import lỗi: " + error.message);
-      } else {
-        alert(`✅ Đã import ${payload.length} rule thành công!`);
-        loadRules(); // reload lại bảng hiện tại
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  }
-  async function saveAll() {
-    const cleaned = rows.map((r) => {
-      const base = {
-        category: r.category || null,
-        threshold: Number(r.threshold || 0),
-        score: Number(r.score || 0),
-        note: r.note || "",
-        active: !!r.active,
-        section,
+        }));
+    
+        // Loại bỏ trùng trong chính payload (theo section|category|threshold)
+        const seen = new Set();
+        const payload = [];
+        for (const row of raw) {
+          const key = `${row.section}|${row.category}|${row.threshold}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            payload.push(row);
+          }
+        }
+    
+        // Nếu có trùng bị loại, báo cho biết
+        if (payload.length !== raw.length) {
+          console.warn(`Đã loại ${raw.length - payload.length} dòng trùng trong file import.`);
+        }
+    
+        if (!confirm(`Nhập/ cập nhật ${payload.length} rule vào database?`)) return;
+    
+        const { error } = await supabase
+          .from("kpi_rule_productivity")
+          .upsert(payload, { onConflict: "section,category,threshold" }); // v2: chuỗi
+    
+        if (error) {
+          console.error(error);
+          alert("Import lỗi: " + error.message);
+        } else {
+          alert(`✅ Import thành công ${payload.length} rule!`);
+          await load(); // <- đúng tên hàm
+        }
       };
-      if (r.id) base.id = r.id;   // chỉ thêm id nếu có
-      return base;
-    });
-
-
-    const uniq = new Set();
-    for (const r of cleaned) {
-      const key = section === "MOLDING" ? `${r.category || ""}|${r.threshold}` : String(r.threshold);
-      if (uniq.has(key)) return alert("Rule bị trùng: " + key);
-      uniq.add(key);
+    
+      reader.readAsArrayBuffer(file);
     }
-
-    setSaving(true);
-    const payload = rows.map(r => {
-      const x = { ...r };
-      delete x.id;
-      x.section   = (x.section || 'MOLDING').toUpperCase();
-      x.category  = x.category || '';
-      x.threshold = Number(x.threshold || 0);
-      x.score     = Number(x.score || 0);
-      x.active    = String(x.active).toLowerCase() !== 'false';
-      return x;
-    });
+  
+    async function saveAll() {
+        const payload = rows.map((r) => {
+          const x = { ...r };
+          delete x.id;
+          x.section   = (x.section || section || 'MOLDING').toUpperCase();
+          x.category  = (x.category || '').toString().trim().replace(/\s+/g, ' ');
+          x.threshold = Number(x.threshold || 0);
+          x.score     = Number(x.score || 0);
+          x.active    = !!x.active;
+          return x;
+        });
+      
+        // Chặn trùng trong payload
+        const seen = new Set();
+        for (const r of payload) {
+          const key = `${r.section}|${r.category}|${r.threshold}`;
+          if (seen.has(key)) return alert("Rule bị trùng trong bảng: " + key);
+          seen.add(key);
+        }
+      
+        const { error } = await supabase
+          .from("kpi_rule_productivity")
+          .upsert(payload, { onConflict: "section,category,threshold" });
+      
+        if (error) return alert(error.message);
+        await load();
+        alert("Đã lưu rule.");
+      }
     
-    
-    const { error } = await supabase
-    .from("kpi_rule_productivity")
-    .upsert(payload, { onConflict: 'section,category,threshold' });
-
-
-
-    setSaving(false);
-    if (error) return alert(error.message);
-    await load();
-    alert("Đã lưu rule.");
-  }
 
   const testScore = useMemo(() => {
     if (section === "MOLDING") {
