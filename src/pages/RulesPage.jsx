@@ -141,11 +141,13 @@ function RulesContent() {
     }
 
     setSaving(true);
-    const payload = rows.map(r => {
-      const copy = { ...r };
-      delete copy.id; // ⚠️ BẮT BUỘC — xoá id để Supabase tự tăng
-      return copy;
-    });
+    const payload = rows.map(r => ({
+      section: r.section?.trim(),
+      category: r.category?.trim(),
+      threshold: Number(r.threshold),
+      score: Number(r.score),
+      active: true
+    }));
     
     const { error } = await supabase
       .from("kpi_rule_productivity")
