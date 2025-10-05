@@ -1,3 +1,4 @@
+// src/pages/RulesPage.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { scoreByProductivity } from "../lib/scoring";
@@ -21,8 +22,13 @@ export default function RulesPage() {
       <div className="min-h-[60vh] flex items-center justify-center">
         <form onSubmit={login} className="w-full max-w-sm p-6 rounded-xl shadow bg-white">
           <h2 className="text-xl font-semibold mb-4">Cấu hình rule điểm sản lượng</h2>
-          <input className="input w-full" placeholder="Mật khẩu" type="password"
-                 value={pwd} onChange={e=>setPwd(e.target.value)} />
+          <input
+            className="input w-full"
+            placeholder="Mật khẩu"
+            type="password"
+            value={pwd}
+            onChange={(e) => setPwd(e.target.value)}
+          />
           <button className="btn btn-primary mt-4 w-full">Đăng nhập</button>
         </form>
       </div>
@@ -40,6 +46,7 @@ function RulesContent() {
   const [testOE, setTestOE] = useState(100);
   const [testCat, setTestCat] = useState("");
 
+  // 📥 Load rule hiện có
   async function load() {
     setLoading(true);
     const { data, error } = await supabase
@@ -52,18 +59,20 @@ function RulesContent() {
     if (error) return alert(error.message);
     setRows(data || []);
   }
-  useEffect(() => { load(); }, [section]);
+  useEffect(() => {
+    load();
+  }, [section]);
 
+  // ➕ Thêm dòng mới
   function addRow() {
     const newRow =
       section === "MOLDING"
         ? { category: "", threshold: 100, score: 7, note: "", active: true }
         : { threshold: 100, score: 7, note: "", active: true };
-
     setRows((r) => [newRow, ...r]);
   }
 
-
+  // 🗑️ Xoá rule
   function delRow(id, idx) {
     if (!id) return setRows((r) => r.filter((_, i) => i !== idx));
     if (!confirm("Xoá rule này?")) return;
@@ -76,99 +85,95 @@ function RulesContent() {
         load();
       });
   }
-  async function handleImportExcel(e) {
-      const file = e.target.files?.[0];
-      if (!file) return;
-    
-      const reader = new FileReader();
-      reader.onload = async (evt) => {
-        const data = new Uint8Array(evt.target.result);
-        const workbook = XLSX.read(data, { type: "array" });
-        const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
-    
-        if (!json.length) return alert("File không có dữ liệu.");
-    
-        // Chuẩn hoá + loại bỏ cột id nếu có
-        const raw = json.map((r) => ({
-          section: (r.section?.toString().trim().toUpperCase()) || "MOLDING",
-          category: (r.category ?? "").toString().trim().replace(/\s+/g, " "),
-          threshold: Number(r.threshold || 0),
-          score: Number(r.score || 0),
-          note: r.note || "",
-          active: String(r.active).toLowerCase() !== "false",
-        }));
-    
-        // Loại bỏ trùng trong chính payload (theo section|category|threshold)
-        const seen = new Set();
-        const payload = [];
-        for (const row of raw) {
-          const key = `${row.section}|${row.category}|${row.threshold}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            payload.push(row);
-          }
-        }
-    
-        // Nếu có trùng bị loại, báo cho biết
-        if (payload.length !== raw.length) {
-          console.warn(`Đã loại ${raw.length - payload.length} dòng trùng trong file import.`);
-        }
-    
-        if (!confirm(`Nhập/ cập nhật ${payload.length} rule vào database?`)) return;
-    
-        const { error } = await supabase
-        .from("kpi_rule_productivity")
-        .upsert(payload, { onConflict: "kpi_rule_prod_unique_cat" });      
-      
-    
-        if (error) {
-          console.error(error);
-          alert("Import lỗi: " + error.message);
-        } else {
-          alert(`✅ Import thành công ${payload.length} rule!`);
-          await load(); // <- đúng tên hàm
-        }
-      };
-    
-      reader.readAsArrayBuffer(file);
-    }
-  
-    async function saveAll() {
-        const payload = rows.map((r) => {
-          const x = { ...r };
-          delete x.id;
-          x.section   = (x.section || section || 'MOLDING').toUpperCase();
-          x.category  = (x.category || '').toString().trim().replace(/\s+/g, ' ');
-          x.threshold = Number(x.threshold || 0);
-          x.score     = Number(x.score || 0);
-          x.active    = !!x.active;
-          return x;
-        });
-      
-        // Chặn trùng trong payload
-        const seen = new Set();
-        for (const r of payload) {
-          const key = `${r.section}|${r.category}|${r.threshold}`;
-          if (seen.has(key)) return alert("Rule bị trùng trong bảng: " + key);
-          seen.add(key);
-        }
-      
-        const { error } = await supabase
-        .from("kpi_rule_productivity")
-        .upsert(payload, { onConflict: "kpi_rule_prod_unique_cat" });
-      
-      
-      
-        if (error) return alert(error.message);
-        await load();
-        alert("Đã lưu rule.");
-      }
-    
 
+  // 📤 Import Excel
+  async function handleImportExcel(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+
+    reader.onload = async (evt) => {
+      const data = new Uint8Array(evt.target.result);
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+
+      if (!json.length) return alert("File không có dữ liệu.");
+
+      // Chuẩn hoá dữ liệu
+      const raw = json.map((r) => ({
+        section: (r.section?.toString().trim().toUpperCase()) || "MOLDING",
+        category: (r.category ?? "").toString().trim().replace(/\s+/g, " "),
+        threshold: Number(r.threshold || 0),
+        score: Number(r.score || 0),
+        note: r.note ?? "",
+        active: String(r.active ?? "true").toLowerCase() !== "false",
+      }));
+
+      // Loại bỏ trùng trong file
+      const seen = new Set();
+      const payload = [];
+      for (const row of raw) {
+        const key = `${row.section}|${row.category}|${row.threshold}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          payload.push(row);
+        }
+      }
+
+      if (!confirm(`Nhập/cập nhật ${payload.length} rule vào database?`)) return;
+
+      const { error } = await supabase
+        .from("kpi_rule_productivity")
+        .upsert(payload, { onConflict: 'section,category,threshold' }); // ✅ cú pháp đúng
+
+      if (error) {
+        console.error(error);
+        alert("Import lỗi: " + error.message);
+      } else {
+        alert(`✅ Import thành công ${payload.length} rule!`);
+        await load();
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  }
+
+  // 💾 Lưu tất cả rule hiện tại
+  async function saveAll() {
+    const payload = rows.map((r) => {
+      const x = { ...r };
+      delete x.id;
+      x.section = (x.section || section || "MOLDING").toUpperCase();
+      x.category = (x.category || "").toString().trim().replace(/\s+/g, " ");
+      x.threshold = Number(x.threshold || 0);
+      x.score = Number(x.score || 0);
+      x.active = !!x.active;
+      if (!("note" in x)) x.note = "";
+      return x;
+    });
+
+    // Kiểm tra trùng trong payload
+    const seen = new Set();
+    for (const r of payload) {
+      const key = `${r.section}|${r.category}|${r.threshold}`;
+      if (seen.has(key)) return alert("Rule bị trùng trong bảng: " + key);
+      seen.add(key);
+    }
+
+    const { error } = await supabase
+      .from("kpi_rule_productivity")
+      .upsert(payload, { onConflict: 'section,category,threshold' }); // ✅ chuẩn cú pháp
+
+    if (error) return alert("Lưu lỗi: " + error.message);
+    await load();
+    alert("Đã lưu rule.");
+  }
+
+  // 🧮 Test nhanh điểm
   const testScore = useMemo(() => {
     if (section === "MOLDING") {
-      const list = rows.filter(r => r.active && r.category === testCat);
+      const list = rows.filter((r) => r.active && r.category === testCat);
       const v = Number(testOE);
       const sorted = [...list].sort((a, b) => b.threshold - a.threshold);
       for (const r of sorted) if (v >= r.threshold) return r.score;
@@ -177,13 +182,14 @@ function RulesContent() {
     return scoreByProductivity(testOE, rows);
   }, [testOE, rows, testCat, section]);
 
+  // 🖼️ Giao diện chính
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
         <h2 className="text-xl font-semibold">
           {section === "MOLDING"
             ? "Rule điểm sản lượng (Loại hàng → Pair/h → Điểm)"
-            : "Rule điểm sản lượng (Số đôi/h → Điểm)"}
+            : "Rule điểm sản lượng (%OE → Điểm)"}
         </h2>
         <span className="px-2 py-1 text-xs rounded bg-slate-100">
           Section: {SECTIONS.find((s) => s.key === section)?.label || section}
@@ -191,7 +197,9 @@ function RulesContent() {
         <button className="btn" onClick={load} disabled={loading}>
           {loading ? "Đang tải..." : "Tải lại"}
         </button>
-        <button className="btn" onClick={addRow}>+ Thêm rule</button>
+        <button className="btn" onClick={addRow}>
+          + Thêm rule
+        </button>
         <label className="btn cursor-pointer bg-green-600 hover:bg-green-700 text-white">
           📤 Import Excel
           <input type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleImportExcel} />
@@ -204,17 +212,29 @@ function RulesContent() {
       {/* Test nhanh */}
       <div className="p-3 rounded border bg-white inline-flex items-center gap-2 flex-wrap">
         {section === "MOLDING" && (
-          <select className="input w-36" value={testCat} onChange={e => setTestCat(e.target.value)}>
+          <select
+            className="input w-36"
+            value={testCat}
+            onChange={(e) => setTestCat(e.target.value)}
+          >
             <option value="">-- Loại hàng --</option>
-            {[...new Set(rows.map(r => r.category).filter(Boolean))].map(c => (
-              <option key={c} value={c}>{c}</option>
+            {[...new Set(rows.map((r) => r.category).filter(Boolean))].map((c) => (
+              <option key={c} value={c}>
+                {c}
+              </option>
             ))}
           </select>
         )}
         <span>{section === "MOLDING" ? "Số đôi/giờ:" : "Test %OE:"}</span>
-        <input type="number" className="input w-28" value={testOE}
-               onChange={e => setTestOE(Number(e.target.value))}/>
-        <span>→ Điểm: <b>{testScore}</b></span>
+        <input
+          type="number"
+          className="input w-28"
+          value={testOE}
+          onChange={(e) => setTestOE(Number(e.target.value))}
+        />
+        <span>
+          → Điểm: <b>{testScore}</b>
+        </span>
       </div>
 
       {/* Bảng Rule */}
@@ -235,31 +255,86 @@ function RulesContent() {
               {rows.map((r, idx) => (
                 <tr key={r.id ?? `new-${idx}`} className="border-b">
                   <td className="p-2">
-                    <input className="input w-40" value={r.category || ""}
-                      onChange={e => setRows(list => list.map((x,i)=> i===idx ? {...x, category:e.target.value} : x))}/>
+                    <input
+                      className="input w-40"
+                      value={r.category || ""}
+                      onChange={(e) =>
+                        setRows((list) =>
+                          list.map((x, i) =>
+                            i === idx ? { ...x, category: e.target.value } : x
+                          )
+                        )
+                      }
+                    />
                   </td>
                   <td className="p-2">
-                    <input type="number" className="input w-28" value={r.threshold}
-                      onChange={e => setRows(list => list.map((x,i)=> i===idx ? {...x, threshold:Number(e.target.value)} : x))}/>
+                    <input
+                      type="number"
+                      className="input w-28"
+                      value={r.threshold}
+                      onChange={(e) =>
+                        setRows((list) =>
+                          list.map((x, i) =>
+                            i === idx ? { ...x, threshold: Number(e.target.value) } : x
+                          )
+                        )
+                      }
+                    />
                   </td>
                   <td className="p-2">
-                    <input type="number" className="input w-20" value={r.score}
-                      onChange={e => setRows(list => list.map((x,i)=> i===idx ? {...x, score:Number(e.target.value)} : x))}/>
+                    <input
+                      type="number"
+                      className="input w-20"
+                      value={r.score}
+                      onChange={(e) =>
+                        setRows((list) =>
+                          list.map((x, i) =>
+                            i === idx ? { ...x, score: Number(e.target.value) } : x
+                          )
+                        )
+                      }
+                    />
                   </td>
                   <td className="p-2">
-                    <input className="input w-80" value={r.note ?? ""}
-                      onChange={e => setRows(list => list.map((x,i)=> i===idx ? {...x, note:e.target.value} : x))}/>
+                    <input
+                      className="input w-80"
+                      value={r.note ?? ""}
+                      onChange={(e) =>
+                        setRows((list) =>
+                          list.map((x, i) =>
+                            i === idx ? { ...x, note: e.target.value } : x
+                          )
+                        )
+                      }
+                    />
                   </td>
                   <td className="p-2">
-                    <input type="checkbox" checked={!!r.active}
-                      onChange={e => setRows(list => list.map((x,i)=> i===idx ? {...x, active:e.target.checked} : x))}/>
+                    <input
+                      type="checkbox"
+                      checked={!!r.active}
+                      onChange={(e) =>
+                        setRows((list) =>
+                          list.map((x, i) =>
+                            i === idx ? { ...x, active: e.target.checked } : x
+                          )
+                        )
+                      }
+                    />
                   </td>
                   <td className="p-2">
-                    <button className="btn" onClick={()=>delRow(r.id, idx)}>Xoá</button>
+                    <button className="btn" onClick={() => delRow(r.id, idx)}>
+                      Xoá
+                    </button>
                   </td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={6} className="p-4 text-center text-gray-500">Chưa có rule</td></tr>}
+              {!rows.length && (
+                <tr>
+                  <td colSpan={6} className="p-4 text-center text-gray-500">
+                    Chưa có rule
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         ) : (
@@ -277,23 +352,63 @@ function RulesContent() {
               {rows.map((r, idx) => (
                 <tr key={r.id ?? `new-${idx}`} className="border-b">
                   <td className="p-2">
-                    <input type="number" className="input w-28" value={r.threshold}
-                      onChange={e => setRows(list => list.map((x,i)=> i===idx ? {...x, threshold:e.target.value} : x))}/>
+                    <input
+                      type="number"
+                      className="input w-28"
+                      value={r.threshold}
+                      onChange={(e) =>
+                        setRows((list) =>
+                          list.map((x, i) =>
+                            i === idx ? { ...x, threshold: e.target.value } : x
+                          )
+                        )
+                      }
+                    />
                   </td>
                   <td className="p-2">
-                    <input type="number" className="input w-20" value={r.score}
-                      onChange={e => setRows(list => list.map((x,i)=> i===idx ? {...x, score:e.target.value} : x))}/>
+                    <input
+                      type="number"
+                      className="input w-20"
+                      value={r.score}
+                      onChange={(e) =>
+                        setRows((list) =>
+                          list.map((x, i) =>
+                            i === idx ? { ...x, score: e.target.value } : x
+                          )
+                        )
+                      }
+                    />
                   </td>
                   <td className="p-2">
-                    <input className="input w-80" value={r.note ?? ""}
-                      onChange={e => setRows(list => list.map((x,i)=> i===idx ? {...x, note:e.target.value} : x))}/>
+                    <input
+                      className="input w-80"
+                      value={r.note ?? ""}
+                      onChange={(e) =>
+                        setRows((list) =>
+                          list.map((x, i) =>
+                            i === idx ? { ...x, note: e.target.value } : x
+                          )
+                        )
+                      }
+                    />
                   </td>
                   <td className="p-2">
-                    <input type="checkbox" checked={!!r.active}
-                      onChange={e => setRows(list => list.map((x,i)=> i===idx ? {...x, active:e.target.checked} : x))}/>
+                    <input
+                      type="checkbox"
+                      checked={!!r.active}
+                      onChange={(e) =>
+                        setRows((list) =>
+                          list.map((x, i) =>
+                            i === idx ? { ...x, active: e.target.checked } : x
+                          )
+                        )
+                      }
+                    />
                   </td>
                   <td className="p-2">
-                    <button className="btn" onClick={()=>delRow(r.id, idx)}>Xoá</button>
+                    <button className="btn" onClick={() => delRow(r.id, idx)}>
+                      Xoá
+                    </button>
                   </td>
                 </tr>
               ))}
