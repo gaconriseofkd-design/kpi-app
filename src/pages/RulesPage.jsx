@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { scoreByProductivity } from "../lib/scoring";
 import { useKpiSection } from "../context/KpiSectionContext";
+import * as XLSX from "xlsx";
 
 export default function RulesPage() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("rules_authed") === "1");
@@ -75,7 +76,48 @@ function RulesContent() {
         load();
       });
   }
-
+  async function handleImportExcel(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+  
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      const data = new Uint8Array(evt.target.result);
+      const workbook = XLSX.read(data, { type: "array" });
+      const sheet = workbook.Sheets[workbook.SheetNames[0]];
+      const json = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+  
+      if (!json.length) return alert("File không có dữ liệu.");
+  
+      // Chuẩn hoá dữ liệu
+      const payload = json.map(r => {
+        const row = {
+          section: r.section?.toUpperCase?.() || "MOLDING",
+          category: r.category || "",
+          threshold: Number(r.threshold || 0),
+          score: Number(r.score || 0),
+          note: r.note || "",
+          active: String(r.active).toLowerCase() !== "false",
+        };
+        return row;
+      });
+  
+      if (!confirm(`Nhập ${payload.length} rule vào database?`)) return;
+  
+      const { error } = await supabase
+        .from("kpi_rule_productivity")
+        .insert(payload);
+  
+      if (error) {
+        console.error(error);
+        alert("Import lỗi: " + error.message);
+      } else {
+        alert(`✅ Đã import ${payload.length} rule thành công!`);
+        loadRules(); // reload lại bảng hiện tại
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
   async function saveAll() {
     const cleaned = rows.map((r) => {
       const base = {
@@ -99,9 +141,16 @@ function RulesContent() {
     }
 
     setSaving(true);
+    const payload = rows.map(r => {
+      const copy = { ...r };
+      delete copy.id; // ⚠️ BẮT BUỘC — xoá id để Supabase tự tăng
+      return copy;
+    });
+    
     const { error } = await supabase
       .from("kpi_rule_productivity")
-      .upsert(cleaned, { onConflict: "id" });
+      .upsert(payload);
+
     setSaving(false);
     if (error) return alert(error.message);
     await load();
@@ -134,6 +183,10 @@ function RulesContent() {
           {loading ? "Đang tải..." : "Tải lại"}
         </button>
         <button className="btn" onClick={addRow}>+ Thêm rule</button>
+        <label className="btn cursor-pointer bg-green-600 hover:bg-green-700 text-white">
+          📤 Import Excel
+          <input type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleImportExcel} />
+        </label>
         <button className="btn btn-primary" onClick={saveAll} disabled={saving}>
           {saving ? "Đang lưu..." : "Lưu tất cả"}
         </button>
