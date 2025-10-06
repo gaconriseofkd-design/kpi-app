@@ -63,9 +63,9 @@ export default function QuickEntry() {
   const { section } = useKpiSection();
   const isMolding = section === "MOLDING";
 
-  /* ===== Pass gate ===== */
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("quick_authed") === "1");
   const [pwd, setPwd] = useState("");
+
   function tryLogin(e) {
     e?.preventDefault();
     if (pwd === "davidtu") {
@@ -73,20 +73,13 @@ export default function QuickEntry() {
       setAuthed(true);
     } else alert("Sai mật khẩu.");
   }
+
+  // 👉 Chuyển phần form login ra component riêng
   if (!authed) {
-    return (
-      <div className="min-h-[60vh] flex items-center justify-center">
-        <form onSubmit={tryLogin} className="w-full max-w-sm p-6 rounded-xl shadow bg-white">
-          <h2 className="text-xl font-semibold mb-4">Nhập KPI nhanh</h2>
-          <input className="input w-full" placeholder="Mật khẩu" type="password" value={pwd} onChange={(e) => setPwd(e.target.value)} />
-          <button className="btn btn-primary w-full mt-4">Đăng nhập</button>
-        </form>
-      </div>
-    );
+    return <LoginForm pwd={pwd} setPwd={setPwd} tryLogin={tryLogin} />;
   }
 
-  /* ===== Chế độ nhập ===== */
-  // mode = 'approver' (tồn tại cho Leanline & Molding) | 'self' (chỉ Molding)
+  // phần còn lại giữ nguyên
   const [mode, setMode] = useState("approver");
 
   return (
@@ -111,7 +104,30 @@ export default function QuickEntry() {
         </div>
       </div>
 
-      {mode === "approver" ? <ApproverMode isMolding={isMolding} section={section} /> : <SelfModeMolding section={section} />}
+      {mode === "approver" ? (
+        <ApproverMode isMolding={isMolding} section={section} />
+      ) : (
+        <SelfModeMolding section={section} />
+      )}
+    </div>
+  );
+}
+
+/* Component con để login */
+function LoginForm({ pwd, setPwd, tryLogin }) {
+  return (
+    <div className="min-h-[60vh] flex items-center justify-center">
+      <form onSubmit={tryLogin} className="w-full max-w-sm p-6 rounded-xl shadow bg-white">
+        <h2 className="text-xl font-semibold mb-4">Nhập KPI nhanh</h2>
+        <input
+          className="input w-full"
+          placeholder="Mật khẩu"
+          type="password"
+          value={pwd}
+          onChange={(e) => setPwd(e.target.value)}
+        />
+        <button className="btn btn-primary w-full mt-4">Đăng nhập</button>
+      </form>
     </div>
   );
 }
