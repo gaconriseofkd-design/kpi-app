@@ -3,6 +3,16 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useKpiSection } from "../context/KpiSectionContext";
 
+// ===== Danh sách Tuân thủ dùng chung =====
+const COMPLIANCE_OPTIONS = [
+  { value: "NONE", label: "Không vi phạm" },
+  { value: "LATE", label: "Ký mẫu đầu chuyền trước khi sử dụng" },
+  { value: "PPE", label: "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất" },
+  { value: "MAT", label: "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất" },
+  { value: "SPEC", label: "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất" },
+  { value: "RULE", label: "Vi phạm nội quy bộ phận/công ty" },
+];
+
 /* ===== Helpers ===== */
 const cx = (...a) => a.filter(Boolean).join(" ");
 const toNum = (v, d = 0) => {
@@ -142,6 +152,9 @@ function ApproverMode({ isMolding, section }) {
   const [workers, setWorkers] = useState([]);
   const [checked, setChecked] = useState(() => new Set());
   const [search, setSearch] = useState("");
+  // Thêm mảng lưu dữ liệu từng dòng (Leanline template)
+  const [rows, setRows] = useState([]);
+
 
   const filteredWorkers = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -309,6 +322,8 @@ function ApproverMode({ isMolding, section }) {
     setReviewRows(rows);
     setSelReview(new Set(rows.map((_, i) => i)));
     setStep(3);
+    setRows(rows); // lưu lại dữ liệu để hiển thị bảng chỉnh sửa KPI
+
   }
 
   /* paging review */
@@ -404,7 +419,43 @@ function ApproverMode({ isMolding, section }) {
       alert(`Đã lưu ${payload.length} dòng (approved).`);
     }
   }
-
+  function update(i, field, value) {
+    setRows((prev) => {
+      const copy = [...prev];
+      copy[i] = { ...copy[i], [field]: value };
+  
+      const r = copy[i];
+      const defects = Number(r.defects || 0);
+      const hours = Number(r.work_hours || 8);
+      const downtime = Number(r.downtime || 0);
+  
+      // --- Tính điểm Q ---
+      let q = 10;
+      if (defects > 0 && defects <= 2) q = 8;
+      else if (defects <= 4) q = 6;
+      else if (defects <= 6) q = 4;
+      else if (defects > 6) q = 0;
+  
+      // --- Tính điểm P (OE%) ---
+      const oe = ((hours - downtime) / hours) * 100;
+      let p = 0;
+      if (oe >= 112) p = 10;
+      else if (oe >= 108) p = 9;
+      else if (oe >= 104) p = 8;
+      else if (oe >= 100) p = 7;
+      else if (oe >= 98) p = 6;
+      else if (oe >= 96) p = 4;
+      else if (oe >= 94) p = 2;
+      else p = 0;
+  
+      copy[i].q_score = q;
+      copy[i].p_score = p;
+      copy[i].kpi_score = ((q + p) / 2).toFixed(1);
+  
+      return copy;
+    });
+  }
+  
   /* UI */
   return (
     <div className="space-y-4">
@@ -491,85 +542,90 @@ function ApproverMode({ isMolding, section }) {
                 <option value="Ca HC">Ca HC</option>
               </select>
             </div>
+            <div>
+              <label>Tuân thủ</label>
+              <select className="input text-center" value={compliance} onChange={(e) => setCompliance(e.target.value)}>
+                {COMPLIANCE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
 
-            {!isMolding ? (
-              <>
-                <div>
-                  <label>%OE</label>
-                  <input type="number" className="input" value={oe} onChange={(e) => setOe(toNum(e.target.value, 0))} />
-                </div>
-                <div>
-                  <label>Số đôi phế</label>
-                  <input type="number" className="input" value={defects} onChange={(e) => setDefects(toNum(e.target.value, 0))} />
-                </div>
-              </>
-            ) : (
-              <>
-                <div>
-                  <label>Loại hàng</label>
-                  <select className="input" value={category} onChange={(e) => setCategory(e.target.value)}>
-                    <option value="">-- Chọn loại hàng --</option>
-                    {categoryOptions.map((c) => (
-                      <option key={c} value={c}>
-                        {c}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label>Giờ làm việc (nhập)</label>
-                  <input
-                    type="number"
-                    className="input"
-                    value={workingInput}
-                    onChange={(e) => setWorkingInput(toNum(e.target.value, 0))}
-                  />
-                </div>
-                <div>
-                  <label>Số giờ khuôn chạy thực tế</label>
-                  <input
-                    type="number"
-                    className="input"
-                    value={moldHours}
-                    onChange={(e) => setMoldHours(toNum(e.target.value, 0))}
-                  />
-                </div>
-                <div>
-                  <label>Sản lượng / ca</label>
-                  <input
-                    type="number"
-                    className="input"
-                    value={output}
-                    onChange={(e) => setOutput(toNum(e.target.value, 0))}
-                  />
-                </div>
-                <div>
-                  <label>Số đôi phế</label>
-                  <input
-                    type="number"
-                    className="input"
-                    value={defects}
-                    onChange={(e) => setDefects(toNum(e.target.value, 0))}
-                  />
-                </div>
-              </>
-            )}
-
-              <div>
-                <label>Tuân thủ</label>
-                <select
-                  className="input text-center"
-                  value={compliance}
-                  onChange={(e) => setCompliance(e.target.value)}
-                >
-                  <option value="NONE">Không vi phạm</option>
-                  <option value="LATE">Ký mẫu đầu chuyền trước khi sử dụng</option>
-                  <option value="PPE">Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất</option>
-                  <option value="MAT">Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất</option>
-                  <option value="SPEC">Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất</option>
-                  <option value="RULE">Vi phạm nội quy bộ phận/công ty</option>
-                </select>
-              </div>
+          <div className="overflow-auto border rounded">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50 text-center">
+                <tr>
+                  <th>MSNV</th>
+                  <th>Họ tên</th>
+                  <th>Line</th>
+                  <th>Giờ làm việc</th>
+                  <th>Giờ dừng máy</th>
+                  <th>Phế</th>
+                  <th>Q</th>
+                  <th>P</th>
+                  <th>KPI</th>
+                  <th>Tuân thủ</th>
+                </tr>
+              </thead>
+              <tbody className="text-center">
+                {rows.map((r, i) => (
+                  <tr key={r.worker_id} className="border-t hover:bg-gray-50">
+                    <td>{r.worker_id}</td>
+                    <td>{r.worker_name}</td>
+                    <td>
+                      <input
+                        className="input text-center"
+                        value={r.line || ""}
+                        onChange={(e) => update(i, "line", e.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        className="input text-center"
+                        value={r.work_hours || 8}
+                        onChange={(e) => update(i, "work_hours", e.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        className="input text-center"
+                        value={r.downtime || 0}
+                        onChange={(e) => update(i, "downtime", e.target.value)}
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="number"
+                        className="input text-center"
+                        value={r.defects || 0}
+                        onChange={(e) => update(i, "defects", e.target.value)}
+                      />
+                    </td>
+                    <td>{r.q_score ?? 0}</td>
+                    <td>{r.p_score ?? 0}</td>
+                    <td>{r.kpi_score ?? 0}</td>
+                    <td>
+                      <select
+                        className="input text-center"
+                        value={r.compliance_code || compliance}
+                        onChange={(e) => update(i, "compliance_code", e.target.value)}
+                      >
+                        {COMPLIANCE_OPTIONS.map(opt => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
           <button className="btn btn-primary" onClick={buildReviewRows}>
@@ -577,6 +633,7 @@ function ApproverMode({ isMolding, section }) {
           </button>
         </div>
       )}
+
 
       {step === 3 && (
         <ReviewTable
