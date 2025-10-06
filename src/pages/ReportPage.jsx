@@ -50,6 +50,18 @@ function ReportContent() {
   const { section } = useKpiSection();               // <<— lấy section hiện tại
   const isMolding = section === "MOLDING";
 
+  const viSection = (s) => {
+    const k = (s || "").toUpperCase();
+    if (k === "MOLDING") return "Molding";
+    if (k === "LEANLINE_DC") return "LL Die cut";
+    if (k === "LEANLINE_MOLDED") return "LL Molded";
+    return s || "";
+  };
+  const fmtDate = (iso) => {
+    if (!iso) return "";
+    const [y, m, d] = iso.split("-").map(Number);
+    return `${m}/${d}/${y}`; // M/D/YYYY giống file mẫu
+  };                                            
   // ----- bộ lọc -----
   const today = () => new Date().toISOString().slice(0,10);
   const firstDayOfMonth = () => {
@@ -196,39 +208,90 @@ function ReportContent() {
   /* ---------- Export XLSX ---------- */
   function exportXLSX() {
     if (!rows.length) return alert("Không có dữ liệu để xuất.");
-    const data = rows.map((r) => {
-      if (isMolding) {
-        return {
-          date: r.date,
-          worker_id: String(r.worker_id),
-          worker_name: r.worker_name,
-          approver_msnv: String(r.approver_msnv || ""),
-          approver_name: r.approver_name,
-          ca: r.ca,
-          category: r.category,
-          output: r.output,
-          p_score: r.p_score, q_score: r.q_score, day_score: r.day_score,
-          compliance_code: r.compliance_code, violations: r.violations, status: r.status,
-          created_at: r.created_at, approved_at: r.approved_at,
-          working_input: r.working_input, working_real: r.working_real,
-          working_exact: r.working_exact, downtime: r.downtime, mold_hours: r.mold_hours,
-        };
+    const isMolding = section === "MOLDING";
+  
+    const titleCase = (s) =>
+      s ? s.toString().toLowerCase().replace(/^\w/u, (c) => c.toUpperCase()) : "";
+    const complianceLabel = (code) => {
+      switch ((code || "NONE").toUpperCase()) {
+        case "NONE": return "KHÔNG VI PHẠM";
+        case "PPE":  return "VI PHẠM PPE";
+        case "LATE": return "ĐI TRỄ";
+        default:     return "OK";
       }
-      return {
-        date: r.date,
-        worker_id: String(r.worker_id),
-        worker_name: r.worker_name,
-        approver_id: String(r.approver_id || ""),
-        approver_name: r.approver_name,
-        line: r.line, ca: r.ca, oe: r.oe, defects: r.defects,
-        p_score: r.p_score, q_score: r.q_score, day_score: r.day_score,
-        compliance_code: r.compliance_code, violations: r.violations, status: r.status,
-        created_at: r.created_at, approved_at: r.approved_at
-      };
-    });
+    };
+  
+    let data;
+    if (isMolding) {
+      data = rows.map((r) => {
+        const p = Number(r.p_score || 0);
+        const q = Number(r.q_score || 0);
+        const day = Number(r.day_score || 0);
+        const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
+        const total = day + overflow;
+        const hasViolation = (r.compliance_code && r.compliance_code !== "NONE") ? 1 : 0;
+  
+        // Thứ tự cột đúng yêu cầu, thêm “MSNV người duyệt” TRƯỚC “Người duyệt”
+        return {
+          "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "MOLDING")),
+          "MSNV": r.worker_id || "",
+          "HỌ VÀ TÊN": r.worker_name || "",
+          "CA LÀM VIỆC": r.ca || "",
+          "NGÀY LÀM VIỆC": fmtDate(r.date),
+          "THỜI GIAN LÀM VIỆC": Number(r.working_input ?? 0),
+          "Số đôi phế": Number(r.defects ?? 0),
+          "Điểm chất lượng": q,
+          "Sản lượng/ca": Number(r.output ?? 0),
+          "Điểm Sản lượng": p,
+          "Tuân thủ": complianceLabel(r.compliance_code),
+          "Vi phạm": hasViolation,
+          "Điểm KPI ngày": day,
+          "Điểm dư": overflow,
+          "Điểm tổng": total,
+          "Loại hàng": r.category || "",
+          "Số giờ khuôn chạy thực tế": Number(r.mold_hours ?? 0),
+          "Thời gian dừng /24 khuôn (h)": Number(r.downtime ?? 0),
+          "MSNV người duyệt": r.approver_msnv || "",
+          "Người duyệt": r.approver_name || ""
+        };
+      });
+    } else {
+      // Leanline DC & Leanline Molded – đúng header như ảnh bạn gửi
+      data = rows.map((r) => {
+        const p = Number(r.p_score || 0);
+        const q = Number(r.q_score || 0);
+        const day = Number(r.day_score || 0);
+        const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
+        const totalMonth = day + overflow; // theo file mẫu: 15 + 3 = 18
+        const hasViolation = (r.compliance_code && r.compliance_code !== "NONE") ? 1 : 0;
+  
+        return {
+          "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "")),
+          "MSNV": r.worker_id || "",
+          "HỌ VÀ TÊN": r.worker_name || "",
+          "CA LÀM VIỆC": r.ca || "",
+          "NGÀY LÀM VIỆC": fmtDate(r.date),
+          "THỜI GIAN LÀM VIỆC": Number(r.working_input ?? r.work_hours ?? 0),
+          "Số đôi phế": Number(r.defects ?? 0),
+          "Điểm chất lượng": q,
+          "%OE": Number(r.oe ?? 0),
+          "Điểm sản lượng": p,
+          "Tuân thủ": complianceLabel(r.compliance_code),
+          "Vi phạm": hasViolation,
+          "Điểm KPI ngày": day,
+          "Điểm dư": overflow,
+          "Điểm KPI tổng tháng": totalMonth,
+          "THỜI GIAN DOWNTIME": Number(r.downtime ?? 0),
+          "MSNV người duyệt": r.approver_id || "",
+          "Họ và Tên Người duyệt": r.approver_name || "",
+          "Line làm việc": r.line || ""
+        };
+      });
+    }
+  
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, isMolding ? "KPI_Molding" : "KPI");
+    XLSX.utils.book_append_sheet(wb, ws, isMolding ? "Molding" : "Leanline");
     XLSX.writeFile(wb, `kpi_report_${section}_${dateFrom}_to_${dateTo}.xlsx`);
   }
 
