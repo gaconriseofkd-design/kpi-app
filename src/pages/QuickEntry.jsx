@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useKpiSection } from "../context/KpiSectionContext";
+import { scoreByQuality, scoreByProductivity } from "../lib/scoring"; // THAY ĐỔI: Import scoring functions
 
 /* ===== Danh sách Tuân thủ dùng chung ===== */
 const COMPLIANCE_OPTIONS = [
@@ -19,29 +20,6 @@ const toNum = (v, d = 0) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : d;
 };
-
-/* Leanline: điểm P theo %OE (giữ logic cũ) */
-function calcPfromOE(oe) {
-  const x = toNum(oe);
-  if (x >= 112) return 10;
-  if (x >= 108) return 9;
-  if (x >= 104) return 8;
-  if (x >= 100) return 7;
-  if (x >= 98) return 6;
-  if (x >= 96) return 4;
-  if (x >= 94) return 2;
-  return 0;
-}
-
-/* Chất lượng chung */
-function calcQ(defects) {
-  const d = toNum(defects);
-  if (d === 0) return 10;
-  if (d <= 2) return 8;
-  if (d <= 4) return 6;
-  if (d <= 6) return 4;
-  return 0;
-}
 
 /* Molding: quy đổi giờ thực tế từ giờ nhập + ca */
 function calcWorkingReal(shift, inputHours) {
@@ -148,15 +126,32 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
 
 /* ======================================================================
    APPROVER MODE — LEANLINE
-   - B1: Nhập MSNV người duyệt → tải nhân viên → chọn danh sách
-   - B2: Nhập KPI CHUNG MỘT LẦN (Ngày, Ca, Line, WorkHours, StopHours, OE, Defects, Compliance)
-         + Preview điểm cho toàn bộ danh sách
-   - B3: Tạo danh sách Review → Bảng CHỈNH SỬA THEO TỪNG NHÂN VIÊN (auto tính lại)
-   - Save = upsert kpi_entries (status: "approved" như QuickEntry cũ)
    ====================================================================== */
 function ApproverModeLeanline({ section }) {
   const [step, setStep] = useState(1);
 
+  // THÊM: State và useEffect để tải rule
+  const [prodRules, setProdRules] = useState([]); 
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await supabase
+        .from("kpi_rule_productivity")
+        .select("*")
+        .eq("active", true)
+        .eq("section", section)
+        .order("threshold", { ascending: false });
+      if (!cancelled) {
+        if (error) console.error("Load rules error:", error);
+        setProdRules(data || []);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [section]);
+  
   // ---- B1: Chọn nhân viên theo Người duyệt ----
   const [approverId, setApproverId] = useState("");
   const [workers, setWorkers] = useState([]);
@@ -212,11 +207,12 @@ function ApproverModeLeanline({ section }) {
   const [tplCompliance, setTplCompliance] = useState("NONE");
 
   // điểm preview cho template
-  const tplQ = useMemo(() => calcQ(tplDefects), [tplDefects]);
-  const tplP = useMemo(() => calcPfromOE(tplOE), [tplOE]);
-  const tplKPI = useMemo(() => tplQ + tplP, [tplQ, tplP]);
+  const tplQ = useMemo(() => scoreByQuality(tplDefects), [tplDefects]); // DÙNG scoreByQuality
+  const tplP = useMemo(() => scoreByProductivity(tplOE, prodRules), [tplOE, prodRules]); // DÙNG scoreByProductivity + rules
+  const tplKPI = useMemo(() => Math.min(15, tplQ + tplP), [tplQ, tplP]);
 
   function proceedToTemplate() {
+    if (!prodRules.length) return alert("Không thể tải Rule tính điểm sản lượng. Vui lòng thử lại."); // THÊM CHECK
     if (!checked.size) return alert("Chưa chọn nhân viên nào.");
     setStep(2);
   }
@@ -230,7 +226,12 @@ function ApproverModeLeanline({ section }) {
     if (!checked.size) return alert("Chưa chọn nhân viên.");
 
     const selectedWorkers = workers.filter((w) => checked.has(w.msnv));
-    const rows = selectedWorkers.map((w) => ({
+    const rows = selectedWorkers.map((w) => {
+      const q = scoreByQuality(tplDefects); // DÙNG scoreByQuality
+      const p = scoreByProductivity(tplOE, prodRules); // DÙNG scoreByProductivity + rules
+      const totalScore = q + p;
+
+      return {
       section,
       work_date: tplDate,
       shift: tplShift,
@@ -243,12 +244,12 @@ function ApproverModeLeanline({ section }) {
       downtime: toNum(tplStopHours),
       oe: toNum(tplOE),
       defects: toNum(tplDefects),
-      q_score: calcQ(tplDefects),
-      p_score: calcPfromOE(tplOE),
-      total_score: calcQ(tplDefects) + calcPfromOE(tplOE),
+      q_score: q,
+      p_score: p,
+      total_score: Math.min(15, totalScore),
       compliance: tplCompliance,
       status: "approved", // quick flow: duyệt luôn
-    }));
+    }});
 
     setReviewRows(rows);
     setSelReview(new Set(rows.map((_, i) => i)));
@@ -266,11 +267,11 @@ function ApproverModeLeanline({ section }) {
           : { ...r0, [key]: toNum(val, 0) };
 
       // tính lại điểm theo Leanline
-      const q = calcQ(r.defects);
-      const p = calcPfromOE(r.oe);
-      const kpi = q + p;
+      const q = scoreByQuality(r.defects); // DÙNG scoreByQuality
+      const p = scoreByProductivity(r.oe, prodRules); // DÙNG scoreByProductivity + rules
+      const rawScore = q + p;
 
-      arr[i] = { ...r, q_score: q, p_score: p, total_score: kpi };
+      arr[i] = { ...r, q_score: q, p_score: p, total_score: Math.min(15, rawScore) };
       return arr;
     });
   }
@@ -321,25 +322,25 @@ function ApproverModeLeanline({ section }) {
     const payload = list.map((r) => {
       const overflow = Math.max(0, (r.q_score + r.p_score) - 15);
       return {
-        date: r.work_date,                    // ✅ đổi lại
-        ca: r.shift,                          // ✅ đổi lại
-        worker_id: r.msnv,                    // ✅ đổi lại
-        worker_name: r.hoten,                 // ✅ đổi lại
+        date: r.work_date,
+        ca: r.shift,
+        worker_id: r.msnv,
+        worker_name: r.hoten,
         approver_id: r.approver_id,
         approver_name: r.approver_name,
         line: r.line,
         work_hours: Number(r.work_hours || 0),
-        stop_hours: Number(r.downtime || 0),  // ✅ đổi lại
+        stop_hours: Number(r.downtime || 0),
         oe: Number(r.oe || 0),
         defects: Number(r.defects || 0),
         p_score: r.p_score,
         q_score: r.q_score,
-        day_score: r.total_score,             // ✅ đổi lại
-        overflow,                             // ✅ thêm mới
-        compliance_code: r.compliance,        // ✅ đổi lại
+        day_score: r.total_score,
+        overflow,
+        compliance_code: r.compliance,
         section: r.section,
         status: "approved",
-        approved_at: now,                     // ✅ thêm mới
+        approved_at: now,
       };
     });
 
@@ -374,7 +375,7 @@ function ApproverModeLeanline({ section }) {
               <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} />
             </div>
             <button className="btn" onClick={loadWorkers}>Tải danh sách NV</button>
-            <button className="btn btn-primary" onClick={proceedToTemplate} disabled={!checked.size}>
+            <button className="btn btn-primary" onClick={proceedToTemplate} disabled={!checked.size || prodRules.length === 0}>
               Tiếp tục ›
             </button>
           </div>
@@ -484,7 +485,7 @@ function ApproverModeLeanline({ section }) {
             <div className="flex gap-6 text-sm">
               <div>Q: <b>{tplQ}</b></div>
               <div>P: <b>{tplP}</b></div>
-              <div>KPI: <b>{tplKPI}</b></div>
+              <div>KPI (Max 15): <b>{tplKPI}</b></div>
               <div className="text-gray-500 ml-auto">Các giá trị này sẽ áp cho tất cả NV ở bước Review.</div>
             </div>
           </div>
@@ -870,7 +871,7 @@ function ApproverModeMolding({ section }) {
       const working_exact = Number((working_real - downtime).toFixed(2));
       const prod = working_exact > 0 ? toNum(output) / working_exact : 0;
 
-      const qScore = calcQ(defects);
+      const qScore = scoreByQuality(defects); // DÙNG scoreByQuality
       let pScore = 0;
       const catRules = rulesByCat[category] || [];
       for (const r of catRules) {
@@ -879,7 +880,7 @@ function ApproverModeMolding({ section }) {
           break;
         }
       }
-      const dayScore = pScore + qScore;
+      const dayScore = Math.min(15, pScore + qScore);
 
       rows.push({
         section,
@@ -949,28 +950,35 @@ function ApproverModeMolding({ section }) {
     setSaving(true);
     const list = idxs.map((i) => reviewRows[i]);
 
-    const payload = list.map((r) => ({
-      section: r.section,
-      date: r.date,
-      ca: r.ca,
-      worker_id: r.worker_id,
-      worker_name: r.worker_name,
-      approver_msnv: r.approver_msnv,
-      approver_name: r.approver_name,
-      category: r.category,
-      working_input: r.working_input,
-      working_real: r.working_real,
-      working_exact: r.working_exact,
-      downtime: r.downtime,
-      mold_hours: r.mold_hours,
-      output: r.output,
-      defects: r.defects,
-      q_score: r.q_score,
-      p_score: r.p_score,
-      day_score: r.day_score,
-      compliance_code: r.compliance_code,
-      status: "approved",
-    }));
+    const now = new Date().toISOString();
+
+    const payload = list.map((r) => {
+      const overflow = Math.max(0, (r.q_score + r.p_score) - 15);
+      return {
+        section: r.section,
+        date: r.date,
+        ca: r.ca,
+        worker_id: r.worker_id,
+        worker_name: r.worker_name,
+        approver_msnv: r.approver_msnv,
+        approver_name: r.approver_name,
+        category: r.category,
+        working_input: r.working_input,
+        working_real: r.working_real,
+        working_exact: r.working_exact,
+        downtime: r.downtime,
+        mold_hours: r.mold_hours,
+        output: r.output,
+        defects: r.defects,
+        q_score: r.q_score,
+        p_score: r.p_score,
+        day_score: r.day_score,
+        overflow,
+        compliance_code: r.compliance_code,
+        status: "approved",
+        approved_at: now,
+      };
+    });
     const { error } = await supabase
       .from("kpi_entries_molding")
       .upsert(payload, { onConflict: "worker_id,date,section" });
@@ -1066,6 +1074,13 @@ function ApproverModeMolding({ section }) {
               </select>
             </div>
             <div>
+              <label>Loại hàng</label>
+              <select className="input" value={category} onChange={e => setCategory(e.target.value)}>
+                <option value="">-- Chọn loại hàng --</option>
+                {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
               <label>Tuân thủ</label>
               <select className="input text-center" value={compliance} onChange={(e) => setCompliance(e.target.value)}>
                 {COMPLIANCE_OPTIONS.map(opt => (
@@ -1076,8 +1091,25 @@ function ApproverModeMolding({ section }) {
               </select>
             </div>
           </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <label>Giờ làm việc (người nhập)</label>
+              <input type="number" className="input" value={workingInput} onChange={e => setWorkingInput(e.target.value)} />
+            </div>
+            <div>
+              <label>Số giờ khuôn chạy thực tế</label>
+              <input type="number" className="input" value={moldHours} onChange={e => setMoldHours(e.target.value)} />
+            </div>
+            <div>
+              <label>Sản lượng / ca</label>
+              <input type="number" className="input" value={output} onChange={e => setOutput(e.target.value)} />
+            </div>
+            <div>
+              <label>Số đôi phế</label>
+              <input type="number" className="input" value={defects} onChange={e => setDefects(e.target.value)} />
+            </div>
+          </div>
 
-          {/* (giữ phần nhập dạng bảng cũ cho Molding) */}
 
           <button className="btn btn-primary" onClick={buildReviewRows}>
             Tạo danh sách Review ›
@@ -1316,7 +1348,7 @@ function SelfModeMolding({ section }) {
     const working_exact = Number((working_real - downtime).toFixed(2));
     const prod = working_exact > 0 ? toNum(row.output) / working_exact : 0;
 
-    const q = calcQ(row.defects);
+    const q = scoreByQuality(row.defects); // DÙNG scoreByQuality
     let p = 0;
     const rules = rulesByCat[row.category] || [];
     for (const r of rules) {
@@ -1325,7 +1357,7 @@ function SelfModeMolding({ section }) {
         break;
       }
     }
-    const day = p + q;
+    const day = Math.min(15, p + q);
 
     return {
       ...row,
@@ -1341,7 +1373,7 @@ function SelfModeMolding({ section }) {
   function update(i, key, val) {
     setRows((old) => {
       const copy = old.slice();
-      const r = { ...copy[i], [key]: ["ca", "category"].includes(key) ? val : toNum(val, 0) };
+      const r = { ...copy[i], [key]: ["ca", "category", "compliance_code"].includes(key) ? val : toNum(val, 0) };
       copy[i] = recompute(r);
       return copy;
     });
@@ -1351,28 +1383,34 @@ function SelfModeMolding({ section }) {
   async function saveAll() {
     if (!rows.length) return alert("Không có dữ liệu để lưu.");
     // Tùy DB của bạn, ở SelfMode này bạn có thể chuyển sang bảng molding nếu muốn.
-    const payload = rows.map((r) => ({
-      section: r.section,
-      date: r.date,
-      ca: r.ca,
-      worker_id: r.worker_id,
-      worker_name: r.worker_name,
-      approver_msnv: r.entrant_msnv,
-      approver_name: r.entrant_name,
-      category: r.category,
-      working_input: r.working_input,
-      working_real: r.working_real,
-      working_exact: r.working_exact,
-      downtime: r.downtime,
-      mold_hours: r.mold_hours,
-      output: r.output,
-      defects: r.defects,
-      q_score: r.q_score,
-      p_score: r.p_score,
-      day_score: r.day_score,
-      compliance_code: r.compliance_code,
-      status: "approved",
-    }));
+    const now = new Date().toISOString();
+    const payload = rows.map((r) => {
+      const overflow = Math.max(0, (r.q_score + r.p_score) - 15);
+      return {
+        section: r.section,
+        date: r.date,
+        ca: r.ca,
+        worker_id: r.worker_id,
+        worker_name: r.worker_name,
+        approver_msnv: r.entrant_msnv,
+        approver_name: r.entrant_name,
+        category: r.category,
+        working_input: r.working_input,
+        working_real: r.working_real,
+        working_exact: r.working_exact,
+        downtime: r.downtime,
+        mold_hours: r.mold_hours,
+        output: r.output,
+        defects: r.defects,
+        q_score: r.q_score,
+        p_score: r.p_score,
+        day_score: r.day_score,
+        overflow,
+        compliance_code: r.compliance_code,
+        status: "approved",
+        approved_at: now,
+      };
+    });
 
     setSaving(true);
     const { error } = await supabase
@@ -1450,9 +1488,9 @@ function SelfModeMolding({ section }) {
                     <td>
                       <select className="input text-center" value={r.category} onChange={(e) => update(i, "category", e.target.value)}>
                         <option value="">--Loại--</option>
-                        {/* Bạn có thể nạp options từ DB tương tự ApproverModeMolding */}
-                        <option value="A">A</option>
-                        <option value="B">B</option>
+                        {categoryOptions.map(c => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
                       </select>
                     </td>
                     <td>
