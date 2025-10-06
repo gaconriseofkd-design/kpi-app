@@ -3,7 +3,7 @@
 import { BrowserRouter, Routes, Route, Link, NavLink } from "react-router-dom";
 import { KpiSectionProvider, useKpiSection } from "./context/KpiSectionContext";
 import SectionGate from "./pages/SectionGate";
-import Shell from "./layout/Shell";
+
 
 import EntryPage from "./pages/EntryPage";
 import EntryPageMolding from "./pages/EntryPageMolding";   // <-- thêm dòng này
