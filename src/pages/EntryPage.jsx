@@ -350,11 +350,11 @@ export default function EntryPage() {
             onChange={(e) => handleChange("compliance", e.target.value)}
           >
             <option value="NONE">Không vi phạm</option>
-            <option value="LATE">Đi trễ / Về sớm</option>
-            <option value="PPE">Vi phạm PPE</option>
-            <option value="MAT">Vi phạm nguyên liệu</option>
-            <option value="SPEC">Vi phạm tiêu chuẩn</option>
-            <option value="RULE">Vi phạm nội quy</option>
+            <option value="LATE">Ký mẫu đầu chuyền trước khi sử dụng</option>
+            <option value="PPE">Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất</option>
+            <option value="MAT">Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất</option>
+            <option value="SPEC">Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất</option>
+            <option value="RULE">Vi phạm nội quy bộ phận/công ty</option>
           </select>
         </label>
       </div>

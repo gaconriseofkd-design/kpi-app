@@ -559,9 +559,11 @@ function ApproverMode({ isMolding, section }) {
               <label>Tuân thủ</label>
               <select className="input" value={compliance} onChange={(e) => setCompliance(e.target.value)}>
                 <option value="NONE">Không vi phạm</option>
-                <option value="PPE">Vi phạm PPE</option>
-                <option value="LATE">Đi trễ</option>
-                <option value="OTHER">Khác</option>
+                <option value="LATE">Ký mẫu đầu chuyền trước khi sử dụng</option>
+                <option value="PPE">Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất</option>
+                <option value="MAT">Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất</option>
+                <option value="SPEC">Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất</option>
+                <option value="RULE">Vi phạm nội quy bộ phận/công ty</option>
               </select>
             </div>
           </div>
