@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useKpiSection } from "../context/KpiSectionContext";
 import { scoreByQuality, scoreByProductivity } from "../lib/scoring"; // THAY ĐỔI: Import scoring functions
+import ApproverModeHybrid from "./QuickEntryLPS"; 
 
 /* ===== Danh sách Tuân thủ dùng chung ===== */
 const COMPLIANCE_OPTIONS = [
@@ -13,7 +14,8 @@ const COMPLIANCE_OPTIONS = [
   { value: "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất", label: "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất" },
   { value: "Vi phạm nội quy bộ phận/công ty", label: "Vi phạm nội quy bộ phận/công ty" },
 ];
-
+const HYBRID_SECTIONS = ["LAMINATION", "PREFITTING", "BÀO", "TÁCH"];
+const isHybridSection = (sectionKey) => HYBRID_SECTIONS.includes(sectionKey);
 /* ===== Helpers ===== */
 const cx = (...a) => a.filter(Boolean).join(" ");
 const toNum = (v, d = 0) => {
@@ -50,6 +52,7 @@ function CellInput({ value, onChange, type = "text", className = "input text-cen
 export default function QuickEntry() {
   const { section } = useKpiSection();
   const isMolding = section === "MOLDING";
+  const isHybrid = isHybridSection(section);
   const isLeanline = String(section || "").toUpperCase().startsWith("LEANLINE");
 
   // ⇩⇩⇩ tất cả hooks phải khai báo trước mọi early-return
@@ -95,6 +98,8 @@ export default function QuickEntry() {
       {mode === "approver" ? (
         isMolding ? (
           <ApproverModeMolding section={section} />
+        ) : isHybrid ? ( // THÊM LOGIC HYBRID
+          <ApproverModeHybrid section={section} />
         ) : (
           <ApproverModeLeanline section={section} />
         )
