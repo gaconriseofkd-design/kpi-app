@@ -85,10 +85,10 @@ function Shell() {
 
 export default function App() {
   return (
-    <KpiSectionProvider>
-      <BrowserRouter>
+    <BrowserRouter>
+      <KpiSectionProvider>
         <Shell />
-      </BrowserRouter>
-    </KpiSectionProvider>
+      </KpiSectionProvider>
+    </BrowserRouter>
   );
 }
