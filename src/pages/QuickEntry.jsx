@@ -316,25 +316,33 @@ function ApproverModeLeanline({ section }) {
     setSaving(true);
     const list = idxs.map((i) => reviewRows[i]);
 
-    const payload = list.map((r) => ({
-      section: r.section,
-      work_date: r.work_date,
-      shift: r.shift,
-      msnv: r.msnv,
-      hoten: r.hoten,
-      approver_id: r.approver_id,
-      approver_name: r.approver_name,
-      line: r.line,
-      work_hours: r.work_hours,
-      downtime: r.downtime,
-      oe: r.oe,
-      defects: r.defects,
-      q_score: r.q_score,
-      p_score: r.p_score,
-      total_score: r.total_score,
-      compliance: r.compliance,
-      status: "approved",
-    }));
+    const now = new Date().toISOString();
+
+    const payload = list.map((r) => {
+      const overflow = Math.max(0, (r.q_score + r.p_score) - 15);
+      return {
+        date: r.work_date,                    // ✅ đổi lại
+        ca: r.shift,                          // ✅ đổi lại
+        worker_id: r.msnv,                    // ✅ đổi lại
+        worker_name: r.hoten,                 // ✅ đổi lại
+        approver_id: r.approver_id,
+        approver_name: r.approver_name,
+        line: r.line,
+        work_hours: Number(r.work_hours || 0),
+        stop_hours: Number(r.downtime || 0),  // ✅ đổi lại
+        oe: Number(r.oe || 0),
+        defects: Number(r.defects || 0),
+        p_score: r.p_score,
+        q_score: r.q_score,
+        day_score: r.total_score,             // ✅ đổi lại
+        overflow,                             // ✅ thêm mới
+        compliance_code: r.compliance,        // ✅ đổi lại
+        section: r.section,
+        status: "approved",
+        approved_at: now,                     // ✅ thêm mới
+      };
+    });
+
 
     const { error } = await supabase
       .from("kpi_entries")
