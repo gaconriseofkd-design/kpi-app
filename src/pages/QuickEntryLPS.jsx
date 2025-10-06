@@ -5,7 +5,7 @@ import { supabase } from "../lib/supabaseClient";
 
 /* ================= Scoring & Helpers ================= */
 
-// Machine Map (Mới)
+// Machine Map (Giữ nguyên)
 const MACHINE_MAP = {
     "LAMINATION": ["Máy dán 1", "Máy dán 2", "Máy dán 3", "Máy dán 4", "Máy dán 5", "Máy dán 6", "Máy dán 7"],
     "PREFITTING": ["Máy cắt 1", "Máy cắt 2", "Máy cắt 3", "Máy cắt 4", "Máy cắt 5", "Máy cắt 6"],
@@ -83,15 +83,17 @@ export default function ApproverModeHybrid({ section }) {
     return MACHINE_MAP[section] || [];
   }, [section]);
 
-  // THÊM useEffect để Tải Rule điểm sản lượng cho Hybrid Sections
+  // THÊM useEffect để Tải Rule điểm sản lượng cho Hybrid Sections (ĐÃ SỬA CHUẨN HÓA)
   useEffect(() => {
     let cancelled = false;
+    const dbSection = section.toUpperCase(); // CHUẨN HÓA SANG IN HOA
+    
     (async () => {
       const { data, error } = await supabase
         .from("kpi_rule_productivity")
         .select("*")
         .eq("active", true)
-        .eq("section", section)
+        .eq("section", dbSection) // DÙNG BIẾN CHUẨN HÓA
         .order("threshold", { ascending: false });
       if (!cancelled) {
         if (error) console.error("Load rules error:", error);
@@ -145,7 +147,7 @@ export default function ApproverModeHybrid({ section }) {
   // ---- B2: Template KPI CHUNG ----
   const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [tplShift, setTplShift] = useState("Ca 1");
-  const [tplLine, setTplLine] = useState(currentMachines[0] || ""); // Set default machine
+  const [tplLine, setTplLine] = useState(currentMachines[0] || ""); 
   const [tplWorkHours, setTplWorkHours] = useState(8);
   const [tplStopHours, setTplStopHours] = useState(0);
   const [tplOutput, setTplOutput] = useState(100); 
@@ -174,9 +176,8 @@ export default function ApproverModeHybrid({ section }) {
 
   function proceedToTemplate() {
     if (!prodRules.length) return alert("Không thể tải Rule tính điểm sản lượng. Vui lòng thử lại.");
-    if (!tplCategory) return alert("Vui lòng chọn Loại năng suất.");
     if (!checked.size) return alert("Chưa chọn nhân viên nào.");
-    setStep(2);
+    setStep(2); // CHUYỂN SANG BƯỚC 2: NHẬP TEMPLATE
   }
 
   // ---- B3: Build Review Rows từ Template + cho phép CHỈNH ----
@@ -185,7 +186,7 @@ export default function ApproverModeHybrid({ section }) {
 
   function buildReviewRows() {
     if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
-    if (!tplCategory) return alert("Chọn Loại năng suất.");
+    if (!tplCategory) return alert("Vui lòng chọn Loại năng suất."); // VALIDATION NÀY BÂY GIỜ CHẠY Ở ĐÂY
     if (!checked.size) return alert("Chưa chọn nhân viên.");
 
     const selectedWorkers = workers.filter((w) => checked.has(w.msnv));
@@ -236,7 +237,6 @@ export default function ApproverModeHybrid({ section }) {
           ? { ...r0, [key]: val }
           : { ...r0, [key]: toNum(val, 0) };
 
-      // tính lại điểm theo Hybrid logic
       const s = deriveDayScoresHybrid({
           section, 
           defects: r.defects, 
@@ -256,7 +256,7 @@ export default function ApproverModeHybrid({ section }) {
     });
   }
 
-  // Paging và Select (Giữ nguyên logic của QuickEntry.jsx)
+  // Paging và Select (Giữ nguyên)
   const pageSize = 50;
   const [page, setPage] = useState(1);
   useEffect(() => setPage(1), [reviewRows.length]);
@@ -356,7 +356,7 @@ export default function ApproverModeHybrid({ section }) {
           </div>
 
           <div className="overflow-auto border rounded">
-             {/* Bảng danh sách NV (Giữ nguyên) */}
+             {/* Bảng danh sách NV */}
             <table className="min-w-full text-sm">
                 <thead className="bg-gray-50">
                 <tr className="text-center">
@@ -402,9 +402,9 @@ export default function ApproverModeHybrid({ section }) {
               </select>
             </div>
             <div>
-              <label>Máy làm việc</label> {/* ĐÃ SỬA LABEL */}
+              <label>Máy làm việc</label>
               <select className="input" value={tplLine} onChange={(e) => setTplLine(e.target.value)}>
-                {currentMachines.map(m => ( // DROPDOWN ĐỘNG
+                {currentMachines.map(m => (
                   <option key={m} value={m}>{m}</option>
                 ))}
               </select>
@@ -491,7 +491,7 @@ function EditReviewHybrid({
     MACHINE_MAP.PREFITTING, 
     MACHINE_MAP.BÀO, 
     MACHINE_MAP.TÁCH
-  ); // Cần có danh sách đầy đủ cho dropdown
+  ); 
 
   return (
     <div className="space-y-3">
@@ -499,6 +499,7 @@ function EditReviewHybrid({
         <button className="btn btn-primary" onClick={saveBatch} disabled={saving || !selReview.size}>
           {saving ? "Đang lưu..." : `Lưu đã chọn (${selReview.size})`}
         </button>
+        {/* Paging */}
         <div className="ml-auto flex items-center gap-3">
             <button className="btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>‹ Trước</button>
             <span>Trang {page}/{totalPages}</span>
@@ -517,7 +518,7 @@ function EditReviewHybrid({
               <th className="p-2">Ca</th>
               <th className="p-2">Giờ làm</th>
               <th className="p-2">Giờ dừng</th>
-              <th className="p-2">Máy làm việc</th> {/* ĐÃ SỬA HEADER */}
+              <th className="p-2">Máy làm việc</th>
               <th className="p-2">Loại NS</th>
               <th className="p-2">SL (Output)</th>
               <th className="p-2">Phế</th>
@@ -545,7 +546,7 @@ function EditReviewHybrid({
                   <td className="p-2"><input type="number" className="input text-center" value={r.stop_hours} onChange={(e) => updateRow(gi, "stop_hours", e.target.value)} /></td>
                   <td className="p-2">
                     <select className="input text-center" value={r.line} onChange={(e) => updateRow(gi, "line", e.target.value)}>
-                        {allMachines.map(m => <option key={m} value={m}>{m}</option>)} {/* Dùng danh sách đầy đủ */}
+                        {allMachines.map(m => <option key={m} value={m}>{m}</option>)}
                     </select>
                   </td>
                   <td className="p-2">
