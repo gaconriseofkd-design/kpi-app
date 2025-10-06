@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useKpiSection } from "../context/KpiSectionContext";
-import { scoreByQuality, scoreByProductivity } from "../lib/scoring"; // THAY ĐỔI: Import scoring functions
+import { scoreByQuality, scoreByProductivity } from "../lib/scoring"; 
 import ApproverModeHybrid from "./QuickEntryLPS"; 
 
 /* ===== Danh sách Tuân thủ dùng chung ===== */
@@ -98,7 +98,7 @@ export default function QuickEntry() {
       {mode === "approver" ? (
         isMolding ? (
           <ApproverModeMolding section={section} />
-        ) : isHybrid ? ( // THÊM LOGIC HYBRID
+        ) : isHybrid ? (
           <ApproverModeHybrid section={section} />
         ) : (
           <ApproverModeLeanline section={section} />
@@ -135,7 +135,6 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
 function ApproverModeLeanline({ section }) {
   const [step, setStep] = useState(1);
 
-  // THÊM: State và useEffect để tải rule
   const [prodRules, setProdRules] = useState([]); 
 
   useEffect(() => {
@@ -212,18 +211,18 @@ function ApproverModeLeanline({ section }) {
   const [tplCompliance, setTplCompliance] = useState("NONE");
 
   // điểm preview cho template
-  const tplQ = useMemo(() => scoreByQuality(tplDefects), [tplDefects]); // DÙNG scoreByQuality
-  const tplP = useMemo(() => scoreByProductivity(tplOE, prodRules), [tplOE, prodRules]); // DÙNG scoreByProductivity + rules
+  const tplQ = useMemo(() => scoreByQuality(tplDefects), [tplDefects]);
+  const tplP = useMemo(() => scoreByProductivity(tplOE, prodRules), [tplOE, prodRules]);
   const tplKPI = useMemo(() => Math.min(15, tplQ + tplP), [tplQ, tplP]);
 
   function proceedToTemplate() {
-    if (!prodRules.length) return alert("Không thể tải Rule tính điểm sản lượng. Vui lòng thử lại."); // THÊM CHECK
+    if (!prodRules.length) return alert("Không thể tải Rule tính điểm sản lượng. Vui lòng thử lại.");
     if (!checked.size) return alert("Chưa chọn nhân viên nào.");
     setStep(2);
   }
 
   // ---- B3: Build Review Rows từ Template + cho phép CHỈNH ----
-  const [reviewRows, setReviewRows] = useState([]); // mảng dòng để chỉnh
+  const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
 
   function buildReviewRows() {
@@ -232,8 +231,8 @@ function ApproverModeLeanline({ section }) {
 
     const selectedWorkers = workers.filter((w) => checked.has(w.msnv));
     const rows = selectedWorkers.map((w) => {
-      const q = scoreByQuality(tplDefects); // DÙNG scoreByQuality
-      const p = scoreByProductivity(tplOE, prodRules); // DÙNG scoreByProductivity + rules
+      const q = scoreByQuality(tplDefects);
+      const p = scoreByProductivity(tplOE, prodRules);
       const totalScore = q + p;
 
       return {
@@ -242,7 +241,7 @@ function ApproverModeLeanline({ section }) {
       shift: tplShift,
       msnv: w.msnv,
       hoten: w.full_name,
-      approver_id: approverId, // người duyệt đã chọn
+      approver_id: approverId,
       approver_name: w.approver_name,
       line: tplLine,
       work_hours: toNum(tplWorkHours),
@@ -253,7 +252,7 @@ function ApproverModeLeanline({ section }) {
       p_score: p,
       total_score: Math.min(15, totalScore),
       compliance: tplCompliance,
-      status: "approved", // quick flow: duyệt luôn
+      status: "approved",
     }});
 
     setReviewRows(rows);
@@ -272,8 +271,8 @@ function ApproverModeLeanline({ section }) {
           : { ...r0, [key]: toNum(val, 0) };
 
       // tính lại điểm theo Leanline
-      const q = scoreByQuality(r.defects); // DÙNG scoreByQuality
-      const p = scoreByProductivity(r.oe, prodRules); // DÙNG scoreByProductivity + rules
+      const q = scoreByQuality(r.defects);
+      const p = scoreByProductivity(r.oe, prodRules);
       const rawScore = q + p;
 
       arr[i] = { ...r, q_score: q, p_score: p, total_score: Math.min(15, rawScore) };
@@ -351,7 +350,7 @@ function ApproverModeLeanline({ section }) {
 
 
     const { error } = await supabase
-    .from("kpi_entries")
+    .from("kpi_entries") // LUÔN LƯU VÀO kpi_entries CHO LEANLINE
     .upsert(payload, { onConflict: "worker_id,date,section" });
 
 
@@ -413,9 +412,7 @@ function ApproverModeLeanline({ section }) {
                     </td>
                     <td className="p-2 text-center">{w.msnv}</td>
                     <td className="p-2 text-center">{w.full_name}</td>
-                    <td className="p-2 text-center">
-                      {w.approver_name} ({w.approver_msnv})
-                    </td>
+                    <td className="p-2 text-center">{w.approver_name} ({w.approver_msnv})</td>
                   </tr>
                 ))}
                 {!filteredWorkers.length && (
@@ -449,7 +446,7 @@ function ApproverModeLeanline({ section }) {
               </select>
             </div>
             <div>
-              <label>Line</label>
+              <label>Máy làm việc</label> {/* ĐÃ SỬA LABEL */}
               <select className="input" value={tplLine} onChange={(e) => setTplLine(e.target.value)}>
                 <option value="LEAN-D1">LEAN-D1</option>
                 <option value="LEAN-D2">LEAN-D2</option>
@@ -501,7 +498,7 @@ function ApproverModeLeanline({ section }) {
                 <tr>
                   <th>MSNV</th>
                   <th>Họ tên</th>
-                  <th>Line</th>
+                  <th>Máy làm việc</th> {/* ĐÃ SỬA HEADER */}
                   <th>Giờ làm</th>
                   <th>Giờ dừng</th>
                   <th>%OE</th>
@@ -620,7 +617,7 @@ function EditReviewLeanline({
               <th className="p-2">Họ tên</th>
               <th className="p-2">Ngày</th>
               <th className="p-2">Ca</th>
-              <th className="p-2">Line</th>
+              <th className="p-2">Máy làm việc</th> {/* ĐÃ SỬA HEADER */}
               <th className="p-2">Giờ làm</th>
               <th className="p-2">Giờ dừng</th>
               <th className="p-2">%OE</th>

@@ -5,6 +5,14 @@ import { supabase } from "../lib/supabaseClient";
 
 /* ================= Scoring & Helpers ================= */
 
+// Machine Map (Mới)
+const MACHINE_MAP = {
+    "LAMINATION": ["Máy dán 1", "Máy dán 2", "Máy dán 3", "Máy dán 4", "Máy dán 5", "Máy dán 6", "Máy dán 7"],
+    "PREFITTING": ["Máy cắt 1", "Máy cắt 2", "Máy cắt 3", "Máy cắt 4", "Máy cắt 5", "Máy cắt 6"],
+    "BÀO": ["Máy bào 1", "Máy bào 2", "Máy bào 3", "Máy bào 4"],
+    "TÁCH": ["Máy tách 1", "Máy tách 2", "Máy tách 3", "Máy tách 4"],
+};
+
 // Lấy trực tiếp từ logic EntryPage.jsx
 const getTableName = (sectionKey) => "kpi_LPS_entries";
 
@@ -33,12 +41,9 @@ function scoreByProductivityHybrid(prodRate, category, allRules) {
 function deriveDayScoresHybrid({ section, defects, category, output, workHours, stopHours }, prodRules) {
   const q = scoreByQuality(defects);
 
-  // 1. Tính Giờ làm việc chính xác (tương tự Leanline)
   const exactHours = Math.max(0, Number(workHours || 0) - Number(stopHours || 0));
-  // 2. Tính Tỷ lệ Sản lượng (Output/Giờ chính xác)
   const prodRate = exactHours > 0 ? Number(output || 0) / exactHours : 0;
   
-  // 3. Chấm điểm P bằng logic Hybrid (Category + ProdRate)
   const p = scoreByProductivityHybrid(prodRate, category, prodRules);
 
   const total = p + q;
@@ -51,7 +56,6 @@ function deriveDayScoresHybrid({ section, defects, category, output, workHours, 
 }
 
 const COMPLIANCE_OPTIONS = [
-    // ... (Danh sách options tuân thủ)
     { value: "NONE", label: "Không vi phạm" },
     { value: "LATE", label: "Ký mẫu đầu chuyền trước khi sử dụng" },
     { value: "PPE", label: "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất" },
@@ -73,6 +77,11 @@ export default function ApproverModeHybrid({ section }) {
   const [prodRules, setProdRules] = useState([]); 
   const [categoryOptions, setCategoryOptions] = useState([]);
   const tableName = getTableName(section);
+
+  // Lấy danh sách máy cho section hiện tại
+  const currentMachines = useMemo(() => {
+    return MACHINE_MAP[section] || [];
+  }, [section]);
 
   // THÊM useEffect để Tải Rule điểm sản lượng cho Hybrid Sections
   useEffect(() => {
@@ -136,11 +145,11 @@ export default function ApproverModeHybrid({ section }) {
   // ---- B2: Template KPI CHUNG ----
   const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [tplShift, setTplShift] = useState("Ca 1");
-  const [tplLine, setTplLine] = useState("LEAN-D1");
+  const [tplLine, setTplLine] = useState(currentMachines[0] || ""); // Set default machine
   const [tplWorkHours, setTplWorkHours] = useState(8);
   const [tplStopHours, setTplStopHours] = useState(0);
-  const [tplOutput, setTplOutput] = useState(100); // Output
-  const [tplCategory, setTplCategory] = useState(""); // Category
+  const [tplOutput, setTplOutput] = useState(100); 
+  const [tplCategory, setTplCategory] = useState(""); 
   const [tplDefects, setTplDefects] = useState(0);
   const [tplCompliance, setTplCompliance] = useState("NONE");
 
@@ -165,6 +174,7 @@ export default function ApproverModeHybrid({ section }) {
 
   function proceedToTemplate() {
     if (!prodRules.length) return alert("Không thể tải Rule tính điểm sản lượng. Vui lòng thử lại.");
+    if (!tplCategory) return alert("Vui lòng chọn Loại năng suất.");
     if (!checked.size) return alert("Chưa chọn nhân viên nào.");
     setStep(2);
   }
@@ -310,7 +320,6 @@ export default function ApproverModeHybrid({ section }) {
       };
     });
 
-    // LƯU VÀO BẢNG RIÊNG (kpi_LPS_entries)
     const { error } = await supabase
     .from(tableName)
     .upsert(payload, { onConflict: "worker_id,date,section" });
@@ -323,7 +332,7 @@ export default function ApproverModeHybrid({ section }) {
 
   return (
     <div className="space-y-4">
-      {/* ==== STEP 1: Chọn NV theo người duyệt (Giữ nguyên) ==== */}
+      {/* ==== STEP 1: Chọn NV theo người duyệt ==== */}
       {step === 1 && (
         <>
           <div className="flex items-end gap-2">
@@ -393,14 +402,11 @@ export default function ApproverModeHybrid({ section }) {
               </select>
             </div>
             <div>
-              <label>Line</label>
+              <label>Máy làm việc</label> {/* ĐÃ SỬA LABEL */}
               <select className="input" value={tplLine} onChange={(e) => setTplLine(e.target.value)}>
-                <option value="LEAN-D1">LEAN-D1</option>
-                <option value="LEAN-D2">LEAN-D2</option>
-                <option value="LEAN-D3">LEAN-D3</option>
-                <option value="LEAN-D4">LEAN-D4</option>
-                <option value="LEAN-H1">LEAN-H1</option>
-                <option value="LEAN-H2">LEAN-H2</option>
+                {currentMachines.map(m => ( // DROPDOWN ĐỘNG
+                  <option key={m} value={m}>{m}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -481,6 +487,11 @@ function EditReviewHybrid({
   toggleAllReviewOnPage, toggleOneReview, updateRow, saveBatch, saving, categoryOptions
 }) {
   const globalIndex = (idx) => (page - 1) * pageSize + idx;
+  const allMachines = MACHINE_MAP.LAMINATION.concat(
+    MACHINE_MAP.PREFITTING, 
+    MACHINE_MAP.BÀO, 
+    MACHINE_MAP.TÁCH
+  ); // Cần có danh sách đầy đủ cho dropdown
 
   return (
     <div className="space-y-3">
@@ -488,7 +499,6 @@ function EditReviewHybrid({
         <button className="btn btn-primary" onClick={saveBatch} disabled={saving || !selReview.size}>
           {saving ? "Đang lưu..." : `Lưu đã chọn (${selReview.size})`}
         </button>
-        {/* Paging (Giữ nguyên) */}
         <div className="ml-auto flex items-center gap-3">
             <button className="btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>‹ Trước</button>
             <span>Trang {page}/{totalPages}</span>
@@ -507,6 +517,7 @@ function EditReviewHybrid({
               <th className="p-2">Ca</th>
               <th className="p-2">Giờ làm</th>
               <th className="p-2">Giờ dừng</th>
+              <th className="p-2">Máy làm việc</th> {/* ĐÃ SỬA HEADER */}
               <th className="p-2">Loại NS</th>
               <th className="p-2">SL (Output)</th>
               <th className="p-2">Phế</th>
@@ -519,8 +530,6 @@ function EditReviewHybrid({
           <tbody className="text-center">
             {pageRows.map((r, idx) => {
               const gi = globalIndex(idx);
-              const exactHours = Math.max(0, toNum(r.work_hours) - toNum(r.stop_hours));
-              const prodRate = exactHours > 0 ? toNum(r.output) / exactHours : 0;
               return (
                 <tr key={gi} className="border-t hover:bg-gray-50">
                   <td className="p-2"><input type="checkbox" checked={selReview.has(gi)} onChange={() => toggleOneReview(gi)} /></td>
@@ -534,6 +543,11 @@ function EditReviewHybrid({
                   </td>
                   <td className="p-2"><input type="number" className="input text-center" value={r.work_hours} onChange={(e) => updateRow(gi, "work_hours", e.target.value)} /></td>
                   <td className="p-2"><input type="number" className="input text-center" value={r.stop_hours} onChange={(e) => updateRow(gi, "stop_hours", e.target.value)} /></td>
+                  <td className="p-2">
+                    <select className="input text-center" value={r.line} onChange={(e) => updateRow(gi, "line", e.target.value)}>
+                        {allMachines.map(m => <option key={m} value={m}>{m}</option>)} {/* Dùng danh sách đầy đủ */}
+                    </select>
+                  </td>
                   <td className="p-2">
                     <select className="input text-center" value={r.category} onChange={(e) => updateRow(gi, "category", e.target.value)}>
                         <option value="">--Chọn--</option>
