@@ -214,12 +214,16 @@ function ReportContent() {
       s ? s.toString().toLowerCase().replace(/^\w/u, (c) => c.toUpperCase()) : "";
     const complianceLabel = (code) => {
       switch ((code || "NONE").toUpperCase()) {
-        case "NONE": return "KHÔNG VI PHẠM";
-        case "PPE":  return "VI PHẠM PPE";
-        case "LATE": return "ĐI TRỄ";
-        default:     return "OK";
+        case "Không vi phạm": return "Không vi phạm";
+        case "Ký mẫu đầu chuyền trước khi sử dụng": return "Ký mẫu đầu chuyền trước khi sử dụng";
+        case "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất":  return "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất";
+        case "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất":  return "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất";
+        case "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất": return "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất";
+        case "Vi phạm nội quy bộ phận/công ty": return "Vi phạm nội quy bộ phận/công ty";
+        default:     return code;
       }
     };
+    
   
     let data;
     if (isMolding) {
@@ -244,7 +248,7 @@ function ReportContent() {
           "Sản lượng/ca": Number(r.output ?? 0),
           "Điểm Sản lượng": p,
           "Tuân thủ": complianceLabel(r.compliance_code),
-          "Vi phạm": hasViolation,
+          "Vi phạm": r.compliance_code && r.compliance_code !== "Không vi phạm" ? 1 : 0,
           "Điểm KPI ngày": day,
           "Điểm dư": overflow,
           "Điểm tổng": total,
@@ -277,7 +281,7 @@ function ReportContent() {
           "%OE": Number(r.oe ?? 0),
           "Điểm sản lượng": p,
           "Tuân thủ": complianceLabel(r.compliance_code),
-          "Vi phạm": hasViolation,
+          "Vi phạm": r.compliance_code && r.compliance_code !== "Không vi phạm" ? 1 : 0,
           "Điểm KPI ngày": day,
           "Điểm dư": overflow,
           "Điểm KPI tổng tháng": totalMonth,
