@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useKpiSection } from "../context/KpiSectionContext";
 
-// ===== Danh sách Tuân thủ dùng chung =====
+/* ===== Danh sách Tuân thủ dùng chung ===== */
 const COMPLIANCE_OPTIONS = [
   { value: "NONE", label: "Không vi phạm" },
   { value: "LATE", label: "Ký mẫu đầu chuyền trước khi sử dụng" },
@@ -72,11 +72,12 @@ function CellInput({ value, onChange, type = "text", className = "input text-cen
 export default function QuickEntry() {
   const { section } = useKpiSection();
   const isMolding = section === "MOLDING";
+  const isLeanline = String(section || "").toUpperCase().startsWith("LEANLINE");
 
   // ⇩⇩⇩ tất cả hooks phải khai báo trước mọi early-return
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("quick_authed") === "1");
   const [pwd, setPwd] = useState("");
-  const [mode, setMode] = useState("approver"); // ← DI CHUYỂN LÊN ĐÂY
+  const [mode, setMode] = useState("approver"); // "approver" | "self" (self chỉ dùng cho Molding)
 
   function tryLogin(e) {
     e?.preventDefault();
@@ -91,7 +92,7 @@ export default function QuickEntry() {
     return <LoginForm pwd={pwd} setPwd={setPwd} tryLogin={tryLogin} />;
   }
 
-    return (
+  return (
     <div className="p-4 space-y-4">
       <div className="flex items-center gap-3">
         <h2 className="text-xl font-semibold">Nhập KPI nhanh ({section})</h2>
@@ -114,7 +115,11 @@ export default function QuickEntry() {
       </div>
 
       {mode === "approver" ? (
-        <ApproverMode isMolding={isMolding} section={section} />
+        isMolding ? (
+          <ApproverModeMolding section={section} />
+        ) : (
+          <ApproverModeLeanline section={section} />
+        )
       ) : (
         <SelfModeMolding section={section} />
       )}
@@ -142,60 +147,639 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
 }
 
 /* ======================================================================
-   MODE 1: Theo người duyệt (Leanline & Molding)
+   APPROVER MODE — LEANLINE
+   - B1: Nhập MSNV người duyệt → tải nhân viên → chọn danh sách
+   - B2: Nhập KPI CHUNG MỘT LẦN (Ngày, Ca, Line, WorkHours, StopHours, OE, Defects, Compliance)
+         + Preview điểm cho toàn bộ danh sách
+   - B3: Tạo danh sách Review → Bảng CHỈNH SỬA THEO TỪNG NHÂN VIÊN (auto tính lại)
+   - Save = upsert kpi_entries (status: "approved" như QuickEntry cũ)
+   ====================================================================== */
+function ApproverModeLeanline({ section }) {
+  const [step, setStep] = useState(1);
+
+  // ---- B1: Chọn nhân viên theo Người duyệt ----
+  const [approverId, setApproverId] = useState("");
+  const [workers, setWorkers] = useState([]);
+  const [checked, setChecked] = useState(new Set());
+  const [search, setSearch] = useState("");
+
+  const filteredWorkers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return workers;
+    return workers.filter(
+      (w) =>
+        String(w.msnv).toLowerCase().includes(q) ||
+        String(w.full_name || "").toLowerCase().includes(q)
+    );
+  }, [workers, search]);
+
+  async function loadWorkers() {
+    const id = approverId.trim();
+    if (!id) return alert("Nhập MSNV người duyệt trước.");
+    const { data, error } = await supabase
+      .from("users")
+      .select("msnv, full_name, approver_msnv, approver_name")
+      .eq("approver_msnv", id);
+    if (error) return alert("Lỗi tải nhân viên: " + error.message);
+    setWorkers(data || []);
+    setChecked(new Set());
+  }
+
+  function toggleWorker(msnv) {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      if (next.has(msnv)) next.delete(msnv);
+      else next.add(msnv);
+      return next;
+    });
+  }
+  function toggleAllWorkers() {
+    setChecked((prev) =>
+      prev.size === filteredWorkers.length
+        ? new Set()
+        : new Set(filteredWorkers.map((w) => w.msnv))
+    );
+  }
+
+  // ---- B2: Template KPI CHUNG ----
+  const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [tplShift, setTplShift] = useState("Ca 1");
+  const [tplLine, setTplLine] = useState("LEAN-D1");
+  const [tplWorkHours, setTplWorkHours] = useState(8);
+  const [tplStopHours, setTplStopHours] = useState(0);
+  const [tplOE, setTplOE] = useState(100);
+  const [tplDefects, setTplDefects] = useState(0);
+  const [tplCompliance, setTplCompliance] = useState("NONE");
+
+  // điểm preview cho template
+  const tplQ = useMemo(() => calcQ(tplDefects), [tplDefects]);
+  const tplP = useMemo(() => calcPfromOE(tplOE), [tplOE]);
+  const tplKPI = useMemo(() => tplQ + tplP, [tplQ, tplP]);
+
+  function proceedToTemplate() {
+    if (!checked.size) return alert("Chưa chọn nhân viên nào.");
+    setStep(2);
+  }
+
+  // ---- B3: Build Review Rows từ Template + cho phép CHỈNH ----
+  const [reviewRows, setReviewRows] = useState([]); // mảng dòng để chỉnh
+  const [selReview, setSelReview] = useState(() => new Set());
+
+  function buildReviewRows() {
+    if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
+    if (!checked.size) return alert("Chưa chọn nhân viên.");
+
+    const selectedWorkers = workers.filter((w) => checked.has(w.msnv));
+    const rows = selectedWorkers.map((w) => ({
+      section,
+      work_date: tplDate,
+      shift: tplShift,
+      msnv: w.msnv,
+      hoten: w.full_name,
+      approver_id: approverId, // người duyệt đã chọn
+      approver_name: w.approver_name,
+      line: tplLine,
+      work_hours: toNum(tplWorkHours),
+      downtime: toNum(tplStopHours),
+      oe: toNum(tplOE),
+      defects: toNum(tplDefects),
+      q_score: calcQ(tplDefects),
+      p_score: calcPfromOE(tplOE),
+      total_score: calcQ(tplDefects) + calcPfromOE(tplOE),
+      compliance: tplCompliance,
+      status: "approved", // quick flow: duyệt luôn
+    }));
+
+    setReviewRows(rows);
+    setSelReview(new Set(rows.map((_, i) => i)));
+    setStep(3);
+  }
+
+  // chỉnh 1 dòng → tự tính lại điểm
+  function updateRow(i, key, val) {
+    setReviewRows((old) => {
+      const arr = old.slice();
+      const r0 = arr[i] || {};
+      const r =
+        key === "compliance" || key === "line" || key === "shift" || key === "work_date"
+          ? { ...r0, [key]: val }
+          : { ...r0, [key]: toNum(val, 0) };
+
+      // tính lại điểm theo Leanline
+      const q = calcQ(r.defects);
+      const p = calcPfromOE(r.oe);
+      const kpi = q + p;
+
+      arr[i] = { ...r, q_score: q, p_score: p, total_score: kpi };
+      return arr;
+    });
+  }
+
+  // paging review
+  const pageSize = 50;
+  const [page, setPage] = useState(1);
+  useEffect(() => setPage(1), [reviewRows.length]);
+  const totalPages = Math.max(1, Math.ceil(reviewRows.length / pageSize));
+  const pageRows = useMemo(
+    () => reviewRows.slice((page - 1) * pageSize, page * pageSize),
+    [reviewRows, page]
+  );
+
+  function toggleAllReviewOnPage() {
+    setSelReview((prev) => {
+      const next = new Set(prev);
+      const start = (page - 1) * pageSize;
+      const allOnPage = pageRows.every((_, idx) => next.has(start + idx));
+      if (allOnPage) {
+        pageRows.forEach((_, idx) => next.delete(start + idx));
+      } else {
+        pageRows.forEach((_, idx) => next.add(start + idx));
+      }
+      return next;
+    });
+  }
+  function toggleOneReview(globalIndex) {
+    setSelReview((prev) => {
+      const next = new Set(prev);
+      if (next.has(globalIndex)) next.delete(globalIndex);
+      else next.add(globalIndex);
+      return next;
+    });
+  }
+
+  // Lưu các dòng đã chọn → kpi_entries
+  const [saving, setSaving] = useState(false);
+  async function saveBatch() {
+    const idxs = Array.from(selReview).sort((a, b) => a - b);
+    if (!idxs.length) return alert("Chưa chọn dòng để lưu.");
+
+    setSaving(true);
+    const list = idxs.map((i) => reviewRows[i]);
+
+    const payload = list.map((r) => ({
+      section: r.section,
+      work_date: r.work_date,
+      shift: r.shift,
+      msnv: r.msnv,
+      hoten: r.hoten,
+      approver_id: r.approver_id,
+      approver_name: r.approver_name,
+      line: r.line,
+      work_hours: r.work_hours,
+      downtime: r.downtime,
+      oe: r.oe,
+      defects: r.defects,
+      q_score: r.q_score,
+      p_score: r.p_score,
+      total_score: r.total_score,
+      compliance: r.compliance,
+      status: "approved",
+    }));
+
+    const { error } = await supabase
+      .from("kpi_entries")
+      .upsert(payload, { onConflict: "msnv,work_date,section" });
+
+    setSaving(false);
+    if (error) return alert("Lưu lỗi: " + error.message);
+    alert(`Đã lưu ${payload.length} dòng (approved).`);
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* ==== STEP 1: Chọn NV theo người duyệt ==== */}
+      {step === 1 && (
+        <>
+          <div className="flex items-end gap-2">
+            <div>
+              <label>MSNV người duyệt</label>
+              <input
+                className="input"
+                value={approverId}
+                onChange={(e) => setApproverId(e.target.value)}
+                placeholder="Ví dụ: 00001"
+              />
+            </div>
+            <div>
+              <label>Tìm nhân viên (MSNV/Họ tên)</label>
+              <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} />
+            </div>
+            <button className="btn" onClick={loadWorkers}>Tải danh sách NV</button>
+            <button className="btn btn-primary" onClick={proceedToTemplate} disabled={!checked.size}>
+              Tiếp tục ›
+            </button>
+          </div>
+
+          <div className="overflow-auto border rounded">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr className="text-center">
+                  <th className="p-2">
+                    <input
+                      type="checkbox"
+                      onChange={toggleAllWorkers}
+                      checked={checked.size === filteredWorkers.length && filteredWorkers.length > 0}
+                    />
+                  </th>
+                  <th className="p-2">MSNV</th>
+                  <th className="p-2">Họ & tên</th>
+                  <th className="p-2">Người duyệt phụ trách</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredWorkers.map((w) => (
+                  <tr key={w.msnv} className="border-t hover:bg-gray-50">
+                    <td className="p-2 text-center">
+                      <input
+                        type="checkbox"
+                        checked={checked.has(w.msnv)}
+                        onChange={() => toggleWorker(w.msnv)}
+                      />
+                    </td>
+                    <td className="p-2 text-center">{w.msnv}</td>
+                    <td className="p-2 text-center">{w.full_name}</td>
+                    <td className="p-2 text-center">
+                      {w.approver_name} ({w.approver_msnv})
+                    </td>
+                  </tr>
+                ))}
+                {!filteredWorkers.length && (
+                  <tr>
+                    <td colSpan={4} className="p-4 text-center text-gray-500">
+                      Không có dữ liệu
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+
+      {/* ==== STEP 2: Template CHUNG + Preview ==== */}
+      {step === 2 && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div>
+              <label>Ngày</label>
+              <input type="date" className="input" value={tplDate} onChange={(e) => setTplDate(e.target.value)} />
+            </div>
+            <div>
+              <label>Ca</label>
+              <select className="input" value={tplShift} onChange={(e) => setTplShift(e.target.value)}>
+                <option value="Ca 1">Ca 1</option>
+                <option value="Ca 2">Ca 2</option>
+                <option value="Ca 3">Ca 3</option>
+                <option value="Ca HC">Ca HC</option>
+              </select>
+            </div>
+            <div>
+              <label>Line</label>
+              <select className="input" value={tplLine} onChange={(e) => setTplLine(e.target.value)}>
+                <option value="LEAN-D1">LEAN-D1</option>
+                <option value="LEAN-D2">LEAN-D2</option>
+                <option value="LEAN-D3">LEAN-D3</option>
+                <option value="LEAN-D4">LEAN-D4</option>
+                <option value="LEAN-H1">LEAN-H1</option>
+                <option value="LEAN-H2">LEAN-H2</option>
+              </select>
+            </div>
+            <div>
+              <label>Tuân thủ</label>
+              <select className="input text-center" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>
+                {COMPLIANCE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label>Giờ làm việc</label>
+              <input type="number" className="input" value={tplWorkHours} onChange={(e) => setTplWorkHours(e.target.value)} />
+            </div>
+            <div>
+              <label>Giờ dừng máy</label>
+              <input type="number" className="input" value={tplStopHours} onChange={(e) => setTplStopHours(e.target.value)} />
+            </div>
+            <div>
+              <label>%OE</label>
+              <input type="number" className="input" value={tplOE} onChange={(e) => setTplOE(e.target.value)} />
+            </div>
+            <div>
+              <label>Phế</label>
+              <input type="number" className="input" value={tplDefects} onChange={(e) => setTplDefects(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="rounded border p-3 bg-gray-50">
+            <div className="flex gap-6 text-sm">
+              <div>Q: <b>{tplQ}</b></div>
+              <div>P: <b>{tplP}</b></div>
+              <div>KPI: <b>{tplKPI}</b></div>
+              <div className="text-gray-500 ml-auto">Các giá trị này sẽ áp cho tất cả NV ở bước Review.</div>
+            </div>
+          </div>
+
+          <div className="overflow-auto border rounded">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50 text-center">
+                <tr>
+                  <th>MSNV</th>
+                  <th>Họ tên</th>
+                  <th>Line</th>
+                  <th>Giờ làm</th>
+                  <th>Giờ dừng</th>
+                  <th>%OE</th>
+                  <th>Phế</th>
+                  <th>Q</th>
+                  <th>P</th>
+                  <th>KPI</th>
+                  <th>Tuân thủ</th>
+                </tr>
+              </thead>
+              <tbody className="text-center">
+                {Array.from(checked)
+                  .map((id) => workers.find((w) => w.msnv === id))
+                  .filter(Boolean)
+                  .map((w) => (
+                    <tr key={w.msnv} className="border-t hover:bg-gray-50">
+                      <td>{w.msnv}</td>
+                      <td>{w.full_name}</td>
+                      <td>{tplLine}</td>
+                      <td>{tplWorkHours}</td>
+                      <td>{tplStopHours}</td>
+                      <td>{tplOE}</td>
+                      <td>{tplDefects}</td>
+                      <td>{tplQ}</td>
+                      <td>{tplP}</td>
+                      <td className="font-semibold">{tplKPI}</td>
+                      <td>{COMPLIANCE_OPTIONS.find(o => o.value === tplCompliance)?.label || tplCompliance}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex justify-between">
+            <button className="btn" onClick={() => setStep(1)}>‹ Quay lại</button>
+            <button className="btn btn-primary" onClick={buildReviewRows}>
+              Tạo danh sách Review ›
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ==== STEP 3: Bảng Review có thể CHỈNH SỬA từng người ==== */}
+      {step === 3 && (
+        <EditReviewLeanline
+          pageSize={pageSize}
+          page={page}
+          setPage={setPage}
+          totalPages={totalPages}
+          pageRows={pageRows}
+          reviewRows={reviewRows}
+          setReviewRows={setReviewRows}
+          selReview={selReview}
+          setSelReview={setSelReview}
+          toggleAllReviewOnPage={toggleAllReviewOnPage}
+          toggleOneReview={toggleOneReview}
+          updateRow={updateRow}
+          saveBatch={saveBatch}
+          saving={saving}
+        />
+      )}
+    </div>
+  );
+}
+
+/* ==== Bảng Review (LEANLINE) — CHO PHÉP CHỈNH ==== */
+function EditReviewLeanline({
+  pageSize,
+  page,
+  setPage,
+  totalPages,
+  pageRows,
+  reviewRows,
+  setReviewRows,
+  selReview,
+  setSelReview,
+  toggleAllReviewOnPage,
+  toggleOneReview,
+  updateRow,
+  saveBatch,
+  saving,
+}) {
+  const globalIndex = (idx) => (page - 1) * pageSize + idx;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <button className="btn btn-primary" onClick={saveBatch} disabled={saving || !selReview.size}>
+          {saving ? "Đang lưu..." : `Lưu đã chọn (${selReview.size})`}
+        </button>
+        <div className="ml-auto flex items-center gap-3">
+          <button className="btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
+            ‹ Trước
+          </button>
+          <span>
+            Trang {page}/{totalPages}
+          </span>
+          <button className="btn" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
+            Sau ›
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-auto border rounded">
+        <table className="min-w-[1100px] text-sm">
+          <thead className="bg-gray-50 text-center">
+            <tr>
+              <th className="p-2">
+                <input
+                  type="checkbox"
+                  onChange={toggleAllReviewOnPage}
+                  checked={pageRows.length > 0 && pageRows.every((_, idx) => selReview.has(globalIndex(idx)))}
+                />
+              </th>
+              <th className="p-2">MSNV</th>
+              <th className="p-2">Họ tên</th>
+              <th className="p-2">Ngày</th>
+              <th className="p-2">Ca</th>
+              <th className="p-2">Line</th>
+              <th className="p-2">Giờ làm</th>
+              <th className="p-2">Giờ dừng</th>
+              <th className="p-2">%OE</th>
+              <th className="p-2">Phế</th>
+              <th className="p-2">Q</th>
+              <th className="p-2">P</th>
+              <th className="p-2">KPI</th>
+              <th className="p-2">Tuân thủ</th>
+            </tr>
+          </thead>
+          <tbody className="text-center">
+            {pageRows.map((r, idx) => {
+              const gi = globalIndex(idx);
+              return (
+                <tr key={gi} className="border-t hover:bg-gray-50">
+                  <td className="p-2">
+                    <input type="checkbox" checked={selReview.has(gi)} onChange={() => toggleOneReview(gi)} />
+                  </td>
+                  <td className="p-2">{r.msnv}</td>
+                  <td className="p-2">{r.hoten}</td>
+                  <td className="p-2">
+                    <input
+                      type="date"
+                      className="input text-center"
+                      value={r.work_date}
+                      onChange={(e) => updateRow(gi, "work_date", e.target.value)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <select
+                      className="input text-center"
+                      value={r.shift}
+                      onChange={(e) => updateRow(gi, "shift", e.target.value)}
+                    >
+                      <option value="Ca 1">Ca 1</option>
+                      <option value="Ca 2">Ca 2</option>
+                      <option value="Ca 3">Ca 3</option>
+                      <option value="Ca HC">Ca HC</option>
+                    </select>
+                  </td>
+                  <td className="p-2">
+                    <select
+                      className="input text-center"
+                      value={r.line || ""}
+                      onChange={(e) => updateRow(gi, "line", e.target.value)}
+                    >
+                      <option value="LEAN-D1">LEAN-D1</option>
+                      <option value="LEAN-D2">LEAN-D2</option>
+                      <option value="LEAN-D3">LEAN-D3</option>
+                      <option value="LEAN-D4">LEAN-D4</option>
+                      <option value="LEAN-H1">LEAN-H1</option>
+                      <option value="LEAN-H2">LEAN-H2</option>
+                    </select>
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="number"
+                      className="input text-center"
+                      value={r.work_hours}
+                      onChange={(e) => updateRow(gi, "work_hours", e.target.value)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="number"
+                      className="input text-center"
+                      value={r.downtime}
+                      onChange={(e) => updateRow(gi, "downtime", e.target.value)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="number"
+                      className="input text-center"
+                      value={r.oe}
+                      onChange={(e) => updateRow(gi, "oe", e.target.value)}
+                    />
+                  </td>
+                  <td className="p-2">
+                    <input
+                      type="number"
+                      className="input text-center"
+                      value={r.defects}
+                      onChange={(e) => updateRow(gi, "defects", e.target.value)}
+                    />
+                  </td>
+                  <td className="p-2">{r.q_score}</td>
+                  <td className="p-2">{r.p_score}</td>
+                  <td className="p-2 font-semibold">{r.total_score}</td>
+                  <td className="p-2">
+                    <select
+                      className="input text-center"
+                      value={r.compliance}
+                      onChange={(e) => updateRow(gi, "compliance", e.target.value)}
+                    >
+                      {COMPLIANCE_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                </tr>
+              );
+            })}
+            {!pageRows.length && (
+              <tr>
+                <td colSpan={14} className="p-4 text-center text-gray-500">
+                  Không có dữ liệu
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ======================================================================
+   APPROVER MODE — MOLDING (giữ nguyên logic cũ)
    - Chọn MSNV người duyệt → chọn nhân viên → nhập template → LƯU = approved
    ====================================================================== */
-   function ApproverMode({ isMolding, section }) {
-    const [step, setStep] = useState(1);
-    const [approverId, setApproverId] = useState("");
-    const [workers, setWorkers] = useState([]);
-    const [checked, setChecked] = useState(new Set());
-    const [search, setSearch] = useState("");
-    const [rows, setRows] = useState([]);
-  
-    // Lọc nhân viên
-    const filteredWorkers = useMemo(() => {
-      const q = search.trim().toLowerCase();
-      if (!q) return workers;
-      return workers.filter(
-        (w) =>
-          String(w.msnv).toLowerCase().includes(q) ||
-          String(w.full_name || "").toLowerCase().includes(q)
-      );
-    }, [workers, search]);
-  
-    // --- Tải danh sách nhân viên theo người duyệt ---
-    async function loadWorkers() {
-      const id = approverId.trim();
-      if (!id) return alert("Nhập MSNV người duyệt trước.");
-      const { data, error } = await supabase
-        .from("users")
-        .select("msnv, full_name, approver_msnv, approver_name")
-        .eq("approver_msnv", id);
-      if (error) return alert("Lỗi tải nhân viên: " + error.message);
-      setWorkers(data || []);
-      setChecked(new Set());
-    }
-  
-    // --- Chọn nhân viên ---
-    function toggleWorker(msnv) {
-      setChecked(prev => {
-        const next = new Set(prev);
-        if (next.has(msnv)) next.delete(msnv);
-        else next.add(msnv);
-        return next;
-      });
-    }
-  
-    function toggleAllWorkers() {
-      setChecked(prev =>
-        prev.size === filteredWorkers.length
-          ? new Set()
-          : new Set(filteredWorkers.map(w => w.msnv))
-      );
-    }
+function ApproverModeMolding({ section }) {
+  const [step, setStep] = useState(1);
+  const [approverId, setApproverId] = useState("");
+  const [workers, setWorkers] = useState([]);
+  const [checked, setChecked] = useState(new Set());
+  const [search, setSearch] = useState("");
+  const [rows, setRows] = useState([]);
 
-     // --- Sang bước nhập KPI ---
+  // Lọc nhân viên
+  const filteredWorkers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return workers;
+    return workers.filter(
+      (w) =>
+        String(w.msnv).toLowerCase().includes(q) ||
+        String(w.full_name || "").toLowerCase().includes(q)
+    );
+  }, [workers, search]);
+
+  // --- Tải danh sách nhân viên theo người duyệt ---
+  async function loadWorkers() {
+    const id = approverId.trim();
+    if (!id) return alert("Nhập MSNV người duyệt trước.");
+    const { data, error } = await supabase
+      .from("users")
+      .select("msnv, full_name, approver_msnv, approver_name")
+      .eq("approver_msnv", id);
+    if (error) return alert("Lỗi tải nhân viên: " + error.message);
+    setWorkers(data || []);
+    setChecked(new Set());
+  }
+
+  // --- Chọn nhân viên ---
+  function toggleWorker(msnv) {
+    setChecked(prev => {
+      const next = new Set(prev);
+      if (next.has(msnv)) next.delete(msnv);
+      else next.add(msnv);
+      return next;
+    });
+  }
+
+  function toggleAllWorkers() {
+    setChecked(prev =>
+      prev.size === filteredWorkers.length
+        ? new Set()
+        : new Set(filteredWorkers.map(w => w.msnv))
+    );
+  }
+
+  // --- Sang bước nhập KPI ---
   function proceedToTemplate() {
     if (!checked.size) return alert("Chưa chọn nhân viên nào.");
     const selected = workers.filter(w => checked.has(w.msnv));
@@ -230,7 +814,6 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
   const [category, setCategory] = useState("");
   const [categoryOptions, setCategoryOptions] = useState([]);
   useEffect(() => {
-    if (!isMolding) return;
     supabase
       .from("kpi_rule_productivity")
       .select("category")
@@ -241,7 +824,7 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
         const list = [...new Set((data || []).map((r) => r.category).filter(Boolean))];
         setCategoryOptions(list);
       });
-  }, [isMolding]);
+  }, []);
 
   /* Review rows */
   const [reviewRows, setReviewRows] = useState([]);
@@ -249,99 +832,73 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
 
   async function buildReviewRows() {
     if (!date || !shift) return alert("Nhập Ngày & Ca.");
-    if (isMolding && !category) return alert("Chọn Loại hàng.");
+    if (!category) return alert("Chọn Loại hàng.");
 
     const selectedWorkers = workers.filter((w) => checked.has(w.msnv));
     const rows = [];
 
     let rulesByCat = {};
-    if (isMolding) {
-      const { data: ruleRows } = await supabase
-        .from("kpi_rule_productivity")
-        .select("category, threshold, score")
-        .eq("section", "MOLDING")
-        .eq("active", true)
-        .order("category", { ascending: true })
-        .order("threshold", { ascending: false });
-      (ruleRows || []).forEach((r) => {
-        if (!rulesByCat[r.category]) rulesByCat[r.category] = [];
-        rulesByCat[r.category].push({
-          threshold: Number(r.threshold),
-          score: Number(r.score),
-        });
+    const { data: ruleRows } = await supabase
+      .from("kpi_rule_productivity")
+      .select("category, threshold, score")
+      .eq("section", "MOLDING")
+      .eq("active", true)
+      .order("category", { ascending: true })
+      .order("threshold", { ascending: false });
+    (ruleRows || []).forEach((r) => {
+      if (!rulesByCat[r.category]) rulesByCat[r.category] = [];
+      rulesByCat[r.category].push({
+        threshold: Number(r.threshold),
+        score: Number(r.score),
       });
-    }
+    });
 
     selectedWorkers.forEach((w) => {
-      if (isMolding) {
-        const working_real = calcWorkingReal(shift, workingInput);
-        let downtime = (working_real * 24 - toNum(moldHours)) / 24;
-        if (downtime > 1) downtime = 1;
-        if (downtime < 0) downtime = 0;
-        const working_exact = Number((working_real - downtime).toFixed(2));
-        const prod = working_exact > 0 ? toNum(output) / working_exact : 0;
+      const working_real = calcWorkingReal(shift, workingInput);
+      let downtime = (working_real * 24 - toNum(moldHours)) / 24;
+      if (downtime > 1) downtime = 1;
+      if (downtime < 0) downtime = 0;
+      const working_exact = Number((working_real - downtime).toFixed(2));
+      const prod = working_exact > 0 ? toNum(output) / working_exact : 0;
 
-        const qScore = calcQ(defects);
-        let pScore = 0;
-        const catRules = rulesByCat[category] || [];
-        for (const r of catRules) {
-          if (prod >= r.threshold) {
-            pScore = r.score;
-            break;
-          }
+      const qScore = calcQ(defects);
+      let pScore = 0;
+      const catRules = rulesByCat[category] || [];
+      for (const r of catRules) {
+        if (prod >= r.threshold) {
+          pScore = r.score;
+          break;
         }
-        const dayScore = pScore + qScore;
-
-        rows.push({
-          section,
-          date,
-          ca: shift,
-          worker_id: w.msnv,
-          worker_name: w.full_name,
-          approver_msnv: approverId, // người duyệt đã chọn
-          approver_name: w.approver_name,
-          category,
-          working_input: toNum(workingInput),
-          working_real: Number(working_real.toFixed(2)),
-          downtime: Number(downtime.toFixed(2)),
-          working_exact,
-          mold_hours: toNum(moldHours),
-          output: toNum(output),
-          defects: toNum(defects),
-          q_score: qScore,
-          p_score: pScore,
-          day_score: dayScore,
-          compliance_code: compliance,
-          status: "approved", // ⬅ duyệt luôn
-        });
-      } else {
-        const qScore = calcQ(defects);
-        const pScore = calcPfromOE(oe);
-        const dayScore = pScore + qScore;
-        rows.push({
-          section,
-          work_date: date,
-          shift,
-          msnv: w.msnv,
-          hoten: w.full_name,
-          approver_id: approverId, // người duyệt đã chọn
-          approver_name: w.approver_name,
-          oe: toNum(oe),
-          defects: toNum(defects),
-          q_score: qScore,
-          p_score: pScore,
-          total_score: dayScore,
-          compliance,
-          status: "approved", // ⬅ duyệt luôn
-        });
       }
+      const dayScore = pScore + qScore;
+
+      rows.push({
+        section,
+        date,
+        ca: shift,
+        worker_id: w.msnv,
+        worker_name: w.full_name,
+        approver_msnv: approverId, // người duyệt đã chọn
+        approver_name: w.approver_name,
+        category,
+        working_input: toNum(workingInput),
+        working_real: Number(working_real.toFixed(2)),
+        downtime: Number(downtime.toFixed(2)),
+        working_exact,
+        mold_hours: toNum(moldHours),
+        output: toNum(output),
+        defects: toNum(defects),
+        q_score: qScore,
+        p_score: pScore,
+        day_score: dayScore,
+        compliance_code: compliance,
+        status: "approved", // ⬅ duyệt luôn
+      });
     });
 
     setReviewRows(rows);
     setSelReview(new Set(rows.map((_, i) => i)));
     setStep(3);
-    setRows(rows); // lưu lại dữ liệu để hiển thị bảng chỉnh sửa KPI
-
   }
 
   /* paging review */
@@ -383,79 +940,36 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
     setSaving(true);
     const list = idxs.map((i) => reviewRows[i]);
 
-    if (isMolding) {
-      const payload = list.map((r) => ({
-        section: r.section,
-        date: r.date,
-        ca: r.ca,
-        worker_id: r.worker_id,
-        worker_name: r.worker_name,
-        approver_msnv: r.approver_msnv,
-        approver_name: r.approver_name,
-        category: r.category,
-        working_input: r.working_input,
-        working_real: r.working_real,
-        working_exact: r.working_exact,
-        downtime: r.downtime,
-        mold_hours: r.mold_hours,
-        output: r.output,
-        defects: r.defects,
-        q_score: r.q_score,
-        p_score: r.p_score,
-        day_score: r.day_score,
-        compliance_code: r.compliance_code,
-        status: "approved",
-      }));
-      const { error } = await supabase
-        .from("kpi_entries_molding")
-        .upsert(payload, { onConflict: "worker_id,date,section" });
-      setSaving(false);
-      if (error) return alert("Lưu lỗi: " + error.message);
-      alert(`Đã lưu ${payload.length} dòng (approved).`);
-    } else {
-      const payload = list.map((r) => ({
-        section: r.section,
-        work_date: r.work_date,
-        shift: r.shift,
-        msnv: r.msnv,
-        hoten: r.hoten,
-        approver_id: r.approver_id,
-        approver_name: r.approver_name,
-        oe: r.oe,
-        defects: r.defects,
-        q_score: r.q_score,
-        p_score: r.p_score,
-        total_score: r.total_score,
-        compliance: r.compliance,
-        status: "approved",
-      }));
-      const { error } = await supabase.from("kpi_entries").upsert(payload, {
-        onConflict: "msnv,work_date,section",
-      });
-      setSaving(false);
-      if (error) return alert("Lưu lỗi: " + error.message);
-      alert(`Đã lưu ${payload.length} dòng (approved).`);
-    }
+    const payload = list.map((r) => ({
+      section: r.section,
+      date: r.date,
+      ca: r.ca,
+      worker_id: r.worker_id,
+      worker_name: r.worker_name,
+      approver_msnv: r.approver_msnv,
+      approver_name: r.approver_name,
+      category: r.category,
+      working_input: r.working_input,
+      working_real: r.working_real,
+      working_exact: r.working_exact,
+      downtime: r.downtime,
+      mold_hours: r.mold_hours,
+      output: r.output,
+      defects: r.defects,
+      q_score: r.q_score,
+      p_score: r.p_score,
+      day_score: r.day_score,
+      compliance_code: r.compliance_code,
+      status: "approved",
+    }));
+    const { error } = await supabase
+      .from("kpi_entries_molding")
+      .upsert(payload, { onConflict: "worker_id,date,section" });
+    setSaving(false);
+    if (error) return alert("Lưu lỗi: " + error.message);
+    alert(`Đã lưu ${payload.length} dòng (approved).`);
   }
-  function update(i, field, val) {
-    setRows(prev => {
-      const copy = [...prev];
-      const r = { ...copy[i], [field]: val };
 
-      const defects = Number(r.defects || 0);
-      const hours = Number(r.work_hours || 8);
-      const downtime = Number(r.downtime || 0);
-      const oe = ((hours - downtime) / hours) * 100;
-
-      const q = calcQ(defects);
-      const p = calcPfromOE(oe);
-      const kpi = ((q + p) / 2).toFixed(1);
-
-      copy[i] = { ...r, oe: oe.toFixed(1), q_score: q, p_score: p, kpi_score: kpi };
-      return copy;
-    });
-  }
-  
   /* UI */
   return (
     <div className="space-y-4">
@@ -554,79 +1068,7 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
             </div>
           </div>
 
-          <div className="overflow-auto border rounded">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-center">
-                <tr>
-                  <th>MSNV</th>
-                  <th>Họ tên</th>
-                  <th>Line</th>
-                  <th>Giờ làm việc</th>
-                  <th>Giờ dừng máy</th>
-                  <th>Phế</th>
-                  <th>Q</th>
-                  <th>P</th>
-                  <th>KPI</th>
-                  <th>Tuân thủ</th>
-                </tr>
-              </thead>
-              <tbody className="text-center">
-                {rows.map((r, i) => (
-                  <tr key={r.worker_id} className="border-t hover:bg-gray-50">
-                    <td>{r.worker_id}</td>
-                    <td>{r.worker_name}</td>
-                    <td>
-                      <input
-                        className="input text-center"
-                        value={r.line || ""}
-                        onChange={(e) => update(i, "line", e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        className="input text-center"
-                        value={r.work_hours || 8}
-                        onChange={(e) => update(i, "work_hours", e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        className="input text-center"
-                        value={r.downtime || 0}
-                        onChange={(e) => update(i, "downtime", e.target.value)}
-                      />
-                    </td>
-                    <td>
-                      <input
-                        type="number"
-                        className="input text-center"
-                        value={r.defects || 0}
-                        onChange={(e) => update(i, "defects", e.target.value)}
-                      />
-                    </td>
-                    <td>{r.q_score ?? 0}</td>
-                    <td>{r.p_score ?? 0}</td>
-                    <td>{r.kpi_score ?? 0}</td>
-                    <td>
-                      <select
-                        className="input text-center"
-                        value={r.compliance_code || compliance}
-                        onChange={(e) => update(i, "compliance_code", e.target.value)}
-                      >
-                        {COMPLIANCE_OPTIONS.map(opt => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          {/* (giữ phần nhập dạng bảng cũ cho Molding) */}
 
           <button className="btn btn-primary" onClick={buildReviewRows}>
             Tạo danh sách Review ›
@@ -634,11 +1076,9 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
         </div>
       )}
 
-
       {step === 3 && (
-        <ReviewTable
-          isMolding={isMolding}
-          pageSize={50}
+        <ReviewTableMolding
+          pageSize={pageSize}
           pageRows={pageRows}
           totalPages={totalPages}
           page={page}
@@ -654,16 +1094,108 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
   );
 }
 
+/* ===== Bảng review (MOLDING) giữ nguyên dùng chung trước đây ===== */
+function ReviewTableMolding({
+  pageRows,
+  totalPages,
+  page,
+  setPage,
+  selReview,
+  toggleAllReviewOnPage,
+  toggleOneReview,
+  saveBatch,
+  saving,
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2">
+        <button className="btn btn-primary" onClick={saveBatch} disabled={saving || !selReview.size}>
+          {saving ? "Đang lưu..." : `Lưu đã chọn (${selReview.size})`}
+        </button>
+        <div className="ml-auto flex items-center gap-3">
+          <span>Tổng: {pageRows.length} / trang</span>
+          <button className="btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
+            ‹ Trước
+          </button>
+          <span>
+            Trang {page}/{totalPages}
+          </span>
+          <button className="btn" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
+            Sau ›
+          </button>
+        </div>
+      </div>
+
+      <div className="overflow-auto border rounded">
+        <table className="min-w-full text-sm">
+          <thead className="bg-gray-50 text-center">
+            <tr>
+              <th className="p-2">
+                <input type="checkbox" onChange={toggleAllReviewOnPage} />
+              </th>
+              <th className="p-2">MSNV</th>
+              <th className="p-2">Họ tên</th>
+              <th className="p-2">Ngày</th>
+              <th className="p-2">Ca</th>
+              <th className="p-2">Loại hàng</th>
+              <th className="p-2">Giờ nhập</th>
+              <th className="p-2">Giờ thực tế</th>
+              <th className="p-2">Downtime</th>
+              <th className="p-2">Giờ chính xác</th>
+              <th className="p-2">Khuôn chạy</th>
+              <th className="p-2">SL/ca</th>
+              <th className="p-2">Phế</th>
+              <th className="p-2">Q</th>
+              <th className="p-2">P</th>
+              <th className="p-2">KPI</th>
+              <th className="p-2">Tuân thủ</th>
+            </tr>
+          </thead>
+          <tbody className="text-center">
+            {pageRows.map((r, idx) => (
+              <tr key={idx} className="border-t hover:bg-gray-50">
+                <td className="p-2">
+                  <input type="checkbox" checked={selReview.has(idx)} onChange={() => toggleOneReview(idx)} />
+                </td>
+                <td className="p-2">{r.worker_id}</td>
+                <td className="p-2">{r.worker_name}</td>
+                <td className="p-2">{r.date}</td>
+                <td className="p-2">{r.ca}</td>
+                <td className="p-2">{r.category}</td>
+                <td className="p-2">{r.working_input}</td>
+                <td className="p-2">{r.working_real}</td>
+                <td className="p-2">{r.downtime}</td>
+                <td className="p-2">{r.working_exact}</td>
+                <td className="p-2">{r.mold_hours}</td>
+                <td className="p-2">{r.output}</td>
+                <td className="p-2">{r.defects}</td>
+                <td className="p-2">{r.q_score}</td>
+                <td className="p-2">{r.p_score}</td>
+                <td className="p-2 font-semibold">{r.day_score}</td>
+                <td className="p-2">{r.compliance_code}</td>
+              </tr>
+            ))}
+            {!pageRows.length && (
+              <tr>
+                <td colSpan={17} className="p-4 text-center text-gray-500">
+                  Không có dữ liệu
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 /* ======================================================================
-   MODE 2: Tự nhập (MSNV người nhập) – MOLDING ONLY
-   - Nhập MSNV người nhập → chọn khoảng ngày → Tải danh sách = hiển thị các ngày
-   - Nhập y chang EntryPageMolding, có sẵn cột MSNV/Họ tên NV & MSNV/Họ tên người nhập
-   - Lưu = approved, upsert theo (worker_id, date, section)
+   MODE 2: Tự nhập (MSNV người nhập) – MOLDING ONLY (giữ nguyên tinh gọn)
    ====================================================================== */
 function SelfModeMolding({ section }) {
   const [entrantId, setEntrantId] = useState("");
   const [entrantName, setEntrantName] = useState("");
-  const [workerId, setWorkerId] = useState("");     // nhân viên = người nhập
+  const [workerId, setWorkerId] = useState("");
   const [workerName, setWorkerName] = useState("");
 
   // lấy họ tên từ bảng users theo MSNV người nhập
@@ -745,10 +1277,8 @@ function SelfModeMolding({ section }) {
       section,
       date: d,
       ca: "",
-      // nhân viên = người nhập
       worker_id: workerId,
       worker_name: workerName,
-      // hiển thị người nhập (không có cột riêng trong DB, sẽ lưu vào approver_* cho tiện theo dõi)
       entrant_msnv: entrantId,
       entrant_name: entrantName,
 
@@ -764,12 +1294,11 @@ function SelfModeMolding({ section }) {
       p_score: 0,
       day_score: 0,
       compliance_code: "NONE",
-      status: "approved", // duyệt luôn
+      status: "approved",
     }));
     setRows(base);
   }
 
-  // cập nhật & tính lại
   function recompute(row) {
     const working_real = calcWorkingReal(row.ca, row.working_input);
     let downtime = (working_real * 24 - toNum(row.mold_hours)) / 24;
@@ -809,94 +1338,86 @@ function SelfModeMolding({ section }) {
     });
   }
 
-  // lưu tất cả (approved)
   const [saving, setSaving] = useState(false);
   async function saveAll() {
     if (!rows.length) return alert("Không có dữ liệu để lưu.");
-    const payload = rows.map(r => ({
-      section,
-      work_date: new Date().toISOString().slice(0, 10),
-      shift: "Ca 1",
-      msnv: r.msnv,
-      hoten: r.hoten,
-      approver_id: approverId,
-      approver_name: "Auto Approver",
-      line: r.line,
-      work_hours: r.work_hours,
+    // Tùy DB của bạn, ở SelfMode này bạn có thể chuyển sang bảng molding nếu muốn.
+    const payload = rows.map((r) => ({
+      section: r.section,
+      date: r.date,
+      ca: r.ca,
+      worker_id: r.worker_id,
+      worker_name: r.worker_name,
+      approver_msnv: r.entrant_msnv,
+      approver_name: r.entrant_name,
+      category: r.category,
+      working_input: r.working_input,
+      working_real: r.working_real,
+      working_exact: r.working_exact,
       downtime: r.downtime,
-      oe: r.oe,
+      mold_hours: r.mold_hours,
+      output: r.output,
       defects: r.defects,
       q_score: r.q_score,
       p_score: r.p_score,
-      total_score: Number(r.kpi_score),
-      compliance: r.compliance,
+      day_score: r.day_score,
+      compliance_code: r.compliance_code,
       status: "approved",
     }));
+
+    setSaving(true);
     const { error } = await supabase
-      .from("kpi_entries")
-      .upsert(payload, { onConflict: "msnv,work_date,section" });
+      .from("kpi_entries_molding")
+      .upsert(payload, { onConflict: "worker_id,date,section" });
+    setSaving(false);
 
     if (error) return alert("Lưu lỗi: " + error.message);
     alert(`Đã lưu ${payload.length} dòng.`);
-    setStep(3);
   }
 
   return (
     <div className="space-y-4">
-      {/* --- STEP 1: Chọn nhân viên --- */}
-      {step === 1 && (
-        <>
-          <div className="flex gap-2 items-end">
-            <div>
-              <label>MSNV người duyệt</label>
-              <input className="input" value={approverId} onChange={(e) => setApproverId(e.target.value)} />
-            </div>
-            <div>
-              <label>Tìm nhân viên</label>
-              <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} />
-            </div>
-            <button className="btn" onClick={loadWorkers}>Tải danh sách</button>
-            <button className="btn btn-primary" onClick={proceedToTemplate}>Tiếp tục ›</button>
-          </div>
+      <div className="rounded border p-3 space-y-3">
+        <div className="grid md:grid-cols-3 gap-3">
+          <label>MSNV người nhập
+            <input className="input" value={entrantId} onChange={(e) => setEntrantId(e.target.value)} />
+          </label>
+          <label>Họ tên người nhập
+            <input className="input" value={entrantName} readOnly />
+          </label>
+          <label>MSNV/Họ tên (áp dụng = người nhập)
+            <input className="input" value={`${workerId} / ${workerName}`} readOnly />
+          </label>
+        </div>
 
-          <div className="overflow-auto border rounded">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-center">
-                <tr>
-                  <th><input type="checkbox" onChange={toggleAllWorkers} /></th>
-                  <th>MSNV</th>
-                  <th>Họ & tên</th>
-                  <th>Người duyệt phụ trách</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredWorkers.map(w => (
-                  <tr key={w.msnv} className="border-t">
-                    <td><input type="checkbox" checked={checked.has(w.msnv)} onChange={() => toggleWorker(w.msnv)} /></td>
-                    <td>{w.msnv}</td>
-                    <td>{w.full_name}</td>
-                    <td>{w.approver_name}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="grid md:grid-cols-3 gap-3">
+          <label>Từ ngày
+            <input type="date" className="input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          </label>
+          <label>Đến ngày
+            <input type="date" className="input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          </label>
+          <div className="flex items-end">
+            <button className="btn" onClick={buildRowsByDates}>Tạo danh sách ngày</button>
           </div>
-        </>
-      )}
+        </div>
+      </div>
 
-      {/* --- STEP 2: Template nhập KPI --- */}
-      {step === 2 && (
+      {!!rows.length && (
         <>
           <div className="overflow-auto border rounded">
             <table className="min-w-[1100px] text-sm">
               <thead className="bg-gray-50 text-center">
                 <tr>
-                  <th>MSNV</th>
-                  <th>Họ tên</th>
-                  <th>Line</th>
-                  <th>Giờ làm việc</th>
-                  <th>Giờ dừng</th>
-                  <th>%OE</th>
+                  <th>Ngày</th>
+                  <th>Ca</th>
+                  <th>Loại hàng</th>
+                  <th>Giờ nhập</th>
+                  <th>Giờ thực tế</th>
+                  <th>Downtime</th>
+                  <th>Giờ chính xác</th>
+                  <th>Khuôn chạy</th>
+                  <th>SL/ca</th>
                   <th>Phế</th>
                   <th>Q</th>
                   <th>P</th>
@@ -906,37 +1427,45 @@ function SelfModeMolding({ section }) {
               </thead>
               <tbody className="text-center">
                 {rows.map((r, i) => (
-                  <tr key={r.msnv} className="border-t hover:bg-gray-50">
-                    <td>{r.msnv}</td>
-                    <td>{r.hoten}</td>
+                  <tr key={r.date} className="border-t hover:bg-gray-50">
+                    <td>{r.date}</td>
                     <td>
-                      <input className="input text-center"
-                        value={r.line}
-                        onChange={(e) => update(i, "line", e.target.value)} />
+                      <select className="input text-center" value={r.ca} onChange={(e) => update(i, "ca", e.target.value)}>
+                        <option value="">--Ca--</option>
+                        <option value="Ca 1">Ca 1</option>
+                        <option value="Ca 2">Ca 2</option>
+                        <option value="Ca 3">Ca 3</option>
+                        <option value="Ca HC">Ca HC</option>
+                      </select>
                     </td>
                     <td>
-                      <input type="number" className="input text-center"
-                        value={r.work_hours}
-                        onChange={(e) => update(i, "work_hours", e.target.value)} />
+                      <select className="input text-center" value={r.category} onChange={(e) => update(i, "category", e.target.value)}>
+                        <option value="">--Loại--</option>
+                        {/* Bạn có thể nạp options từ DB tương tự ApproverModeMolding */}
+                        <option value="A">A</option>
+                        <option value="B">B</option>
+                      </select>
                     </td>
                     <td>
-                      <input type="number" className="input text-center"
-                        value={r.downtime}
-                        onChange={(e) => update(i, "downtime", e.target.value)} />
+                      <input type="number" className="input text-center" value={r.working_input} onChange={(e) => update(i, "working_input", e.target.value)} />
                     </td>
-                    <td>{r.oe}</td>
+                    <td>{r.working_real}</td>
+                    <td>{r.downtime}</td>
+                    <td>{r.working_exact}</td>
                     <td>
-                      <input type="number" className="input text-center"
-                        value={r.defects}
-                        onChange={(e) => update(i, "defects", e.target.value)} />
+                      <input type="number" className="input text-center" value={r.mold_hours} onChange={(e) => update(i, "mold_hours", e.target.value)} />
+                    </td>
+                    <td>
+                      <input type="number" className="input text-center" value={r.output} onChange={(e) => update(i, "output", e.target.value)} />
+                    </td>
+                    <td>
+                      <input type="number" className="input text-center" value={r.defects} onChange={(e) => update(i, "defects", e.target.value)} />
                     </td>
                     <td>{r.q_score}</td>
                     <td>{r.p_score}</td>
-                    <td className="font-semibold">{r.kpi_score}</td>
+                    <td className="font-semibold">{r.day_score}</td>
                     <td>
-                      <select className="input text-center"
-                        value={r.compliance}
-                        onChange={(e) => update(i, "compliance", e.target.value)}>
+                      <select className="input text-center" value={r.compliance_code} onChange={(e) => update(i, "compliance_code", e.target.value)}>
                         {COMPLIANCE_OPTIONS.map(opt => (
                           <option key={opt.value} value={opt.value}>{opt.label}</option>
                         ))}
@@ -949,195 +1478,12 @@ function SelfModeMolding({ section }) {
           </div>
 
           <div className="flex justify-end gap-2">
-            <button className="btn" onClick={() => setStep(1)}>‹ Quay lại</button>
-            <button className="btn btn-primary" onClick={saveAll}>Lưu tất cả</button>
+            <button className="btn btn-primary" onClick={saveAll} disabled={saving}>
+              {saving ? "Đang lưu..." : "Lưu tất cả"}
+            </button>
           </div>
         </>
       )}
-
-      {/* --- STEP 3: Review lại sau khi lưu --- */}
-      {step === 3 && (
-        <div className="overflow-auto border rounded">
-          <table className="min-w-[1000px] text-sm">
-            <thead className="bg-gray-50 text-center">
-              <tr>
-                <th>MSNV</th>
-                <th>Họ tên</th>
-                <th>Line</th>
-                <th>Giờ làm việc</th>
-                <th>Giờ dừng</th>
-                <th>%OE</th>
-                <th>Phế</th>
-                <th>Q</th>
-                <th>P</th>
-                <th>KPI</th>
-                <th>Tuân thủ</th>
-              </tr>
-            </thead>
-            <tbody className="text-center">
-              {rows.map(r => (
-                <tr key={r.msnv} className="border-t">
-                  <td>{r.msnv}</td>
-                  <td>{r.hoten}</td>
-                  <td>{r.line}</td>
-                  <td>{r.work_hours}</td>
-                  <td>{r.downtime}</td>
-                  <td>{r.oe}</td>
-                  <td>{r.defects}</td>
-                  <td>{r.q_score}</td>
-                  <td>{r.p_score}</td>
-                  <td className="font-semibold">{r.kpi_score}</td>
-                  <td>{COMPLIANCE_OPTIONS.find(opt => opt.value === r.compliance)?.label || r.compliance}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="flex justify-end mt-3">
-            <button className="btn btn-primary" onClick={() => setStep(1)}>Nhập mới</button>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ===== Bảng review dùng chung cho ApproverMode ===== */
-function ReviewTable({
-  isMolding,
-  pageRows,
-  totalPages,
-  page,
-  setPage,
-  selReview,
-  toggleAllReviewOnPage,
-  toggleOneReview,
-  saveBatch,
-  saving,
-}) {
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-2">
-        <button className="btn btn-primary" onClick={saveBatch} disabled={saving || !selReview.size}>
-          {saving ? "Đang lưu..." : `Lưu đã chọn (${selReview.size})`}
-        </button>
-        <div className="ml-auto flex items-center gap-3">
-          <span>Tổng: {pageRows.length} / trang</span>
-          <button className="btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
-            ‹ Trước
-          </button>
-          <span>
-            Trang {page}/{totalPages}
-          </span>
-          <button className="btn" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
-            Sau ›
-          </button>
-        </div>
-      </div>
-
-      <div className="overflow-auto border rounded">
-        <table className="min-w-full text-sm">
-          <thead className="bg-gray-50 text-center">
-            {isMolding ? (
-              <tr>
-                <th className="p-2">
-                  <input
-                    type="checkbox"
-                    onChange={toggleAllReviewOnPage}
-                    checked={pageRows.length > 0 && pageRows.every((_, idx) => selReview.has(idx))}
-                  />
-                </th>
-                <th className="p-2">MSNV</th>
-                <th className="p-2">Họ tên</th>
-                <th className="p-2">Ngày</th>
-                <th className="p-2">Ca</th>
-                <th className="p-2">Loại hàng</th>
-                <th className="p-2">Giờ nhập</th>
-                <th className="p-2">Giờ thực tế</th>
-                <th className="p-2">Downtime</th>
-                <th className="p-2">Giờ chính xác</th>
-                <th className="p-2">Khuôn chạy</th>
-                <th className="p-2">SL/ca</th>
-                <th className="p-2">Phế</th>
-                <th className="p-2">Q</th>
-                <th className="p-2">P</th>
-                <th className="p-2">KPI</th>
-                <th className="p-2">Tuân thủ</th>
-              </tr>
-            ) : (
-              <tr>
-                <th className="p-2">
-                  <input
-                    type="checkbox"
-                    onChange={toggleAllReviewOnPage}
-                    checked={pageRows.length > 0 && pageRows.every((_, idx) => selReview.has(idx))}
-                  />
-                </th>
-                <th className="p-2">MSNV</th>
-                <th className="p-2">Họ tên</th>
-                <th className="p-2">Ngày</th>
-                <th className="p-2">Ca</th>
-                <th className="p-2">%OE</th>
-                <th className="p-2">Phế</th>
-                <th className="p-2">Q</th>
-                <th className="p-2">P</th>
-                <th className="p-2">KPI</th>
-                <th className="p-2">Tuân thủ</th>
-              </tr>
-            )}
-          </thead>
-          <tbody className="text-center">
-            {pageRows.map((r, idx) =>
-              isMolding ? (
-                <tr key={idx} className="border-t hover:bg-gray-50">
-                  <td className="p-2">
-                    <input type="checkbox" checked={selReview.has(idx)} onChange={() => toggleOneReview(idx)} />
-                  </td>
-                  <td className="p-2">{r.worker_id}</td>
-                  <td className="p-2">{r.worker_name}</td>
-                  <td className="p-2">{r.date}</td>
-                  <td className="p-2">{r.ca}</td>
-                  <td className="p-2">{r.category}</td>
-                  <td className="p-2">{r.working_input}</td>
-                  <td className="p-2">{r.working_real}</td>
-                  <td className="p-2">{r.downtime}</td>
-                  <td className="p-2">{r.working_exact}</td>
-                  <td className="p-2">{r.mold_hours}</td>
-                  <td className="p-2">{r.output}</td>
-                  <td className="p-2">{r.defects}</td>
-                  <td className="p-2">{r.q_score}</td>
-                  <td className="p-2">{r.p_score}</td>
-                  <td className="p-2 font-semibold">{r.day_score}</td>
-                  <td className="p-2">{r.compliance_code}</td>
-                </tr>
-              ) : (
-                <tr key={idx} className="border-t hover:bg-gray-50">
-                  <td className="p-2">
-                    <input type="checkbox" checked={selReview.has(idx)} onChange={() => toggleOneReview(idx)} />
-                  </td>
-                  <td className="p-2">{r.msnv}</td>
-                  <td className="p-2">{r.hoten}</td>
-                  <td className="p-2">{r.work_date}</td>
-                  <td className="p-2">{r.shift}</td>
-                  <td className="p-2">{r.oe}</td>
-                  <td className="p-2">{r.defects}</td>
-                  <td className="p-2">{r.q_score}</td>
-                  <td className="p-2">{r.p_score}</td>
-                  <td className="p-2 font-semibold">{r.total_score}</td>
-                  <td className="p-2">{r.compliance}</td>
-                </tr>
-              )
-            )}
-            {!pageRows.length && (
-              <tr>
-                <td colSpan={isMolding ? 17 : 11} className="p-4 text-center text-gray-500">
-                  Không có dữ liệu
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }
