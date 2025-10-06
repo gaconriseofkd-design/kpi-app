@@ -6,11 +6,11 @@ import { useKpiSection } from "../context/KpiSectionContext";
 /* ===== Danh sách Tuân thủ dùng chung ===== */
 const COMPLIANCE_OPTIONS = [
   { value: "NONE", label: "Không vi phạm" },
-  { value: "LATE", label: "Ký mẫu đầu chuyền trước khi sử dụng" },
-  { value: "PPE", label: "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất" },
-  { value: "MAT", label: "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất" },
-  { value: "SPEC", label: "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất" },
-  { value: "RULE", label: "Vi phạm nội quy bộ phận/công ty" },
+  { value: "Ký mẫu đầu chuyền trước khi sử dụng", label: "Ký mẫu đầu chuyền trước khi sử dụng" },
+  { value: "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất", label: "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất" },
+  { value: "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất", label: "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất" },
+  { value: "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất", label: "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất" },
+  { value: "Vi phạm nội quy bộ phận/công ty", label: "Vi phạm nội quy bộ phận/công ty" },
 ];
 
 /* ===== Helpers ===== */
