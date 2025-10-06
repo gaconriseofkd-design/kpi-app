@@ -886,10 +886,12 @@ function SelfModeMolding({ section }) {
                     <td className="p-2 font-semibold">{r.day_score}</td>
                     <td className="p-2">
                       <select className="input text-center" value={r.compliance_code} onChange={(e) => update(i, "compliance_code", e.target.value)}>
-                        <option value="NONE">NONE</option>
-                        <option value="PPE">PPE</option>
-                        <option value="LATE">LATE</option>
-                        <option value="OTHER">OTHER</option>
+                      <option value="NONE">Không vi phạm</option>
+                      <option value="LATE">Ký mẫu đầu chuyền trước khi sử dụng</option>
+                      <option value="PPE">Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất</option>
+                      <option value="MAT">Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất</option>
+                      <option value="SPEC">Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất</option>
+                      <option value="RULE">Vi phạm nội quy bộ phận/công ty</option>
                       </select>
                     </td>
                   </tr>
