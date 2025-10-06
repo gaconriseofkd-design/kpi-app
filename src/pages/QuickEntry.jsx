@@ -63,8 +63,10 @@ export default function QuickEntry() {
   const { section } = useKpiSection();
   const isMolding = section === "MOLDING";
 
+  // ⇩⇩⇩ tất cả hooks phải khai báo trước mọi early-return
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("quick_authed") === "1");
   const [pwd, setPwd] = useState("");
+  const [mode, setMode] = useState("approver"); // ← DI CHUYỂN LÊN ĐÂY
 
   function tryLogin(e) {
     e?.preventDefault();
@@ -74,15 +76,12 @@ export default function QuickEntry() {
     } else alert("Sai mật khẩu.");
   }
 
-  // 👉 Chuyển phần form login ra component riêng
+  // Chưa login → chỉ hiển thị form, NHƯNG các hooks ở trên đã được gọi đủ
   if (!authed) {
     return <LoginForm pwd={pwd} setPwd={setPwd} tryLogin={tryLogin} />;
   }
 
-  // phần còn lại giữ nguyên
-  const [mode, setMode] = useState("approver");
-
-  return (
+    return (
     <div className="p-4 space-y-4">
       <div className="flex items-center gap-3">
         <h2 className="text-xl font-semibold">Nhập KPI nhanh ({section})</h2>
