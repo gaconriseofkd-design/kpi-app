@@ -345,8 +345,9 @@ function ApproverModeLeanline({ section }) {
 
 
     const { error } = await supabase
-      .from("kpi_entries")
-      .upsert(payload, { onConflict: "msnv,work_date,section" });
+    .from("kpi_entries")
+    .upsert(payload, { onConflict: "worker_id,date,section" });
+
 
     setSaving(false);
     if (error) return alert("Lưu lỗi: " + error.message);
