@@ -5,7 +5,7 @@ import { useKpiSection } from "../context/KpiSectionContext";
 
 /* ================= Helpers & Scoring ================= */
 
-// Machine Map (Mới)
+// Machine Map (Giữ nguyên)
 const MACHINE_MAP = {
     "LAMINATION": ["Máy dán 1", "Máy dán 2", "Máy dán 3", "Máy dán 4", "Máy dán 5", "Máy dán 6", "Máy dán 7"],
     "PREFITTING": ["Máy cắt 1", "Máy cắt 2", "Máy cắt 3", "Máy cắt 4", "Máy cắt 5", "Máy cắt 6"],
@@ -19,6 +19,28 @@ const isHybridSection = (sectionKey) => HYBRID_SECTIONS.includes(sectionKey);
 
 const getTableName = (sectionKey) => 
   isHybridSection(sectionKey) ? "kpi_LPS_entries" : "kpi_entries";
+
+/** Quy đổi giờ làm việc thực tế từ giờ nhập + ca làm việc (Logic Molding/Hybrid) */
+function calcWorkingReal(shift, inputHours) {
+  const h = Number(inputHours || 0);
+  if (h < 8) return h;
+
+  // base theo ca (7.17, 6.92, 6.67)
+  const BASE_BY_SHIFT = {
+    "Ca 1": 7.17,
+    "Ca 2": 7.17,
+    "Ca 3": 6.92,
+    "Ca HC": 6.67,
+  };
+  const base = BASE_BY_SHIFT[shift] ?? 7.17;
+
+  if (h < 9) return base;
+
+  const extra = h - 8;
+  const adj = extra >= 2 ? extra - 0.5 : extra; // trừ 0.5 nếu OT >= 2 giờ
+  return base + adj;
+}
+
 
 function scoreByQuality(defects) {
   const d = Number(defects || 0);
@@ -53,21 +75,30 @@ function scoreByProductivityHybrid(prodRate, category, allRules) {
   return 0;
 }
 
-function deriveDayScores({ section, oe, defects, category, output, workHours, stopHours }, prodRules) {
+function deriveDayScores({ section, oe, defects, category, output, workHours, stopHours, ca }, prodRules) {
   const isHybrid = isHybridSection(section);
   const q = scoreByQuality(defects);
   let p = 0;
   let prodRate = 0;
+  let workingReal = 0; // Giờ thực tế (Quy đổi)
 
   if (isHybrid) {
-    const exactHours = Math.max(0, Number(workHours || 0) - Number(stopHours || 0));
+    // 1. TÍNH GIỜ THỰC TẾ (Quy đổi)
+    workingReal = calcWorkingReal(ca, workHours);
+    // 2. TÍNH GIỜ CHÍNH XÁC = Giờ Quy đổi - Giờ dừng
+    const exactHours = Math.max(0, workingReal - Number(stopHours || 0));
+    
+    // 3. TÍNH PROD RATE
     prodRate = exactHours > 0 ? Number(output || 0) / exactHours : 0;
     
+    // 4. CHẤM ĐIỂM
     p = scoreByProductivityHybrid(prodRate, category, prodRules);
 
   } else {
+    // Leanline (Duy trì logic cũ)
     prodRate = Number(oe || 0);
     p = scoreByProductivityLeanline(prodRate, prodRules);
+    workingReal = Number(workHours || 0); // Giữ nguyên giờ nhập cho hiển thị nếu không phải Hybrid
   }
 
   const total = p + q;
@@ -77,6 +108,7 @@ function deriveDayScores({ section, oe, defects, category, output, workHours, st
     day_score: Math.min(15, total),
     overflow: Math.max(0, total - 15),
     prodRate: prodRate,
+    workingReal: workingReal, // Trả về Giờ Thực tế (Quy đổi)
   };
 }
 
@@ -125,18 +157,19 @@ export default function EntryPage() {
         ...DEFAULT_FORM, 
         date: f.date,
         line: defaultLine,
-        // Reset category/output if switching from Leanline to Hybrid (and vice versa)
         category: isHybridSection(section) ? f.category : "", 
         output: isHybridSection(section) ? f.output : 0, 
         oe: isHybridSection(section) ? 0 : f.oe,
     })); 
 
     (async () => {
+      // CHUẨN HÓA SANG IN HOA ĐỂ TRUY VẤN
+      const dbSection = section.toUpperCase();
       const { data, error } = await supabase
         .from("kpi_rule_productivity")
         .select("*")
         .eq("active", true)
-        .eq("section", section)
+        .eq("section", dbSection) // DÙNG DB SECTION IN HOA
         .order("threshold", { ascending: false });
       if (!cancelled) {
         if (error) console.error("Load rules error:", error);
@@ -183,10 +216,10 @@ export default function EntryPage() {
     return () => clearTimeout(t);
   }, [form.workerId]);
 
-  // ====== tính điểm động (Giữ nguyên) ======
+  // ====== tính điểm động ======
   const scores = useMemo(
-    () => deriveDayScores({ section, oe: form.oe, defects: form.defects, category: form.category, output: form.output, workHours: form.workHours, stopHours: form.stopHours }, prodRules),
-    [section, form.oe, form.defects, form.category, form.output, form.workHours, form.stopHours, prodRules]
+    () => deriveDayScores({ section, oe: form.oe, defects: form.defects, category: form.category, output: form.output, workHours: form.workHours, stopHours: form.stopHours, ca: form.ca }, prodRules),
+    [section, form.oe, form.defects, form.category, form.output, form.workHours, form.stopHours, form.ca, prodRules]
   );
 
   function handleChange(key, val) {
@@ -234,6 +267,7 @@ export default function EntryPage() {
       oe: isHybrid ? null : Number(form.oe || 0),
       output: isHybrid ? Number(form.output || 0) : null,
       category: isHybrid ? form.category : null,
+      working_real: isHybrid ? scores.workingReal : null, // THÊM GIỜ THỰC TẾ
       
       p_score: scores.p_score,
       q_score: scores.q_score,
@@ -250,7 +284,6 @@ export default function EntryPage() {
       setLoading(true);
 
       if (isUpdate) {
-        // Cập nhật
         const isApproved = isUpdate.status === "approved";
         const msg = isApproved
           ? "Ngày này đã có bản ghi ĐÃ DUYỆT.\nGhi đè sẽ đưa bản ghi về trạng thái CHỜ DUYỆT lại. Tiếp tục?"
@@ -275,13 +308,11 @@ export default function EntryPage() {
 
         alert("Đã cập nhật bản ghi.");
       } else {
-        // Insert mới
         const { error } = await supabase.from(tableName).insert([payload]);
         if (error) throw error;
         alert(`Đã gửi KPI cho ${form.workerId} – điểm ngày: ${scores.day_score}.`);
       }
 
-      // Reset số liệu...
       setForm((f) => ({
         ...f,
         workHours: 8,
@@ -336,7 +367,7 @@ export default function EntryPage() {
         </label>
 
         <label>Máy làm việc:
-          <select // ĐÃ THAY BẰNG DYNAMIC DROPDOWN
+          <select 
             className="input"
             value={form.line}
             onChange={(e) => handleChange("line", e.target.value)}
@@ -437,9 +468,14 @@ export default function EntryPage() {
       </div>
 
       <div className="mt-3 p-4 rounded bg-gray-50">
-        <p>Giờ chính xác: <b>{Math.max(0, Number(form.workHours || 0) - Number(form.stopHours || 0))}</b></p>
+        <p>Giờ làm việc nhập: <b>{Number(form.workHours || 0)}</b></p>
+        <p>Giờ dừng máy: <b>{Number(form.stopHours || 0)}</b></p>
         {isHybrid && (
-            <p>Tỷ lệ năng suất: <b>{scores.prodRate.toFixed(2)}</b></p>
+            <>
+                <p>Giờ thực tế (Quy đổi): <b>{scores.workingReal.toFixed(2)}</b></p>
+                <p>Giờ chính xác: <b>{(scores.workingReal - Number(form.stopHours || 0)).toFixed(2)}</b></p>
+                <p>Tỷ lệ năng suất: <b>{scores.prodRate.toFixed(2)}</b></p>
+            </>
         )}
         <p>Điểm Sản lượng (P): <b>{scores.p_score}</b></p>
         <p>Điểm Chất lượng (Q): <b>{scores.q_score}</b></p>

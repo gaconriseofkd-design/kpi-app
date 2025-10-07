@@ -13,6 +13,26 @@ const MACHINE_MAP = {
     "TÁCH": ["Máy tách 1", "Máy tách 2", "Máy tách 3", "Máy tách 4"],
 };
 
+// THÊM HÀM QUY ĐỔI GIỜ THỰC TẾ (calcWorkingReal)
+function calcWorkingReal(shift, inputHours) {
+  const h = Number(inputHours || 0);
+  if (h < 8) return h;
+
+  const BASE_BY_SHIFT = {
+    "Ca 1": 7.17,
+    "Ca 2": 7.17,
+    "Ca 3": 6.92,
+    "Ca HC": 6.67,
+  };
+  const base = BASE_BY_SHIFT[shift] ?? 7.17;
+
+  if (h < 9) return base;
+
+  const extra = h - 8;
+  const adj = extra >= 2 ? extra - 0.5 : extra; 
+  return base + adj;
+}
+
 // Lấy trực tiếp từ logic EntryPage.jsx
 const getTableName = (sectionKey) => "kpi_LPS_entries";
 
@@ -38,10 +58,14 @@ function scoreByProductivityHybrid(prodRate, category, allRules) {
   return 0;
 }
 
-function deriveDayScoresHybrid({ section, defects, category, output, workHours, stopHours }, prodRules) {
+function deriveDayScoresHybrid({ section, defects, category, output, workHours, stopHours, shift }, prodRules) {
   const q = scoreByQuality(defects);
 
-  const exactHours = Math.max(0, Number(workHours || 0) - Number(stopHours || 0));
+  // TÍNH GIỜ THỰC TẾ (Quy đổi)
+  const workingReal = calcWorkingReal(shift, workHours);
+  // TÍNH GIỜ CHÍNH XÁC = Giờ Quy đổi - Giờ dừng
+  const exactHours = Math.max(0, workingReal - Number(stopHours || 0));
+  
   const prodRate = exactHours > 0 ? Number(output || 0) / exactHours : 0;
   
   const p = scoreByProductivityHybrid(prodRate, category, prodRules);
@@ -52,6 +76,7 @@ function deriveDayScoresHybrid({ section, defects, category, output, workHours, 
     q_score: q,
     day_score: Math.min(15, total),
     prodRate: prodRate,
+    workingReal: workingReal, // THÊM GIỜ THỰC TẾ VÀO RETURN
   };
 }
 
@@ -93,7 +118,7 @@ export default function ApproverModeHybrid({ section }) {
         .from("kpi_rule_productivity")
         .select("*")
         .eq("active", true)
-        .eq("section", dbSection) // DÙNG BIẾN CHUẨN HÓA
+        .eq("section", dbSection) 
         .order("threshold", { ascending: false });
       if (!cancelled) {
         if (error) console.error("Load rules error:", error);
@@ -163,21 +188,22 @@ export default function ApproverModeHybrid({ section }) {
         category: tplCategory, 
         output: tplOutput, 
         workHours: tplWorkHours, 
-        stopHours: tplStopHours 
+        stopHours: tplStopHours,
+        shift: tplShift // ĐÃ THÊM SHIFT
     }, prodRules),
-    [section, tplDefects, tplCategory, tplOutput, tplWorkHours, tplStopHours, prodRules]
+    [section, tplDefects, tplCategory, tplOutput, tplWorkHours, tplStopHours, tplShift, prodRules]
   );
   
   const tplKPI = scores.day_score;
   const tplProdRate = scores.prodRate;
   const tplQ = scores.q_score;
   const tplP = scores.p_score;
-  const tplExactHours = Math.max(0, toNum(tplWorkHours) - toNum(tplStopHours));
+  const tplExactHours = Math.max(0, scores.workingReal - toNum(tplStopHours)); // DÙNG workingReal TỪ SCORES
 
   function proceedToTemplate() {
     if (!prodRules.length) return alert("Không thể tải Rule tính điểm sản lượng. Vui lòng thử lại.");
     if (!checked.size) return alert("Chưa chọn nhân viên nào.");
-    setStep(2); // CHUYỂN SANG BƯỚC 2: NHẬP TEMPLATE
+    setStep(2);
   }
 
   // ---- B3: Build Review Rows từ Template + cho phép CHỈNH ----
@@ -186,7 +212,7 @@ export default function ApproverModeHybrid({ section }) {
 
   function buildReviewRows() {
     if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
-    if (!tplCategory) return alert("Vui lòng chọn Loại năng suất."); // VALIDATION NÀY BÂY GIỜ CHẠY Ở ĐÂY
+    if (!tplCategory) return alert("Vui lòng chọn Loại năng suất.");
     if (!checked.size) return alert("Chưa chọn nhân viên.");
 
     const selectedWorkers = workers.filter((w) => checked.has(w.msnv));
@@ -197,7 +223,8 @@ export default function ApproverModeHybrid({ section }) {
           category: tplCategory, 
           output: tplOutput, 
           workHours: tplWorkHours, 
-          stopHours: tplStopHours 
+          stopHours: tplStopHours,
+          shift: tplShift 
       }, prodRules);
 
       return {
@@ -218,6 +245,7 @@ export default function ApproverModeHybrid({ section }) {
         p_score: s.p_score,
         total_score: s.day_score,
         compliance: tplCompliance,
+        working_real: s.workingReal, // THÊM GIỜ THỰC TẾ
         status: "approved",
       };
     });
@@ -243,14 +271,16 @@ export default function ApproverModeHybrid({ section }) {
           category: r.category, 
           output: r.output, 
           workHours: r.work_hours, 
-          stopHours: r.stop_hours 
+          stopHours: r.stop_hours,
+          shift: r.shift
       }, prodRules);
 
       arr[i] = { 
           ...r, 
           q_score: s.q_score, 
           p_score: s.p_score, 
-          total_score: s.day_score 
+          total_score: s.day_score,
+          working_real: s.workingReal, // CẬP NHẬT GIỜ THỰC TẾ
       };
       return arr;
     });
@@ -315,6 +345,7 @@ export default function ApproverModeHybrid({ section }) {
         overflow,
         compliance_code: r.compliance,
         section: r.section,
+        working_real: r.working_real, // THÊM GIỜ THỰC TẾ VÀO PAYLOAD
         status: "approved",
         approved_at: now,
       };
@@ -443,7 +474,8 @@ export default function ApproverModeHybrid({ section }) {
 
           <div className="rounded border p-3 bg-gray-50">
             <div className="flex gap-6 text-sm">
-              <div>Giờ chính xác: <b>{tplExactHours}</b></div>
+              <div>Giờ thực tế (Quy đổi): <b>{scores.workingReal.toFixed(2)}</b></div>
+              <div>Giờ chính xác: <b>{tplExactHours.toFixed(2)}</b></div>
               <div>Tỷ lệ NS: <b>{tplProdRate.toFixed(2)}</b></div>
               <div>Q: <b>{tplQ}</b></div>
               <div>P: <b>{tplP}</b></div>
@@ -508,7 +540,7 @@ function EditReviewHybrid({
       </div>
 
       <div className="overflow-auto border rounded">
-        <table className="min-w-[1200px] text-sm">
+        <table className="min-w-[1300px] text-sm">
           <thead className="bg-gray-50 text-center">
             <tr>
               <th className="p-2"><input type="checkbox" onChange={toggleAllReviewOnPage} checked={pageRows.length > 0 && pageRows.every((_, idx) => selReview.has(globalIndex(idx)))} /></th>
@@ -516,8 +548,10 @@ function EditReviewHybrid({
               <th className="p-2">Họ tên</th>
               <th className="p-2">Ngày</th>
               <th className="p-2">Ca</th>
-              <th className="p-2">Giờ làm</th>
+              <th className="p-2">Giờ nhập</th>
               <th className="p-2">Giờ dừng</th>
+              <th className="p-2">Giờ TT (Quy đổi)</th> {/* ĐÃ THÊM */}
+              <th className="p-2">Giờ CX</th> {/* ĐÃ THÊM */}
               <th className="p-2">Máy làm việc</th>
               <th className="p-2">Loại NS</th>
               <th className="p-2">SL (Output)</th>
@@ -531,6 +565,7 @@ function EditReviewHybrid({
           <tbody className="text-center">
             {pageRows.map((r, idx) => {
               const gi = globalIndex(idx);
+              const exactHours = Math.max(0, r.working_real - toNum(r.stop_hours));
               return (
                 <tr key={gi} className="border-t hover:bg-gray-50">
                   <td className="p-2"><input type="checkbox" checked={selReview.has(gi)} onChange={() => toggleOneReview(gi)} /></td>
@@ -544,6 +579,8 @@ function EditReviewHybrid({
                   </td>
                   <td className="p-2"><input type="number" className="input text-center" value={r.work_hours} onChange={(e) => updateRow(gi, "work_hours", e.target.value)} /></td>
                   <td className="p-2"><input type="number" className="input text-center" value={r.stop_hours} onChange={(e) => updateRow(gi, "stop_hours", e.target.value)} /></td>
+                  <td className="p-2 font-medium">{r.working_real.toFixed(2)}</td> {/* GIỜ TT */}
+                  <td className="p-2">{exactHours.toFixed(2)}</td> {/* GIỜ CX */}
                   <td className="p-2">
                     <select className="input text-center" value={r.line} onChange={(e) => updateRow(gi, "line", e.target.value)}>
                         {allMachines.map(m => <option key={m} value={m}>{m}</option>)}
@@ -569,7 +606,7 @@ function EditReviewHybrid({
               );
             })}
             {!pageRows.length && (
-              <tr><td colSpan={14} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>
+              <tr><td colSpan={17} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>
             )}
           </tbody>
         </table>
