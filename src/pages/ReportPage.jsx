@@ -12,19 +12,28 @@ import {
 const HYBRID_SECTIONS = ["LAMINATION", "PREFITTING", "BÀO", "TÁCH"];
 const isHybridSection = (s) => HYBRID_SECTIONS.includes(s);
 
-// FIX: Trả về tên bảng viết thường kpi_lps_entries
 function getTableName(s) {
   const sectionKey = (s || "").toUpperCase();
   if (sectionKey === "MOLDING") return "kpi_entries_molding";
-  if (isHybridSection(sectionKey)) return "kpi_lps_entries"; // << ĐÃ SỬA
+  if (isHybridSection(sectionKey)) return "kpi_lps_entries"; // FIX: Tên bảng viết thường
   return "kpi_entries"; // Leanline DC & Leanline Molded
 }
 
-
-/* =============== Gate đăng nhập (Giữ nguyên) =============== */
+/* =============== Gate đăng nhập =============== */
 export default function ReportPage() {
-// ... (Logic giữ nguyên)
-// ...
+  const [authed, setAuthed] = useState(() => sessionStorage.getItem("rp_authed") === "1");
+  const [pwd, setPwd] = useState("");
+
+  function tryLogin(e) {
+    e?.preventDefault();
+    if (pwd === "davidtu") {
+      sessionStorage.setItem("rp_authed", "1");
+      setAuthed(true);
+    } else {
+      alert("Sai mật khẩu.");
+    }
+  }
+
   if (!authed) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -47,12 +56,12 @@ export default function ReportPage() {
   return <ReportContent />;
 }
 
-/* =============== Trang báo cáo (Giữ nguyên) =============== */
+/* =============== Trang báo cáo =============== */
 function ReportContent() {
-  const { section } = useKpiSection();               
+  const { section } = useKpiSection();               // <<— lấy section hiện tại
   const isMolding = section === "MOLDING";
   const isHybrid = isHybridSection(section);
-  const tableName = getTableName(section);
+  const tableName = getTableName(section); // Dùng hàm getTableName đã fix
 
   const viSection = (s) => {
     const k = (s || "").toUpperCase();
@@ -359,7 +368,7 @@ function ReportContent() {
           <input type="date" className="input" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} />
         </label>
         <label> Đến ngày
-          <input type="date" className="input" value={dateTo} onChange={e=>setTo(e.target.value)} />
+          <input type="date" className="input" value={dateTo} onChange={e=>setDateTo(e.target.value)} />
         </label>
 
         <label> MSNV người duyệt (tuỳ chọn)
