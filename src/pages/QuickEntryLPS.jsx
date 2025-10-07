@@ -33,8 +33,8 @@ function calcWorkingReal(shift, inputHours) {
   return base + adj;
 }
 
-// Lấy trực tiếp từ logic EntryPage.jsx
-const getTableName = (sectionKey) => "kpi_LPS_entries";
+// SỬA LỖI: Chuyển tên bảng thành chữ thường (kpi_lps_entries)
+const getTableName = (sectionKey) => "kpi_lps_entries";
 
 function scoreByQuality(defects) {
   const d = Number(defects || 0);
@@ -61,9 +61,7 @@ function scoreByProductivityHybrid(prodRate, category, allRules) {
 function deriveDayScoresHybrid({ section, defects, category, output, workHours, stopHours, shift }, prodRules) {
   const q = scoreByQuality(defects);
 
-  // TÍNH GIỜ THỰC TẾ (Quy đổi)
   const workingReal = calcWorkingReal(shift, workHours);
-  // TÍNH GIỜ CHÍNH XÁC = Giờ Quy đổi - Giờ dừng
   const exactHours = Math.max(0, workingReal - Number(stopHours || 0));
   
   const prodRate = exactHours > 0 ? Number(output || 0) / exactHours : 0;
@@ -76,7 +74,7 @@ function deriveDayScoresHybrid({ section, defects, category, output, workHours, 
     q_score: q,
     day_score: Math.min(15, total),
     prodRate: prodRate,
-    workingReal: workingReal, // THÊM GIỜ THỰC TẾ VÀO RETURN
+    workingReal: workingReal,
   };
 }
 
@@ -189,7 +187,7 @@ export default function ApproverModeHybrid({ section }) {
         output: tplOutput, 
         workHours: tplWorkHours, 
         stopHours: tplStopHours,
-        shift: tplShift // ĐÃ THÊM SHIFT
+        shift: tplShift 
     }, prodRules),
     [section, tplDefects, tplCategory, tplOutput, tplWorkHours, tplStopHours, tplShift, prodRules]
   );
@@ -198,7 +196,7 @@ export default function ApproverModeHybrid({ section }) {
   const tplProdRate = scores.prodRate;
   const tplQ = scores.q_score;
   const tplP = scores.p_score;
-  const tplExactHours = Math.max(0, scores.workingReal - toNum(tplStopHours)); // DÙNG workingReal TỪ SCORES
+  const tplExactHours = Math.max(0, scores.workingReal - toNum(tplStopHours));
 
   function proceedToTemplate() {
     if (!prodRules.length) return alert("Không thể tải Rule tính điểm sản lượng. Vui lòng thử lại.");
@@ -245,7 +243,7 @@ export default function ApproverModeHybrid({ section }) {
         p_score: s.p_score,
         total_score: s.day_score,
         compliance: tplCompliance,
-        working_real: s.workingReal, // THÊM GIỜ THỰC TẾ
+        working_real: s.workingReal, 
         status: "approved",
       };
     });
@@ -280,7 +278,7 @@ export default function ApproverModeHybrid({ section }) {
           q_score: s.q_score, 
           p_score: s.p_score, 
           total_score: s.day_score,
-          working_real: s.workingReal, // CẬP NHẬT GIỜ THỰC TẾ
+          working_real: s.workingReal, 
       };
       return arr;
     });
@@ -345,7 +343,7 @@ export default function ApproverModeHybrid({ section }) {
         overflow,
         compliance_code: r.compliance,
         section: r.section,
-        working_real: r.working_real, // THÊM GIỜ THỰC TẾ VÀO PAYLOAD
+        working_real: r.working_real,
         status: "approved",
         approved_at: now,
       };
@@ -550,8 +548,8 @@ function EditReviewHybrid({
               <th className="p-2">Ca</th>
               <th className="p-2">Giờ nhập</th>
               <th className="p-2">Giờ dừng</th>
-              <th className="p-2">Giờ TT (Quy đổi)</th> {/* ĐÃ THÊM */}
-              <th className="p-2">Giờ CX</th> {/* ĐÃ THÊM */}
+              <th className="p-2">Giờ TT (QĐ)</th> 
+              <th className="p-2">Giờ CX</th> 
               <th className="p-2">Máy làm việc</th>
               <th className="p-2">Loại NS</th>
               <th className="p-2">SL (Output)</th>
@@ -579,8 +577,8 @@ function EditReviewHybrid({
                   </td>
                   <td className="p-2"><input type="number" className="input text-center" value={r.work_hours} onChange={(e) => updateRow(gi, "work_hours", e.target.value)} /></td>
                   <td className="p-2"><input type="number" className="input text-center" value={r.stop_hours} onChange={(e) => updateRow(gi, "stop_hours", e.target.value)} /></td>
-                  <td className="p-2 font-medium">{r.working_real.toFixed(2)}</td> {/* GIỜ TT */}
-                  <td className="p-2">{exactHours.toFixed(2)}</td> {/* GIỜ CX */}
+                  <td className="p-2 font-medium">{r.working_real.toFixed(2)}</td> 
+                  <td className="p-2">{exactHours.toFixed(2)}</td> 
                   <td className="p-2">
                     <select className="input text-center" value={r.line} onChange={(e) => updateRow(gi, "line", e.target.value)}>
                         {allMachines.map(m => <option key={m} value={m}>{m}</option>)}

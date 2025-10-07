@@ -17,15 +17,14 @@ const MACHINE_MAP = {
 const HYBRID_SECTIONS = ["LAMINATION", "PREFITTING", "BÀO", "TÁCH"];
 const isHybridSection = (sectionKey) => HYBRID_SECTIONS.includes(sectionKey);
 
+// SỬA LỖI: Chuyển tên bảng thành chữ thường (kpi_lps_entries)
 const getTableName = (sectionKey) => 
-  isHybridSection(sectionKey) ? "kpi_LPS_entries" : "kpi_entries";
+  isHybridSection(sectionKey) ? "kpi_lps_entries" : "kpi_entries";
 
-/** Quy đổi giờ làm việc thực tế từ giờ nhập + ca làm việc (Logic Molding/Hybrid) */
 function calcWorkingReal(shift, inputHours) {
   const h = Number(inputHours || 0);
   if (h < 8) return h;
 
-  // base theo ca (7.17, 6.92, 6.67)
   const BASE_BY_SHIFT = {
     "Ca 1": 7.17,
     "Ca 2": 7.17,
@@ -37,7 +36,7 @@ function calcWorkingReal(shift, inputHours) {
   if (h < 9) return base;
 
   const extra = h - 8;
-  const adj = extra >= 2 ? extra - 0.5 : extra; // trừ 0.5 nếu OT >= 2 giờ
+  const adj = extra >= 2 ? extra - 0.5 : extra; 
   return base + adj;
 }
 
@@ -80,25 +79,20 @@ function deriveDayScores({ section, oe, defects, category, output, workHours, st
   const q = scoreByQuality(defects);
   let p = 0;
   let prodRate = 0;
-  let workingReal = 0; // Giờ thực tế (Quy đổi)
+  let workingReal = 0;
 
   if (isHybrid) {
-    // 1. TÍNH GIỜ THỰC TẾ (Quy đổi)
     workingReal = calcWorkingReal(ca, workHours);
-    // 2. TÍNH GIỜ CHÍNH XÁC = Giờ Quy đổi - Giờ dừng
     const exactHours = Math.max(0, workingReal - Number(stopHours || 0));
     
-    // 3. TÍNH PROD RATE
     prodRate = exactHours > 0 ? Number(output || 0) / exactHours : 0;
     
-    // 4. CHẤM ĐIỂM
     p = scoreByProductivityHybrid(prodRate, category, prodRules);
 
   } else {
-    // Leanline (Duy trì logic cũ)
     prodRate = Number(oe || 0);
     p = scoreByProductivityLeanline(prodRate, prodRules);
-    workingReal = Number(workHours || 0); // Giữ nguyên giờ nhập cho hiển thị nếu không phải Hybrid
+    workingReal = Number(workHours || 0);
   }
 
   const total = p + q;
@@ -108,7 +102,7 @@ function deriveDayScores({ section, oe, defects, category, output, workHours, st
     day_score: Math.min(15, total),
     overflow: Math.max(0, total - 15),
     prodRate: prodRate,
-    workingReal: workingReal, // Trả về Giờ Thực tế (Quy đổi)
+    workingReal: workingReal,
   };
 }
 
@@ -151,7 +145,6 @@ export default function EntryPage() {
   useEffect(() => {
     let cancelled = false;
     
-    // Reset form và set line/machine mặc định
     const defaultLine = currentMachines[0] || DEFAULT_FORM.line;
     setForm(f => ({ 
         ...DEFAULT_FORM, 
@@ -163,13 +156,12 @@ export default function EntryPage() {
     })); 
 
     (async () => {
-      // CHUẨN HÓA SANG IN HOA ĐỂ TRUY VẤN
       const dbSection = section.toUpperCase();
       const { data, error } = await supabase
         .from("kpi_rule_productivity")
         .select("*")
         .eq("active", true)
-        .eq("section", dbSection) // DÙNG DB SECTION IN HOA
+        .eq("section", dbSection) 
         .order("threshold", { ascending: false });
       if (!cancelled) {
         if (error) console.error("Load rules error:", error);
@@ -216,7 +208,7 @@ export default function EntryPage() {
     return () => clearTimeout(t);
   }, [form.workerId]);
 
-  // ====== tính điểm động ======
+  // ====== tính điểm động (Giữ nguyên) ======
   const scores = useMemo(
     () => deriveDayScores({ section, oe: form.oe, defects: form.defects, category: form.category, output: form.output, workHours: form.workHours, stopHours: form.stopHours, ca: form.ca }, prodRules),
     [section, form.oe, form.defects, form.category, form.output, form.workHours, form.stopHours, form.ca, prodRules]
@@ -267,7 +259,7 @@ export default function EntryPage() {
       oe: isHybrid ? null : Number(form.oe || 0),
       output: isHybrid ? Number(form.output || 0) : null,
       category: isHybrid ? form.category : null,
-      working_real: isHybrid ? scores.workingReal : null, // THÊM GIỜ THỰC TẾ
+      working_real: isHybrid ? scores.workingReal : null, 
       
       p_score: scores.p_score,
       q_score: scores.q_score,
