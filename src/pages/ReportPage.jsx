@@ -8,6 +8,18 @@ import {
   ResponsiveContainer
 } from "recharts";
 
+/* =============== Helper Logic =============== */
+const HYBRID_SECTIONS = ["LAMINATION", "PREFITTING", "BÀO", "TÁCH"];
+const isHybridSection = (s) => HYBRID_SECTIONS.includes(s);
+
+function getTableName(s) {
+  const sectionKey = (s || "").toUpperCase();
+  if (sectionKey === "MOLDING") return "kpi_entries_molding";
+  if (isHybridSection(sectionKey)) return "kpi_LPS_entries";
+  return "kpi_entries"; // Leanline DC & Leanline Molded
+}
+
+
 /* =============== Gate đăng nhập =============== */
 export default function ReportPage() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("rp_authed") === "1");
@@ -49,10 +61,16 @@ export default function ReportPage() {
 function ReportContent() {
   const { section } = useKpiSection();               // <<— lấy section hiện tại
   const isMolding = section === "MOLDING";
+  const isHybrid = isHybridSection(section);
+  const tableName = getTableName(section);
 
   const viSection = (s) => {
     const k = (s || "").toUpperCase();
     if (k === "MOLDING") return "Molding";
+    if (k === "LAMINATION") return "Lamination";
+    if (k === "PREFITTING") return "Prefitting";
+    if (k === "BÀO") return "Bào";
+    if (k === "TÁCH") return "Tách";
     if (k === "LEANLINE_DC") return "LL Die cut";
     if (k === "LEANLINE_MOLDED") return "LL Molded";
     return s || "";
@@ -70,53 +88,61 @@ function ReportContent() {
 
   const [dateFrom, setDateFrom] = useState(firstDayOfMonth());
   const [dateTo, setDateTo]     = useState(today());
-  const [approverId, setApproverId] = useState(""); // Leanline: approver_id | Molding: approver_msnv
+  const [approverId, setApproverId] = useState(""); 
   const [workerId, setWorkerId]     = useState("");
   const [status, setStatus]         = useState("all"); // all|pending|approved|rejected
   const [onlyApproved, setOnlyApproved] = useState(false);
-  const [category, setCategory]     = useState(""); // chỉ dùng cho Molding
+  const [category, setCategory]     = useState(""); 
 
   // ----- dữ liệu -----
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // ----- options cho Molding -----
+  // ----- options cho Category (Molding/Hybrid) -----
   const [catOptions, setCatOptions] = useState([]);
   useEffect(() => {
-    if (!isMolding) { setCatOptions([]); return; }
+    if (!isMolding && !isHybrid) { setCatOptions([]); setCategory(""); return; }
+    
+    // Sử dụng section hiện tại (đã được chuẩn hóa ngầm trong context)
     supabase
       .from("kpi_rule_productivity")
       .select("category")
-      .eq("section", "MOLDING")
+      .eq("section", section.toUpperCase()) // Dùng section in hoa để truy vấn DB
       .eq("active", true)
       .then(({ data, error }) => {
         if (error) { console.error(error); return; }
         const opts = [...new Set((data || []).map(r => r.category).filter(Boolean))];
-        setCatOptions(opts);
+        setCatOptions(opts.sort());
       });
-  }, [isMolding]);
+  }, [section, isMolding, isHybrid]);
 
   // ----- Load dữ liệu -----
   async function runQuery() {
     if (!dateFrom || !dateTo) return alert("Chọn khoảng ngày trước khi xem báo cáo.");
     if (new Date(dateFrom) > new Date(dateTo)) return alert("Khoảng ngày không hợp lệ.");
 
-    const table = isMolding ? "kpi_entries_molding" : "kpi_entries";
+    const table = getTableName(section); // Use dynamic table name
     let q = supabase.from(table).select("*").gte("date", dateFrom).lte("date", dateTo);
 
-    // lọc theo section nếu cột section có trong bảng (cả 2 bảng đều có)
+    // Lọc theo section 
     q = q.eq("section", section);
 
     if (status !== "all") q = q.eq("status", status);
     if (onlyApproved)     q = q.eq("status", "approved");
     if (workerId.trim())  q = q.eq("worker_id", workerId.trim());
+    
     if (approverId.trim()) {
-      q = isMolding ? q.eq("approver_msnv", approverId.trim()) : q.eq("approver_id", approverId.trim());
+      // approver_msnv cho Molding và approver_id cho Leanline/Hybrid
+      const approverCol = isMolding ? "approver_msnv" : "approver_id";
+      q = q.eq(approverCol, approverId.trim());
     }
-    if (isMolding && category) q = q.eq("category", category);
+    
+    // Lọc theo category (chỉ áp dụng cho Molding/Hybrid)
+    if ((isMolding || isHybrid) && category) q = q.eq("category", category);
 
     setLoading(true);
-    const { data, error } = await q.order("date", { ascending: true }).order("worker_id", { ascending: true });
+    // order by worker_id trước date để Top 5/summary dễ dùng hơn
+    const { data, error } = await q.order("worker_id", { ascending: true }).order("date", { ascending: true });
     setLoading(false);
     if (error) return alert("Lỗi tải dữ liệu: " + error.message);
     setRows(data || []);
@@ -154,6 +180,7 @@ function ReportContent() {
     const n = rows.length;
     const total = rows.reduce((s, r) => s + Number(r.day_score || 0), 0);
     const avg = n ? total / n : 0;
+    // Sử dụng violations (có sẵn trong cả 3 bảng) hoặc suy ra từ compliance code
     const viol = rows.reduce((s, r) => s + Number(r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0)), 0);
     const workers = new Set(rows.map(r => r.worker_id)).size;
     return { records: n, total, avg, violations: viol, workers };
@@ -208,18 +235,22 @@ function ReportContent() {
   /* ---------- Export XLSX ---------- */
   function exportXLSX() {
     if (!rows.length) return alert("Không có dữ liệu để xuất.");
-    const isMolding = section === "MOLDING";
   
     const titleCase = (s) =>
       s ? s.toString().toLowerCase().replace(/^\w/u, (c) => c.toUpperCase()) : "";
     const complianceLabel = (code) => {
       switch ((code || "NONE").toUpperCase()) {
-        case "Không vi phạm": return "Không vi phạm";
-        case "Ký mẫu đầu chuyền trước khi sử dụng": return "Ký mẫu đầu chuyền trước khi sử dụng";
-        case "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất":  return "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất";
-        case "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất":  return "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất";
-        case "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất": return "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất";
-        case "Vi phạm nội quy bộ phận/công ty": return "Vi phạm nội quy bộ phận/công ty";
+        case "NONE": return "Không vi phạm";
+        case "KÝ MẪU ĐẦU CHUYỀN TRƯỚC KHI SỬ DỤNG":
+        case "LATE": return "Ký mẫu đầu chuyền trước khi sử dụng";
+        case "QUY ĐỊNH VỀ KIỂM TRA ĐIỀU KIỆN MÁY TRƯỚC/TRONG KHI SẢN XUẤT":
+        case "PPE":  return "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất";
+        case "QUY ĐỊNH VỀ KIỂM TRA NGUYÊN LIỆU TRƯỚC/TRONG KHI SẢN XUẤT":
+        case "MAT":  return "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất";
+        case "QUY ĐỊNH VỀ KIỂM TRA QUY CÁCH/TIÊU CHUẨN SẢN PHẨM TRƯỚC/TRONG KHI SẢN XUẤT":
+        case "SPEC": return "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất";
+        case "VI PHẠM NỘI QUY BỘ PHẬN/CÔNG TY":
+        case "RULE": return "Vi phạm nội quy bộ phận/công ty";
         default:     return code;
       }
     };
@@ -227,15 +258,14 @@ function ReportContent() {
   
     let data;
     if (isMolding) {
+      // Logic Export Molding (Giữ nguyên)
       data = rows.map((r) => {
         const p = Number(r.p_score || 0);
         const q = Number(r.q_score || 0);
         const day = Number(r.day_score || 0);
         const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
         const total = day + overflow;
-        const hasViolation = (r.compliance_code && r.compliance_code !== "NONE") ? 1 : 0;
   
-        // Thứ tự cột đúng yêu cầu, thêm “MSNV người duyệt” TRƯỚC “Người duyệt”
         return {
           "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "MOLDING")),
           "MSNV": r.worker_id || "",
@@ -248,7 +278,7 @@ function ReportContent() {
           "Sản lượng/ca": Number(r.output ?? 0),
           "Điểm Sản lượng": p,
           "Tuân thủ": complianceLabel(r.compliance_code),
-          "Vi phạm": r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0,
+          "Vi phạm": r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0),
           "Điểm KPI ngày": day,
           "Điểm dư": overflow,
           "Điểm tổng": total,
@@ -259,15 +289,15 @@ function ReportContent() {
           "Người duyệt": r.approver_name || ""
         };
       });
-    } else {
-      // Leanline DC & Leanline Molded – đúng header như ảnh bạn gửi
+    } else if (isHybrid) {
+      // Logic Export HYBRID (LAMINATION, PREFITTING, BÀO, TÁCH)
       data = rows.map((r) => {
         const p = Number(r.p_score || 0);
         const q = Number(r.q_score || 0);
         const day = Number(r.day_score || 0);
         const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
-        const totalMonth = day + overflow; // theo file mẫu: 15 + 3 = 18
-        const hasViolation = (r.compliance_code && r.compliance_code !== "NONE") ? 1 : 0;
+        const exactHours = Math.max(0, Number(r.working_real || 0) - Number(r.stop_hours || 0));
+        const prodRate = exactHours > 0 ? Number(r.output || 0) / exactHours : 0;
   
         return {
           "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "")),
@@ -275,17 +305,52 @@ function ReportContent() {
           "HỌ VÀ TÊN": r.worker_name || "",
           "CA LÀM VIỆC": r.ca || "",
           "NGÀY LÀM VIỆC": fmtDate(r.date),
-          "THỜI GIAN LÀM VIỆC": Number(r.working_input ?? r.work_hours ?? 0),
+          "THỜI GIAN LÀM VIỆC (Nhập)": Number(r.work_hours ?? 0),
+          "THỜI GIAN THỰC TẾ (Quy đổi)": Number(r.working_real ?? 0),
+          "THỜI GIAN CHÍNH XÁC": exactHours,
+          "Số đôi phế": Number(r.defects ?? 0),
+          "Điểm chất lượng": q,
+          "Sản lượng (Output)": Number(r.output ?? 0),
+          "Tỷ lệ Năng suất": Number(prodRate),
+          "Loại năng suất": r.category || "",
+          "Điểm Sản lượng": p,
+          "Tuân thủ": complianceLabel(r.compliance_code),
+          "Vi phạm": r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0),
+          "Điểm KPI ngày": day,
+          "Điểm dư": overflow,
+          "MSNV người duyệt": r.approver_id || "",
+          "Họ và Tên Người duyệt": r.approver_name || "",
+          "Máy làm việc": r.line || "",
+          "THỜI GIAN DỪNG MÁY": Number(r.stop_hours ?? 0),
+        };
+      });
+
+    } else {
+      // Logic Export LEANLINE DC & LEANLINE MOLDED (Giữ nguyên)
+      data = rows.map((r) => {
+        const p = Number(r.p_score || 0);
+        const q = Number(r.q_score || 0);
+        const day = Number(r.day_score || 0);
+        const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
+        const totalMonth = day + overflow;
+  
+        return {
+          "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "")),
+          "MSNV": r.worker_id || "",
+          "HỌ VÀ TÊN": r.worker_name || "",
+          "CA LÀM VIỆC": r.ca || "",
+          "NGÀY LÀM VIỆC": fmtDate(r.date),
+          "THỜI GIAN LÀM VIỆC": Number(r.work_hours ?? 0),
           "Số đôi phế": Number(r.defects ?? 0),
           "Điểm chất lượng": q,
           "%OE": Number(r.oe ?? 0),
           "Điểm sản lượng": p,
           "Tuân thủ": complianceLabel(r.compliance_code),
-          "Vi phạm": r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0,
+          "Vi phạm": r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0),
           "Điểm KPI ngày": day,
           "Điểm dư": overflow,
           "Điểm KPI tổng tháng": totalMonth,
-          "THỜI GIAN DOWNTIME": Number(r.downtime ?? 0),
+          "THỜI GIAN DOWNTIME": Number(r.stop_hours ?? 0),
           "MSNV người duyệt": r.approver_id || "",
           "Họ và Tên Người duyệt": r.approver_name || "",
           "Line làm việc": r.line || ""
@@ -295,7 +360,7 @@ function ReportContent() {
   
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, isMolding ? "Molding" : "Leanline");
+    XLSX.utils.book_append_sheet(wb, ws, viSection(section));
     XLSX.writeFile(wb, `kpi_report_${section}_${dateFrom}_to_${dateTo}.xlsx`);
   }
 
@@ -303,7 +368,7 @@ function ReportContent() {
 
   return (
     <div className="p-4 space-y-6">
-      <h2 className="text-xl font-semibold">Báo cáo KPI – {isMolding ? "Molding" : "Leanline"}</h2>
+      <h2 className="text-xl font-semibold">Báo cáo KPI – {viSection(section)}</h2>
 
       {/* Bộ lọc */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -315,15 +380,19 @@ function ReportContent() {
         </label>
 
         <label> MSNV người duyệt (tuỳ chọn)
-          <input className="input" value={approverId} onChange={e=>setApproverId(e.target.value)} placeholder={isMolding ? "VD: 04126 (approver_msnv)" : "VD: 04126 (approver_id)"} />
+          <input 
+            className="input" 
+            value={approverId} 
+            onChange={e=>setApproverId(e.target.value)} 
+            placeholder={isMolding ? "VD: 04126 (approver_msnv)" : "VD: 04126 (approver_id)"} />
         </label>
 
         <label> MSNV nhân viên (tuỳ chọn)
           <input className="input" value={workerId} onChange={e=>setWorkerId(e.target.value)} placeholder="VD: 04126" />
         </label>
 
-        {isMolding && (
-          <label> Loại hàng
+        {(isMolding || isHybrid) && ( // Category cho Molding và Hybrid
+          <label> Loại hàng/năng suất
             <select className="input" value={category} onChange={e=>setCategory(e.target.value)}>
               <option value="">-- Tất cả --</option>
               {catOptions.map(c => <option key={c} value={c}>{c}</option>)}
@@ -441,7 +510,7 @@ function ReportContent() {
         </div>
 
         <div className="overflow-auto">
-          {isMolding ? (
+          {isMolding && (
             <table className="min-w-[1050px] text-sm">
               <thead className="bg-gray-100 text-xs uppercase">
                 <tr>
@@ -477,7 +546,61 @@ function ReportContent() {
                 )}
               </tbody>
             </table>
-          ) : (
+          )}
+
+          {isHybrid && ( // Bảng cho Hybrid Sections
+            <table className="min-w-[1300px] text-sm">
+              <thead className="bg-gray-100 text-xs uppercase">
+                <tr>
+                  <th className="p-2 text-center">Ngày</th>
+                  <th className="p-2 text-center">MSNV</th>
+                  <th className="p-2 text-center">Họ tên</th>
+                  <th className="p-2 text-center">Máy</th>
+                  <th className="p-2 text-center">Ca</th>
+                  <th className="p-2 text-center">Giờ LV (QĐ)</th>
+                  <th className="p-2 text-center">Giờ Dừng</th>
+                  <th className="p-2 text-center">Loại NS</th>
+                  <th className="p-2 text-center">Output</th>
+                  <th className="p-2 text-center">Tỷ lệ NS</th>
+                  <th className="p-2 text-center">Phế</th>
+                  <th className="p-2 text-center">Q</th>
+                  <th className="p-2 text-center">P</th>
+                  <th className="p-2 text-center">KPI</th>
+                  <th className="p-2 text-center">Duyệt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((r, i) => {
+                  const exactHours = Math.max(0, Number(r.working_real || 0) - Number(r.stop_hours || 0));
+                  const prodRate = exactHours > 0 ? Number(r.output || 0) / exactHours : 0;
+                  return (
+                    <tr key={`${r.worker_id}-${r.date}-${i}`} className="border-b hover:bg-gray-50">
+                      <td className="p-2 text-center">{r.date}</td>
+                      <td className="p-2 text-center">{r.worker_id}</td>
+                      <td className="p-2 text-center">{r.worker_name}</td>
+                      <td className="p-2 text-center">{r.line}</td>
+                      <td className="p-2 text-center">{r.ca}</td>
+                      <td className="p-2 text-center">{fmt(r.working_real, 2)}</td>
+                      <td className="p-2 text-center">{fmt(r.stop_hours, 2)}</td>
+                      <td className="p-2 text-center">{r.category}</td>
+                      <td className="p-2 text-center">{fmt(r.output, 0)}</td>
+                      <td className="p-2 text-center">{fmt(prodRate, 2)}</td>
+                      <td className="p-2 text-center">{fmt(r.defects, 0)}</td>
+                      <td className="p-2 text-center">{fmt(r.q_score, 2)}</td>
+                      <td className="p-2 text-center">{fmt(r.p_score, 2)}</td>
+                      <td className="p-2 text-center font-semibold">{fmt(r.day_score, 2)}</td>
+                      <td className="p-2 text-center">{r.status}</td>
+                    </tr>
+                  );
+                })}
+                {!pageRows.length && (
+                  <tr><td colSpan={15} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>
+                )}
+              </tbody>
+            </table>
+          )}
+
+          {!isMolding && !isHybrid && (
             <table className="min-w-[1100px] text-sm">
               <thead className="bg-gray-100 text-xs uppercase">
                 <tr>
