@@ -211,32 +211,7 @@ function ReportContent() {
   }, [rows, missingWorkerId, dateFrom, dateTo, workerOptions]);
 
 
-  // ----- 3. Effects & Data Fetching (useEffect Hooks) -----
-  useEffect(() => {
-    if (!isMolding && !isHybrid) { setCatOptions([]); setCategory(""); return; }
-    
-    supabase
-      .from("kpi_rule_productivity")
-      .select("category")
-      .eq("section", section.toUpperCase()) 
-      .eq("active", true)
-      .then(({ data, error }) => {
-        if (error) { console.error(error); return; }
-        const opts = [...new Set((data || []).map(r => r.category).filter(Boolean))];
-        setCatOptions(opts.sort());
-      });
-  }, [section, isMolding, isHybrid]);
-
-  useEffect(() => { if (!chartWorker && workerOptions.length) setChartWorker(workerOptions[0]?.[0] || ""); }, [workerOptions]);
-  
-  useEffect(() => { setPage(1); }, [rows]);
-  
-  useEffect(() => {
-    setRows([]); setCategory(""); setWorkerId(""); setApproverId(""); setStatus("all"); setOnlyApproved(false);
-    setMissingWorkerId("");
-  }, [section]);
-
-  // ----- Load dữ liệu Function -----
+  // ----- 3. Action Functions (const = () => {}) -----
   async function runQuery() {
     if (!dateFrom || !dateTo) return alert("Chọn khoảng ngày trước khi xem báo cáo.");
     if (new Date(dateFrom) > new Date(dateTo)) return alert("Khoảng ngày không hợp lệ.");
@@ -263,13 +238,142 @@ function ReportContent() {
     setRows(data || []);
   }
 
-  // ----- Export Missing Data Function -----
+  function exportXLSX() {
+    if (!rows.length) return alert("Không có dữ liệu để xuất.");
+  
+    const titleCase = (s) =>
+      s ? s.toString().toLowerCase().replace(/^\w/u, (c) => c.toUpperCase()) : "";
+    const complianceLabel = (code) => {
+      switch ((code || "NONE").toUpperCase()) {
+        case "NONE": return "Không vi phạm";
+        case "KÝ MẪU ĐẦU CHUYỀN TRƯỚC KHI SỬ DỤNG":
+        case "LATE": return "Ký mẫu đầu chuyền trước khi sử dụng";
+        case "QUY ĐỊNH VỀ KIỂM TRA ĐIỀU KIỆN MÁY TRƯỚC/TRONG KHI SẢN XUẤT":
+        case "PPE":  return "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất";
+        case "QUY ĐỊNH VỀ KIỂM TRA NGUYÊN LIỆU TRƯỚC/TRONG KHI SẢN XUẤT":
+        case "MAT":  return "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất";
+        case "QUY ĐỊNH VỀ KIỂM TRA QUY CÁCH/TIÊU CHUẨN SẢN PHẨM TRƯỚC/TRONG KHI SẢN XUẤT":
+        case "SPEC": return "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất";
+        case "VI PHẠM NỘI QUY BỘ PHẬN/CÔNG TY":
+        case "RULE": return "Vi phạm nội quy bộ phận/công ty";
+        default:     return code;
+      }
+    };
+    
+  
+    let data;
+    if (isMolding) {
+      // Logic Export Molding
+      data = rows.map((r) => {
+        const p = Number(r.p_score || 0);
+        const q = Number(r.q_score || 0);
+        const day = Number(r.day_score || 0);
+        const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
+        const total = day + overflow;
+  
+        return {
+          "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "MOLDING")),
+          "MSNV": r.worker_id || "",
+          "HỌ VÀ TÊN": r.worker_name || "",
+          "CA LÀM VIỆC": r.ca || "",
+          "NGÀY LÀM VIỆC": fmtDate(r.date),
+          "THỜI GIAN LÀM VIỆC": Number(r.working_input ?? 0),
+          "Số đôi phế": Number(r.defects ?? 0),
+          "Điểm chất lượng": q,
+          "Sản lượng/ca": Number(r.output ?? 0),
+          "Điểm Sản lượng": p,
+          "Tuân thủ": complianceLabel(r.compliance_code),
+          "Vi phạm": r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0),
+          "Điểm KPI ngày": day,
+          "Điểm dư": overflow,
+          "Điểm tổng": total,
+          "Loại hàng": r.category || "",
+          "Số giờ khuôn chạy thực tế": Number(r.mold_hours ?? 0),
+          "Thời gian dừng /24 khuôn (h)": Number(r.downtime ?? 0),
+          "MSNV người duyệt": r.approver_msnv || "",
+          "Người duyệt": r.approver_name || ""
+        };
+      });
+    } else if (isHybrid) {
+      // Logic Export HYBRID (LAMINATION, PREFITTING, BÀO, TÁCH)
+      data = rows.map((r) => {
+        const p = Number(r.p_score || 0);
+        const q = Number(r.q_score || 0);
+        const day = Number(r.day_score || 0);
+        const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
+        const exactHours = Math.max(0, Number(r.working_real || 0) - Number(r.stop_hours || 0));
+        const prodRate = exactHours > 0 ? Number(r.output || 0) / exactHours : 0;
+  
+        return {
+          "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "")),
+          "MSNV": r.worker_id || "",
+          "HỌ VÀ TÊN": r.worker_name || "",
+          "CA LÀM VIỆC": r.ca || "",
+          "NGÀY LÀM VIỆC": fmtDate(r.date),
+          "THỜI GIAN LÀM VIỆC (Nhập)": Number(r.work_hours ?? 0),
+          "THỜI GIAN THỰC TẾ (Quy đổi)": Number(r.working_real ?? 0),
+          "THỜI GIAN CHÍNH XÁC": exactHours,
+          "Số đôi phế": Number(r.defects ?? 0),
+          "Điểm chất lượng": q,
+          "Sản lượng (Output)": Number(r.output ?? 0),
+          "Tỷ lệ Năng suất": Number(prodRate),
+          "Loại năng suất": r.category || "",
+          "Điểm Sản lượng": p,
+          "Tuân thủ": complianceLabel(r.compliance_code),
+          "Vi phạm": r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0),
+          "Điểm KPI ngày": day,
+          "Điểm dư": overflow,
+          "MSNV người duyệt": r.approver_id || "",
+          "Họ và Tên Người duyệt": r.approver_name || "",
+          "Máy làm việc": r.line || "",
+          "THỜI GIAN DỪNG MÁY": Number(r.stop_hours ?? 0),
+        };
+      });
+
+    } else {
+      // Logic Export LEANLINE DC & LEANLINE MOLDED
+      data = rows.map((r) => {
+        const p = Number(r.p_score || 0);
+        const q = Number(r.q_score || 0);
+        const day = Number(r.day_score || 0);
+        const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
+        const totalMonth = day + overflow;
+  
+        return {
+          "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "")),
+          "MSNV": r.worker_id || "",
+          "HỌ VÀ TÊN": r.worker_name || "",
+          "CA LÀM VIỆC": r.ca || "",
+          "NGÀY LÀM VIỆC": fmtDate(r.date),
+          "THỜI GIAN LÀM VIỆC": Number(r.work_hours ?? 0),
+          "Số đôi phế": Number(r.defects ?? 0),
+          "Điểm chất lượng": q,
+          "%OE": Number(r.oe ?? 0),
+          "Điểm sản lượng": p,
+          "Tuân thủ": complianceLabel(r.compliance_code),
+          "Vi phạm": r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0),
+          "Điểm KPI ngày": day,
+          "Điểm dư": overflow,
+          "Điểm KPI tổng tháng": totalMonth,
+          "THỜI GIAN DOWNTIME": Number(r.stop_hours ?? 0),
+          "MSNV người duyệt": r.approver_id || "",
+          "Họ và Tên Người duyệt": r.approver_name || "",
+          "Line làm việc": r.line || ""
+        };
+      });
+    }
+  
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, viSection(section));
+    XLSX.writeFile(wb, `kpi_report_${section}_${dateFrom}_to_${dateTo}.xlsx`);
+  }
+
   function exportMissingXLSX() {
     if (!missingReport || !missingReport.dates.length) {
         return alert("Không có ngày thiếu KPI để xuất.");
     }
     
-    // Tùy chỉnh Export XLSX cho Missing Report (Giữ nguyên)
     const data = missingReport.dates.map(date => ({
         "SECTION": viSection(section),
         "MSNV": missingReport.workerId,
@@ -285,6 +389,33 @@ function ReportContent() {
     
     XLSX.writeFile(wb, `kpi_missing_${section}_${missingReport.workerId}_${dateFrom}_to_${dateTo}.xlsx`);
   }
+
+
+  // ----- 4. Effects (Triggering data load/reset) -----
+  useEffect(() => {
+    if (!isMolding && !isHybrid) { setCatOptions([]); setCategory(""); return; }
+    
+    supabase
+      .from("kpi_rule_productivity")
+      .select("category")
+      .eq("section", section.toUpperCase()) 
+      .eq("active", true)
+      .then(({ data, error }) => {
+        if (error) { console.error(error); return; }
+        const opts = [...new Set((data || []).map(r => r.category).filter(Boolean))];
+        setCatOptions(opts.sort());
+      });
+  }, [section, isMolding, isHybrid]);
+
+  useEffect(() => { if (!chartWorker && workerOptions.length) setChartWorker(workerOptions[0]?.[0] || ""); }, [workerOptions]);
+  
+  useEffect(() => { setPage(1); }, [rows]);
+  
+  useEffect(() => {
+    setRows([]); setCategory(""); setWorkerId(""); setApproverId(""); setStatus("all"); setOnlyApproved(false);
+    setMissingWorkerId("");
+  }, [section]);
+
 
   // --- JSX Rendering Starts Here ---
   return (
