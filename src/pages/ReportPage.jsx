@@ -508,7 +508,7 @@ function ReportContent() {
             </table>
           )}
 
-          {isHybrid && ( // Bảng cho Hybrid Sections
+          {isHybrid && ( // Bảng cho Hybrid Sections...
             <table className="min-w-[1300px] text-sm">
               <thead className="bg-gray-100 text-xs uppercase">
                 <tr>
