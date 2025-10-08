@@ -454,11 +454,11 @@ function ReportContent() {
     const id = approverId.trim();
     if (!id) { setApproverWorkers([]); return; }
 
-    const approverCol = isMolding ? "approver_msnv" : "approver_id";
+    const approverCol = "approver_msnv"; // FIX: LUÔN DÙNG approver_msnv CHO BẢNG USERS
 
     supabase.from("users")
         .select("msnv, full_name")
-        .eq(approverCol, id)
+        .eq(approverCol, id) // Dùng cột cố định
         .then(({ data, error }) => {
             if (error) { console.error("Error loading approver workers:", error); return; }
             setApproverWorkers(data || []);

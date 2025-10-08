@@ -153,7 +153,7 @@ export default function ApproverModeHybrid({ section }) {
     const { data, error } = await supabase
       .from("users")
       .select("msnv, full_name, approver_msnv, approver_name")
-      .eq("approver_msnv", id);
+      .eq("approver_msnv", id); // FIX: LUÔN DÙNG approver_msnv
     if (error) return alert("Lỗi tải nhân viên: " + error.message);
     setWorkers(data || []);
     setChecked(new Set());
