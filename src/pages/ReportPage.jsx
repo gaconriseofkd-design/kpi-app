@@ -71,19 +71,17 @@ export default function ReportPage() {
 
 /* =============== Trang báo cáo =============== */
 function ReportContent() {
-  // Lấy Context
   const { section } = useKpiSection();               
   const isMolding = section === "MOLDING";
   const isHybrid = isHybridSection(section);
   const tableName = getTableName(section);
 
-  // Constants
   const today = () => new Date().toISOString().slice(0,10);
   const firstDayOfMonth = () => {
     const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1).toISOString().slice(0,10);
   };
   
-  // ----- 1. State Declarations (All useState Hooks) -----
+  // ----- 1. State Declarations -----
   const [dateFrom, setDateFrom] = useState(firstDayOfMonth());
   const [dateTo, setDateTo]     = useState(today());
   const [approverId, setApproverId] = useState(""); 
@@ -94,13 +92,15 @@ function ReportContent() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [catOptions, setCatOptions] = useState([]);
-  const [missingWorkerId, setMissingWorkerId] = useState("");
+  const [missingPage, setMissingPage] = useState(1);
   
   // States liên quan đến Chart/Table
   const [chartWorker, setChartWorker] = useState("");
   const [teamMode, setTeamMode] = useState("global");
   const [page, setPage] = useState(1);
+  const [approverWorkers, setApproverWorkers] = useState([]); // DANH SÁCH NV DƯỚI QUYỀN
   const pageSize = 100;
+  const missingPageSize = 10; // Kích thước trang cho Báo cáo thiếu KPI
 
 
   // ----- 2. Helpers & Derived States (useMemo Hooks) -----
@@ -118,7 +118,7 @@ function ReportContent() {
   const fmtDate = (iso) => {
     if (!iso) return "";
     const [y, m, d] = iso.split("-").map(Number);
-    return `${m}/${d}/${y}`; // M/D/YYYY giống file mẫu
+    return `${m}/${d}/${y}`;
   };  
   const fmt = (n, d=2) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-US",{maximumFractionDigits:d}) : "");
 
@@ -187,31 +187,93 @@ function ReportContent() {
     }
     return [...idx.values()].sort((a,b) => a.date.localeCompare(b.date));
   }, [rows, chartWorker, teamMode, approverId, isMolding]);
+  
+  const missingReportFull = useMemo(() => {
+    if (!approverWorkers.length || !rows.length || !dateFrom || !dateTo) return [];
 
-  const missingReport = useMemo(() => {
-    const id = missingWorkerId.trim();
-    if (!id || !dateFrom || !dateTo) return null;
-
-    const submittedDates = new Set(
-        rows.filter(r => r.worker_id === id).map(r => r.date)
-    );
-    const allDates = getAllDatesInRange(dateFrom, dateTo);
-
-    const workerName = workerOptions.find(([wid]) => wid === id)?.[1] || id;
-
-    const missing = allDates.filter(d => !submittedDates.has(d));
+    const submittedMap = new Map(); 
+    for (const r of rows) {
+        if (!submittedMap.has(r.worker_id)) {
+            submittedMap.set(r.worker_id, new Set());
+        }
+        submittedMap.get(r.worker_id).add(r.date);
+    }
     
-    return { 
-        workerId: id, 
-        workerName: workerName,
-        dates: missing,
-        submittedCount: submittedDates.size,
-        totalDays: allDates.length
-    };
-  }, [rows, missingWorkerId, dateFrom, dateTo, workerOptions]);
+    const allDates = getAllDatesInRange(dateFrom, dateTo);
+    
+    const report = [];
+    approverWorkers.forEach(w => {
+        const submittedDates = submittedMap.get(w.msnv) || new Set();
+        const missingDates = allDates.filter(d => !submittedDates.has(d));
+        
+        if (missingDates.length > 0) {
+            report.push({
+                msnv: w.msnv,
+                name: w.full_name,
+                missing: missingDates.join(", "),
+                missingCount: missingDates.length,
+                totalDays: allDates.length
+            });
+        }
+    });
+
+    return report.sort((a, b) => b.missingCount - a.missingCount); // Sắp xếp giảm dần theo số ngày thiếu
+  }, [approverWorkers, rows, dateFrom, dateTo]);
+
+  const missingReportPaged = useMemo(() => {
+    const start = (missingPage - 1) * missingPageSize;
+    const end = start + missingPageSize;
+    return missingReportFull.slice(start, end);
+  }, [missingReportFull, missingPage]);
+
+  const missingTotalPages = useMemo(() => Math.max(1, Math.ceil(missingReportFull.length / missingPageSize)), [missingReportFull.length]);
 
 
-  // ----- 3. Action Functions (const = () => {}) -----
+  // ----- 3. Effects & Data Fetching (useEffect Hooks) -----
+  useEffect(() => {
+    // 1. Load Category Options
+    if (!isMolding && !isHybrid) { setCatOptions([]); setCategory(""); return; }
+    
+    supabase
+      .from("kpi_rule_productivity")
+      .select("category")
+      .eq("section", section.toUpperCase()) 
+      .eq("active", true)
+      .then(({ data, error }) => {
+        if (error) { console.error(error); return; }
+        const opts = [...new Set((data || []).map(r => r.category).filter(Boolean))];
+        setCatOptions(opts.sort());
+      });
+  }, [section, isMolding, isHybrid]);
+  
+  useEffect(() => {
+    // 2. Load Workers by Approver (for Missing KPI Report)
+    const id = approverId.trim();
+    if (!id) { setApproverWorkers([]); return; }
+
+    const approverCol = isMolding ? "approver_msnv" : "approver_id";
+
+    supabase.from("users")
+        .select("msnv, full_name")
+        .eq(approverCol, id)
+        .then(({ data, error }) => {
+            if (error) { console.error("Error loading approver workers:", error); return; }
+            setApproverWorkers(data || []);
+        });
+  }, [approverId, isMolding]);
+
+  useEffect(() => { if (!chartWorker && workerOptions.length) setChartWorker(workerOptions[0]?.[0] || ""); }, [workerOptions]);
+  
+  useEffect(() => { setPage(1); setMissingPage(1); }, [rows]);
+  
+  useEffect(() => {
+    setRows([]); setCategory(""); setWorkerId(""); setApproverId(""); setStatus("all"); setOnlyApproved(false);
+    setMissingPage(1);
+  }, [section]);
+  
+  useEffect(() => { setMissingPage(1); }, [approverId, dateFrom, dateTo]);
+
+  // ----- Load dữ liệu Function -----
   async function runQuery() {
     if (!dateFrom || !dateTo) return alert("Chọn khoảng ngày trước khi xem báo cáo.");
     if (new Date(dateFrom) > new Date(dateTo)) return alert("Khoảng ngày không hợp lệ.");
@@ -227,6 +289,10 @@ function ReportContent() {
     if (approverId.trim()) {
       const approverCol = isMolding ? "approver_msnv" : "approver_id";
       q = q.eq(approverCol, approverId.trim());
+      
+      // Nếu có MSNV người duyệt, chúng ta không dùng workerId cho việc lọc rows, 
+      // mà dùng để lọc biểu đồ/tổng hợp sau này. Tuy nhiên, nếu workerId là null, ta không nên lọc
+      // Nếu workerId có giá trị, nó sẽ tự động lọc rows, giữ lại tính năng lọc đơn
     }
     
     if ((isMolding || isHybrid) && category) q = q.eq("category", category);
@@ -238,6 +304,7 @@ function ReportContent() {
     setRows(data || []);
   }
 
+  // ----- Export XLSX Function -----
   function exportXLSX() {
     if (!rows.length) return alert("Không có dữ liệu để xuất.");
   
@@ -369,29 +436,49 @@ function ReportContent() {
     XLSX.writeFile(wb, `kpi_report_${section}_${dateFrom}_to_${dateTo}.xlsx`);
   }
 
-  function exportMissingXLSX() {
-    if (!missingReport || !missingReport.dates.length) {
-        return alert("Không có ngày thiếu KPI để xuất.");
-    }
+  function exportMissingXLSXFull() {
+    if (!missingReportFull.length) return alert("Không có nhân viên nào thiếu KPI để xuất.");
     
-    const data = missingReport.dates.map(date => ({
-        "SECTION": viSection(section),
-        "MSNV": missingReport.workerId,
-        "HỌ VÀ TÊN": missingReport.workerName,
-        "NGÀY THIẾU KPI": date,
-        "NGÀY BẮT ĐẦU LỌC": dateFrom,
-        "NGÀY KẾT THÚC LỌC": dateTo
-    }));
+    // Xuất tổng hợp tất cả ngày thiếu của tất cả nhân viên thiếu KPI
+    const data = missingReportFull.flatMap(r => 
+        r.missing.map(date => ({
+            "SECTION": viSection(section),
+            "MSNV": r.msnv,
+            "HỌ VÀ TÊN": r.name,
+            "NGÀY THIẾU KPI": date,
+            "NGÀY BẮT ĐẦU LỌC": dateFrom,
+            "NGÀY KẾT THÚC LỌC": dateTo
+        }))
+    );
     
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "KPI_Missing_Dates");
     
-    XLSX.writeFile(wb, `kpi_missing_${section}_${missingReport.workerId}_${dateFrom}_to_${dateTo}.xlsx`);
+    XLSX.writeFile(wb, `kpi_missing_full_${section}_${approverId}_${dateFrom}_to_${dateTo}.xlsx`);
   }
 
 
   // ----- 4. Effects (Triggering data load/reset) -----
+  useEffect(() => {
+    // Rerun when page/rows change
+    setPage(1); 
+  }, [rows]);
+  
+  useEffect(() => {
+    // Rerun when approver changes
+    setMissingPage(1);
+  }, [approverId, dateFrom, dateTo]);
+  
+  useEffect(() => {
+    // Rerun when section changes
+    setRows([]); setCategory(""); setWorkerId(""); setApproverId(""); setStatus("all"); setOnlyApproved(false);
+  }, [section]);
+  
+  // Reruns when workerOptions changes (used for chart default)
+  useEffect(() => { if (!chartWorker && workerOptions.length) setChartWorker(workerOptions[0]?.[0] || ""); }, [workerOptions]);
+  
+  // Reruns when workerOptions changes (used for category dropdown)
   useEffect(() => {
     if (!isMolding && !isHybrid) { setCatOptions([]); setCategory(""); return; }
     
@@ -406,15 +493,22 @@ function ReportContent() {
         setCatOptions(opts.sort());
       });
   }, [section, isMolding, isHybrid]);
-
-  useEffect(() => { if (!chartWorker && workerOptions.length) setChartWorker(workerOptions[0]?.[0] || ""); }, [workerOptions]);
   
-  useEffect(() => { setPage(1); }, [rows]);
-  
+  // Load Workers by Approver (for Missing KPI Report)
   useEffect(() => {
-    setRows([]); setCategory(""); setWorkerId(""); setApproverId(""); setStatus("all"); setOnlyApproved(false);
-    setMissingWorkerId("");
-  }, [section]);
+    const id = approverId.trim();
+    if (!id) { setApproverWorkers([]); return; }
+
+    const approverCol = isMolding ? "approver_msnv" : "approver_id";
+
+    supabase.from("users")
+        .select("msnv, full_name")
+        .eq(approverCol, id)
+        .then(({ data, error }) => {
+            if (error) { console.error("Error loading approver workers:", error); return; }
+            setApproverWorkers(data || []);
+        });
+  }, [approverId, isMolding]);
 
 
   // --- JSX Rendering Starts Here ---
@@ -483,47 +577,62 @@ function ReportContent() {
 
       {/* Tra cứu ngày thiếu KPI */}
       <div className="p-4 border rounded bg-white space-y-3">
-        <h3 className="text-lg font-semibold">Tra cứu ngày thiếu KPI</h3>
-        <div className="flex items-center gap-3">
-          <label className="flex items-center gap-2">
-            Chọn Nhân viên:
-            <select 
-                className="input w-48" 
-                value={missingWorkerId} 
-                onChange={e => setMissingWorkerId(e.target.value)}
-            >
-                <option value="">-- Chọn MSNV --</option>
-                {workerOptions.map(([id, name]) => (
-                    <option key={id} value={id}>{id} — {name}</option>
-                ))}
-            </select>
-          </label>
-          <button 
-            className="btn" 
-            onClick={exportMissingXLSX} 
-            disabled={!missingReport || missingReport.dates.length === 0}
-          >
-            Xuất XLSX ngày thiếu
-          </button>
-        </div>
+        <h3 className="text-lg font-semibold">Tra cứu ngày thiếu KPI theo Người duyệt</h3>
         
-        {missingReport && (
-            <div className="pt-2">
-                <p className="font-medium mb-2">
-                    {missingReport.workerName} ({missingReport.workerId}): 
-                    <span className="ml-2">Đã gửi {missingReport.submittedCount}/{missingReport.totalDays} ngày.</span>
-                </p>
-                {missingReport.dates.length > 0 ? (
-                    <div className="text-red-600 border border-red-300 p-2 rounded max-h-32 overflow-y-auto">
-                        <span className="font-semibold mr-2">THIẾU KPI CÁC NGÀY:</span> 
-                        {missingReport.dates.join(", ")}
+        {!approverId.trim() && <p className="text-gray-500">Vui lòng nhập MSNV Người duyệt để tra cứu.</p>}
+        {approverId.trim() && approverWorkers.length === 0 && !loading && <p className="text-red-500">Không tìm thấy nhân viên nào dưới quyền người duyệt này.</p>}
+
+        {approverWorkers.length > 0 && (
+            <>
+                <div className="flex items-center gap-3">
+                    <span className="font-medium">Tổng số NV cần theo dõi: <b>{approverWorkers.length}</b></span>
+                    <span className="font-medium">NV thiếu KPI: <b className="text-red-600">{missingReportFull.length}</b></span>
+                    <button 
+                        className="btn ml-auto" 
+                        onClick={exportMissingXLSXFull} 
+                        disabled={!missingReportFull.length}
+                    >
+                        Xuất XLSX (Tổng hợp)
+                    </button>
+                </div>
+                
+                <div className="overflow-x-auto">
+                    <table className="min-w-full text-sm border">
+                        <thead className="bg-gray-100 text-xs uppercase">
+                            <tr>
+                                <th className="p-2 text-left">MSNV</th>
+                                <th className="p-2 text-left">Họ & tên</th>
+                                <th className="p-2 text-center">Thiếu / Tổng ngày</th>
+                                <th className="p-2 text-left">Những ngày thiếu KPI</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {missingReportPaged.map(r => (
+                                <tr key={r.msnv} className="border-b hover:bg-gray-50">
+                                    <td className="p-2">{r.msnv}</td>
+                                    <td className="p-2">{r.name}</td>
+                                    <td className={`p-2 text-center font-semibold ${r.missingCount > 0 ? 'text-red-600' : ''}`}>
+                                        {r.missingCount}/{r.totalDays}
+                                    </td>
+                                    <td className="p-2 text-wrap max-w-lg text-xs">{r.missing}</td>
+                                </tr>
+                            ))}
+                            {!missingReportPaged.length && <tr><td colSpan={4} className="p-4 text-center text-gray-500">Tất cả nhân viên đã gửi đủ KPI hoặc không có dữ liệu KPI trong khoảng ngày này.</td></tr>}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Pagination */}
+                {missingTotalPages > 1 && (
+                    <div className="flex justify-center items-center gap-3 mt-3">
+                        <button className="btn" onClick={() => setMissingPage(p => Math.max(1, p - 1))} disabled={missingPage <= 1}>‹ Trước</button>
+                        <span>Trang {missingPage}/{missingTotalPages}</span>
+                        <button className="btn" onClick={() => setMissingPage(p => Math.min(missingTotalPages, p + 1))} disabled={missingPage >= missingTotalPages}>Sau ›</button>
                     </div>
-                ) : (
-                    <p className="text-green-600">✅ Đã gửi KPI đủ {missingReport.totalDays} ngày trong khoảng.</p>
                 )}
-            </div>
+            </>
         )}
-        {!rows.length && <p className="text-gray-500">Tải dữ liệu báo cáo trước để xem danh sách nhân viên.</p>}
+        {!rows.length && approverId.trim() && <p className="text-gray-500">Đang chờ tải dữ liệu KPI chi tiết để kiểm tra.</p>}
       </div>
 
       {/* Chart */}
