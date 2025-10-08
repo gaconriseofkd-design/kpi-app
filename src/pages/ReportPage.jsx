@@ -26,13 +26,11 @@ function getAllDatesInRange(start, end) {
   const endDate = new Date(end);
   
   while (currentDate <= endDate) {
-    // Chỉ lấy ngày làm việc (trừ T7 & CN nếu cần, nhưng tạm thời lấy tất cả ngày)
     dates.push(currentDate.toISOString().slice(0, 10));
     currentDate.setDate(currentDate.getDate() + 1);
   }
   return dates;
 }
-
 
 /* =============== Gate đăng nhập =============== */
 export default function ReportPage() {
@@ -76,8 +74,31 @@ function ReportContent() {
   const { section } = useKpiSection();               
   const isMolding = section === "MOLDING";
   const isHybrid = isHybridSection(section);
-  const tableName = getTableName(section); 
+  const tableName = getTableName(section);
 
+  const today = () => new Date().toISOString().slice(0,10);
+  const firstDayOfMonth = () => {
+    const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1).toISOString().slice(0,10);
+  };
+  
+  // ----- 1. State Declarations (All useState Hooks) -----
+  const [dateFrom, setDateFrom] = useState(firstDayOfMonth());
+  const [dateTo, setDateTo]     = useState(today());
+  const [approverId, setApproverId] = useState(""); 
+  const [workerId, setWorkerId]     = useState("");
+  const [status, setStatus]         = useState("all");
+  const [onlyApproved, setOnlyApproved] = useState(false);
+  const [category, setCategory]     = useState(""); 
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [catOptions, setCatOptions] = useState([]);
+  const [chartWorker, setChartWorker] = useState("");
+  const [teamMode, setTeamMode] = useState("global");
+  const [page, setPage] = useState(1);
+  const [missingWorkerId, setMissingWorkerId] = useState("");
+  const pageSize = 100;
+
+  // ----- 2. Helpers & Derived States (useMemo Hooks) -----
   const viSection = (s) => {
     const k = (s || "").toUpperCase();
     if (k === "MOLDING") return "Molding";
@@ -93,29 +114,99 @@ function ReportContent() {
     if (!iso) return "";
     const [y, m, d] = iso.split("-").map(Number);
     return `${m}/${d}/${y}`; // M/D/YYYY giống file mẫu
-  };                                            
-  // ----- bộ lọc -----
-  const today = () => new Date().toISOString().slice(0,10);
-  const firstDayOfMonth = () => {
-    const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1).toISOString().slice(0,10);
-  };
+  };  
+  const fmt = (n, d=2) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-US",{maximumFractionDigits:d}) : "");
 
-  const [dateFrom, setDateFrom] = useState(firstDayOfMonth());
-  const [dateTo, setDateTo]     = useState(today());
-  const [approverId, setApproverId] = useState(""); 
-  const [workerId, setWorkerId]     = useState(""); // Dùng cho lọc chính
-  const [status, setStatus]         = useState("all"); 
-  const [onlyApproved, setOnlyApproved] = useState(false);
-  const [category, setCategory]     = useState(""); 
+  const workerOptions = useMemo(() => {
+    return Array.from(new Map(rows.map(r => [r.worker_id, r.worker_name || r.worker_id])).entries());
+  }, [rows]); 
 
-  // ----- dữ liệu -----
-  const [rows, setRows] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const top5 = useMemo(() => {
+    const map = new Map();
+    for (const r of rows) {
+      const cur = map.get(r.worker_id) || { name: r.worker_name || r.worker_id, total: 0, count: 0 };
+      cur.total += Number(r.day_score || 0);
+      cur.count += 1;
+      map.set(r.worker_id, cur);
+    }
+    const arr = [...map.entries()].map(([id, v]) => ({
+      worker_id: id, worker_name: v.name, total: v.total, avg: v.count ? v.total/v.count : 0, days: v.count
+    })).sort((a,b) => b.total - a.total);
+    return arr.slice(0, 5);
+  }, [rows]);
 
-  // ----- Missing KPI Report State -----
-  const [missingWorkerId, setMissingWorkerId] = useState("");
-  const [catOptions, setCatOptions] = useState([]);
+  const summary = useMemo(() => {
+    const n = rows.length;
+    const total = rows.reduce((s, r) => s + Number(r.day_score || 0), 0);
+    const avg = n ? total / n : 0;
+    const viol = rows.reduce((s, r) => s + Number(r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0)), 0);
+    const workers = new Set(rows.map(r => r.worker_id)).size;
+    return { records: n, total, avg, violations: viol, workers };
+  }, [rows]);
 
+  const chartData = useMemo(() => {
+    if (!chartWorker) return [];
+    const byDateAll = new Map();       
+    const byDateApv = new Map();       
+    const workerRows = rows.filter(r => r.worker_id === chartWorker);
+
+    const approverField = isMolding ? "approver_msnv" : "approver_id";
+    const workerApprover = workerRows[0]?.[approverField] || (approverId || "");
+
+    for (const r of rows) {
+      const k = r.date;
+      const g = byDateAll.get(k) || { sum: 0, count: 0 };
+      g.sum += Number(r.day_score || 0);
+      g.count += 1;
+      byDateAll.set(k, g);
+
+      if (workerApprover && r[approverField] === workerApprover) {
+        const g2 = byDateApv.get(k) || { sum: 0, count: 0 };
+        g2.sum += Number(r.day_score || 0);
+        g2.count += 1;
+        byDateApv.set(k, g2);
+      }
+    }
+
+    const idx = new Map(); 
+    for (const r of workerRows) idx.set(r.date, { date: r.date, worker: Number(r.day_score || 0) });
+
+    const base = (teamMode === "approver" && workerApprover) ? byDateApv : byDateAll;
+    for (const [d, v] of base) {
+      const row = idx.get(d) || { date: d };
+      row.avg = v.count ? v.sum / v.count : 0;
+      idx.set(d, row);
+    }
+    return [...idx.values()].sort((a,b) => a.date.localeCompare(b.date));
+  }, [rows, chartWorker, teamMode, approverId, isMolding]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
+  const pageRows = useMemo(() => rows.slice((page-1)*pageSize, page*pageSize), [rows, page]);
+
+  const missingReport = useMemo(() => {
+    const id = missingWorkerId.trim();
+    if (!id || !dateFrom || !dateTo) return null;
+
+    const submittedDates = new Set(
+        rows.filter(r => r.worker_id === id).map(r => r.date)
+    );
+    const allDates = getAllDatesInRange(dateFrom, dateTo);
+
+    const workerName = workerOptions.find(([wid]) => wid === id)?.[1] || id;
+
+    const missing = allDates.filter(d => !submittedDates.has(d));
+    
+    return { 
+        workerId: id, 
+        workerName: workerName,
+        dates: missing,
+        submittedCount: submittedDates.size,
+        totalDays: allDates.length
+    };
+  }, [rows, missingWorkerId, dateFrom, dateTo, workerOptions]);
+
+
+  // ----- 3. Effects & Data Fetching (useEffect Hooks) -----
   useEffect(() => {
     if (!isMolding && !isHybrid) { setCatOptions([]); setCategory(""); return; }
     
@@ -131,7 +222,16 @@ function ReportContent() {
       });
   }, [section, isMolding, isHybrid]);
 
-  // ----- Load dữ liệu -----
+  useEffect(() => { if (!chartWorker && workerOptions.length) setChartWorker(workerOptions[0][0]); }, [workerOptions, chartWorker]);
+  
+  useEffect(() => { setPage(1); }, [rows]);
+  
+  useEffect(() => {
+    setRows([]); setCategory(""); setWorkerId(""); setApproverId(""); setStatus("all"); setOnlyApproved(false);
+    setMissingWorkerId("");
+  }, [section]);
+
+  // ----- Load dữ liệu Function -----
   async function runQuery() {
     if (!dateFrom || !dateTo) return alert("Chọn khoảng ngày trước khi xem báo cáo.");
     if (new Date(dateFrom) > new Date(dateTo)) return alert("Khoảng ngày không hợp lệ.");
@@ -158,40 +258,7 @@ function ReportContent() {
     setRows(data || []);
   }
 
-  // reset khi đổi section
-  useEffect(() => {
-    setRows([]); setCategory(""); setWorkerId(""); setApproverId(""); setStatus("all"); setOnlyApproved(false);
-    setMissingWorkerId("");
-  }, [section]);
-
-  /* ---------- Missing KPI Logic ---------- */
-  const workerOptions = useMemo(() => {
-    // Lấy danh sách nhân viên duy nhất từ bộ lọc hiện tại
-    return Array.from(new Map(rows.map(r => [r.worker_id, r.worker_name || r.worker_id])).entries());
-  }, [rows]); 
-
-  const missingReport = useMemo(() => {
-    const id = missingWorkerId.trim();
-    if (!id || !dateFrom || !dateTo) return null;
-
-    const submittedDates = new Set(
-        rows.filter(r => r.worker_id === id).map(r => r.date)
-    );
-    const allDates = getAllDatesInRange(dateFrom, dateTo);
-
-    const workerName = workerOptions.find(([wid]) => wid === id)?.[1] || id;
-
-    const missing = allDates.filter(d => !submittedDates.has(d));
-    
-    return { 
-        workerId: id, 
-        workerName: workerName,
-        dates: missing,
-        submittedCount: submittedDates.size,
-        totalDays: allDates.length
-    };
-  }, [rows, missingWorkerId, dateFrom, dateTo, workerOptions]);
-
+  // ----- Export Missing Data Function -----
   function exportMissingXLSX() {
     if (!missingReport || !missingReport.dates.length) {
         return alert("Không có ngày thiếu KPI để xuất.");
@@ -212,82 +279,8 @@ function ReportContent() {
     
     XLSX.writeFile(wb, `kpi_missing_${section}_${missingReport.workerId}_${dateFrom}_to_${dateTo}.xlsx`);
   }
-  /* ---------- END Missing KPI Logic ---------- */
 
-  /* ---------- TOP 5 & summary (Giữ nguyên) ---------- */
-  const top5 = useMemo(() => {
-    const map = new Map();
-    for (const r of rows) {
-      const cur = map.get(r.worker_id) || { name: r.worker_name || r.worker_id, total: 0, count: 0 };
-      cur.total += Number(r.day_score || 0);
-      cur.count += 1;
-      map.set(r.worker_id, cur);
-    }
-    const arr = [...map.entries()].map(([id, v]) => ({
-      worker_id: id, worker_name: v.name, total: v.total, avg: v.count ? v.total/v.count : 0, days: v.count
-    })).sort((a,b) => b.total - a.total);
-    return arr.slice(0, 5);
-  }, [rows]);
-
-  const summary = useMemo(() => {
-    const n = rows.length;
-    const total = rows.reduce((s, r) => s + Number(r.day_score || 0), 0);
-    const avg = n ? total / n : 0;
-    const viol = rows.reduce((s, r) => s + Number(r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0)), 0);
-    const workers = new Set(rows.map(r => r.worker_id)).size;
-    return { records: n, total, avg, violations: viol, workers };
-  }, [rows]);
-
-  /* ---------- Chart (Giữ nguyên) ---------- */
-  const [teamMode, setTeamMode] = useState("global"); // global|approver
-  const chartData = useMemo(() => {
-    if (!chartWorker) return [];
-    const byDateAll = new Map();       // date -> {sum,count}
-    const byDateApv = new Map();       // date -> {sum,count}
-    const workerRows = rows.filter(r => r.worker_id === chartWorker);
-
-    const approverField = isMolding ? "approver_msnv" : "approver_id";
-    const workerApprover = workerRows[0]?.[approverField] || (approverId || "");
-
-    for (const r of rows) {
-      const k = r.date;
-      const g = byDateAll.get(k) || { sum: 0, count: 0 };
-      g.sum += Number(r.day_score || 0);
-      g.count += 1;
-      byDateAll.set(k, g);
-
-      if (workerApprover && r[approverField] === workerApprover) {
-        const g2 = byDateApv.get(k) || { sum: 0, count: 0 };
-        g2.sum += Number(r.day_score || 0);
-        g2.count += 1;
-        byDateApv.set(k, g2);
-      }
-    }
-
-    const idx = new Map(); // date -> {date, worker, avg}
-    for (const r of workerRows) idx.set(r.date, { date: r.date, worker: Number(r.day_score || 0) });
-
-    const base = (teamMode === "approver" && workerApprover) ? byDateApv : byDateAll;
-    for (const [d, v] of base) {
-      const row = idx.get(d) || { date: d };
-      row.avg = v.count ? v.sum / v.count : 0;
-      idx.set(d, row);
-    }
-    return [...idx.values()].sort((a,b) => a.date.localeCompare(b.date));
-  }, [rows, chartWorker, teamMode, approverId, isMolding]);
-
-  const [chartWorker, setChartWorker] = useState("");
-  useEffect(() => { if (!chartWorker && workerOptions.length) setChartWorker(workerOptions[0][0]); }, [workerOptions, chartWorker]);
-
-  /* ---------- Paging bảng (Giữ nguyên) ---------- */
-  const [page, setPage] = useState(1);
-  const pageSize = 100;
-  useEffect(() => { setPage(1); }, [rows]);
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-  const pageRows = useMemo(() => rows.slice((page-1)*pageSize, page*pageSize), [rows, page]);
-
-  const fmt = (n, d=2) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-US",{maximumFractionDigits:d}) : "");
-
+  // --- JSX Rendering Starts Here ---
   return (
     <div className="p-4 space-y-6">
       <h2 className="text-xl font-semibold">Báo cáo KPI – {viSection(section)}</h2>
