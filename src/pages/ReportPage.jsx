@@ -189,9 +189,11 @@ function ReportContent() {
   }, [rows, chartWorker, teamMode, approverId, isMolding]);
   
   const missingReportFull = useMemo(() => {
-    if (!approverWorkers.length || !rows.length || !dateFrom || !dateTo) return [];
+    // FIX: LOẠI BỎ ĐIỀU KIỆN || !rows.length 
+    if (!approverWorkers.length || !dateFrom || !dateTo) return [];
 
     const submittedMap = new Map(); 
+    // Lấp đầy submittedMap. Nếu rows rỗng, map này cũng rỗng, là đúng.
     for (const r of rows) {
         if (!submittedMap.has(r.worker_id)) {
             submittedMap.set(r.worker_id, new Set());
