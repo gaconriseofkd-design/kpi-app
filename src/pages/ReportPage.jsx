@@ -71,17 +71,19 @@ export default function ReportPage() {
 
 /* =============== Trang báo cáo =============== */
 function ReportContent() {
+  // Lấy Context
   const { section } = useKpiSection();               
   const isMolding = section === "MOLDING";
   const isHybrid = isHybridSection(section);
   const tableName = getTableName(section);
 
+  // Constants
   const today = () => new Date().toISOString().slice(0,10);
   const firstDayOfMonth = () => {
     const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1).toISOString().slice(0,10);
   };
   
-  // ----- 1. State Declarations -----
+  // ----- 1. State Declarations (All useState Hooks) -----
   const [dateFrom, setDateFrom] = useState(firstDayOfMonth());
   const [dateTo, setDateTo]     = useState(today());
   const [approverId, setApproverId] = useState(""); 
@@ -92,15 +94,15 @@ function ReportContent() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [catOptions, setCatOptions] = useState([]);
-  const [missingPage, setMissingPage] = useState(1);
+  const [missingWorkerId, setMissingWorkerId] = useState("");
   
   // States liên quan đến Chart/Table
   const [chartWorker, setChartWorker] = useState("");
   const [teamMode, setTeamMode] = useState("global");
   const [page, setPage] = useState(1);
-  const [approverWorkers, setApproverWorkers] = useState([]); // DANH SÁCH NV DƯỚI QUYỀN
+  const [approverWorkers, setApproverWorkers] = useState([]);
   const pageSize = 100;
-  const missingPageSize = 10; // Kích thước trang cho Báo cáo thiếu KPI
+  const missingPageSize = 10;
 
 
   // ----- 2. Helpers & Derived States (useMemo Hooks) -----
@@ -118,7 +120,7 @@ function ReportContent() {
   const fmtDate = (iso) => {
     if (!iso) return "";
     const [y, m, d] = iso.split("-").map(Number);
-    return `${m}/${d}/${y}`;
+    return `${m}/${d}/${y}`; // M/D/YYYY giống file mẫu
   };  
   const fmt = (n, d=2) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-US",{maximumFractionDigits:d}) : "");
 
@@ -189,11 +191,9 @@ function ReportContent() {
   }, [rows, chartWorker, teamMode, approverId, isMolding]);
   
   const missingReportFull = useMemo(() => {
-    // FIX: LOẠI BỎ ĐIỀU KIỆN || !rows.length 
-    if (!approverWorkers.length || !dateFrom || !dateTo) return [];
+    if (!approverWorkers.length || !dateFrom || !dateTo) return []; // FIX: BỎ !rows.length
 
     const submittedMap = new Map(); 
-    // Lấp đầy submittedMap. Nếu rows rỗng, map này cũng rỗng, là đúng.
     for (const r of rows) {
         if (!submittedMap.has(r.worker_id)) {
             submittedMap.set(r.worker_id, new Set());
@@ -212,7 +212,8 @@ function ReportContent() {
             report.push({
                 msnv: w.msnv,
                 name: w.full_name,
-                missing: missingDates.join(", "),
+                missing: missingDates, // LƯU DƯỚI DẠNG MẢNG ĐỂ DÙNG TRONG EXPORT
+                missingDisplay: missingDates.join(", "), // LƯU DƯỚI DẠNG CHUỖI ĐỂ HIỂN THỊ TRÊN BẢNG
                 missingCount: missingDates.length,
                 totalDays: allDates.length
             });
@@ -222,60 +223,16 @@ function ReportContent() {
     return report.sort((a, b) => b.missingCount - a.missingCount); // Sắp xếp giảm dần theo số ngày thiếu
   }, [approverWorkers, rows, dateFrom, dateTo]);
 
+  const missingTotalPages = useMemo(() => Math.max(1, Math.ceil(missingReportFull.length / missingPageSize)), [missingReportFull.length]);
+
   const missingReportPaged = useMemo(() => {
     const start = (missingPage - 1) * missingPageSize;
     const end = start + missingPageSize;
     return missingReportFull.slice(start, end);
   }, [missingReportFull, missingPage]);
 
-  const missingTotalPages = useMemo(() => Math.max(1, Math.ceil(missingReportFull.length / missingPageSize)), [missingReportFull.length]);
 
-
-  // ----- 3. Effects & Data Fetching (useEffect Hooks) -----
-  useEffect(() => {
-    // 1. Load Category Options
-    if (!isMolding && !isHybrid) { setCatOptions([]); setCategory(""); return; }
-    
-    supabase
-      .from("kpi_rule_productivity")
-      .select("category")
-      .eq("section", section.toUpperCase()) 
-      .eq("active", true)
-      .then(({ data, error }) => {
-        if (error) { console.error(error); return; }
-        const opts = [...new Set((data || []).map(r => r.category).filter(Boolean))];
-        setCatOptions(opts.sort());
-      });
-  }, [section, isMolding, isHybrid]);
-  
-  useEffect(() => {
-    // 2. Load Workers by Approver (for Missing KPI Report)
-    const id = approverId.trim();
-    if (!id) { setApproverWorkers([]); return; }
-
-    const approverCol = isMolding ? "approver_msnv" : "approver_id";
-
-    supabase.from("users")
-        .select("msnv, full_name")
-        .eq(approverCol, id)
-        .then(({ data, error }) => {
-            if (error) { console.error("Error loading approver workers:", error); return; }
-            setApproverWorkers(data || []);
-        });
-  }, [approverId, isMolding]);
-
-  useEffect(() => { if (!chartWorker && workerOptions.length) setChartWorker(workerOptions[0]?.[0] || ""); }, [workerOptions]);
-  
-  useEffect(() => { setPage(1); setMissingPage(1); }, [rows]);
-  
-  useEffect(() => {
-    setRows([]); setCategory(""); setWorkerId(""); setApproverId(""); setStatus("all"); setOnlyApproved(false);
-    setMissingPage(1);
-  }, [section]);
-  
-  useEffect(() => { setMissingPage(1); }, [approverId, dateFrom, dateTo]);
-
-  // ----- Load dữ liệu Function -----
+  // ----- 3. Action Functions (const = () => {}) -----
   async function runQuery() {
     if (!dateFrom || !dateTo) return alert("Chọn khoảng ngày trước khi xem báo cáo.");
     if (new Date(dateFrom) > new Date(dateTo)) return alert("Khoảng ngày không hợp lệ.");
@@ -291,10 +248,6 @@ function ReportContent() {
     if (approverId.trim()) {
       const approverCol = isMolding ? "approver_msnv" : "approver_id";
       q = q.eq(approverCol, approverId.trim());
-      
-      // Nếu có MSNV người duyệt, chúng ta không dùng workerId cho việc lọc rows, 
-      // mà dùng để lọc biểu đồ/tổng hợp sau này. Tuy nhiên, nếu workerId là null, ta không nên lọc
-      // Nếu workerId có giá trị, nó sẽ tự động lọc rows, giữ lại tính năng lọc đơn
     }
     
     if ((isMolding || isHybrid) && category) q = q.eq("category", category);
@@ -306,7 +259,6 @@ function ReportContent() {
     setRows(data || []);
   }
 
-  // ----- Export XLSX Function -----
   function exportXLSX() {
     if (!rows.length) return alert("Không có dữ liệu để xuất.");
   
@@ -441,7 +393,7 @@ function ReportContent() {
   function exportMissingXLSXFull() {
     if (!missingReportFull.length) return alert("Không có nhân viên nào thiếu KPI để xuất.");
     
-    // Xuất tổng hợp tất cả ngày thiếu của tất cả nhân viên thiếu KPI
+    // SỬA LỖI: flatMap giờ sử dụng trường 'missing' (mảng) thay vì chuỗi
     const data = missingReportFull.flatMap(r => 
         r.missing.map(date => ({
             "SECTION": viSection(section),
@@ -475,6 +427,7 @@ function ReportContent() {
   useEffect(() => {
     // Rerun when section changes
     setRows([]); setCategory(""); setWorkerId(""); setApproverId(""); setStatus("all"); setOnlyApproved(false);
+    setMissingWorkerId("");
   }, [section]);
   
   // Reruns when workerOptions changes (used for chart default)
@@ -616,7 +569,7 @@ function ReportContent() {
                                     <td className={`p-2 text-center font-semibold ${r.missingCount > 0 ? 'text-red-600' : ''}`}>
                                         {r.missingCount}/{r.totalDays}
                                     </td>
-                                    <td className="p-2 text-wrap max-w-lg text-xs">{r.missing}</td>
+                                    <td className="p-2 text-wrap max-w-lg text-xs">{r.missingDisplay}</td>
                                 </tr>
                             ))}
                             {!missingReportPaged.length && <tr><td colSpan={4} className="p-4 text-center text-gray-500">Tất cả nhân viên đã gửi đủ KPI hoặc không có dữ liệu KPI trong khoảng ngày này.</td></tr>}
