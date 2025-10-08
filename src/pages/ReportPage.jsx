@@ -19,6 +19,21 @@ function getTableName(s) {
   return "kpi_entries"; // Leanline DC & Leanline Molded
 }
 
+/** Helper: Tạo danh sách tất cả các ngày trong khoảng */
+function getAllDatesInRange(start, end) {
+  const dates = [];
+  let currentDate = new Date(start);
+  const endDate = new Date(end);
+  
+  while (currentDate <= endDate) {
+    // Chỉ lấy ngày làm việc (trừ T7 & CN nếu cần, nhưng tạm thời lấy tất cả ngày)
+    dates.push(currentDate.toISOString().slice(0, 10));
+    currentDate.setDate(currentDate.getDate() + 1);
+  }
+  return dates;
+}
+
+
 /* =============== Gate đăng nhập =============== */
 export default function ReportPage() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("rp_authed") === "1");
@@ -58,10 +73,10 @@ export default function ReportPage() {
 
 /* =============== Trang báo cáo =============== */
 function ReportContent() {
-  const { section } = useKpiSection();               // <<— lấy section hiện tại
+  const { section } = useKpiSection();               
   const isMolding = section === "MOLDING";
   const isHybrid = isHybridSection(section);
-  const tableName = getTableName(section); // Dùng hàm getTableName đã fix
+  const tableName = getTableName(section); 
 
   const viSection = (s) => {
     const k = (s || "").toUpperCase();
@@ -88,8 +103,8 @@ function ReportContent() {
   const [dateFrom, setDateFrom] = useState(firstDayOfMonth());
   const [dateTo, setDateTo]     = useState(today());
   const [approverId, setApproverId] = useState(""); 
-  const [workerId, setWorkerId]     = useState("");
-  const [status, setStatus]         = useState("all"); // all|pending|approved|rejected
+  const [workerId, setWorkerId]     = useState(""); // Dùng cho lọc chính
+  const [status, setStatus]         = useState("all"); 
   const [onlyApproved, setOnlyApproved] = useState(false);
   const [category, setCategory]     = useState(""); 
 
@@ -97,15 +112,17 @@ function ReportContent() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // ----- options cho Category (Molding/Hybrid) -----
+  // ----- Missing KPI Report State -----
+  const [missingWorkerId, setMissingWorkerId] = useState("");
   const [catOptions, setCatOptions] = useState([]);
+
   useEffect(() => {
     if (!isMolding && !isHybrid) { setCatOptions([]); setCategory(""); return; }
     
     supabase
       .from("kpi_rule_productivity")
       .select("category")
-      .eq("section", section.toUpperCase()) // Dùng section in hoa để truy vấn DB
+      .eq("section", section.toUpperCase()) 
       .eq("active", true)
       .then(({ data, error }) => {
         if (error) { console.error(error); return; }
@@ -121,7 +138,6 @@ function ReportContent() {
 
     let q = supabase.from(tableName).select("*").gte("date", dateFrom).lte("date", dateTo);
 
-    // Lọc theo section 
     q = q.eq("section", section);
 
     if (status !== "all") q = q.eq("status", status);
@@ -145,15 +161,58 @@ function ReportContent() {
   // reset khi đổi section
   useEffect(() => {
     setRows([]); setCategory(""); setWorkerId(""); setApproverId(""); setStatus("all"); setOnlyApproved(false);
+    setMissingWorkerId("");
   }, [section]);
 
-  /* ---------- worker list cho chart (Giữ nguyên) ---------- */
-  const workerList = useMemo(
-    () => Array.from(new Map(rows.map(r => [r.worker_id, r.worker_name || r.worker_id])).entries()),
-    [rows]
-  ); // [ [id, name] ]
-  const [chartWorker, setChartWorker] = useState("");
-  useEffect(() => { if (!chartWorker && workerList.length) setChartWorker(workerList[0][0]); }, [workerList, chartWorker]);
+  /* ---------- Missing KPI Logic ---------- */
+  const workerOptions = useMemo(() => {
+    // Lấy danh sách nhân viên duy nhất từ bộ lọc hiện tại
+    return Array.from(new Map(rows.map(r => [r.worker_id, r.worker_name || r.worker_id])).entries());
+  }, [rows]); 
+
+  const missingReport = useMemo(() => {
+    const id = missingWorkerId.trim();
+    if (!id || !dateFrom || !dateTo) return null;
+
+    const submittedDates = new Set(
+        rows.filter(r => r.worker_id === id).map(r => r.date)
+    );
+    const allDates = getAllDatesInRange(dateFrom, dateTo);
+
+    const workerName = workerOptions.find(([wid]) => wid === id)?.[1] || id;
+
+    const missing = allDates.filter(d => !submittedDates.has(d));
+    
+    return { 
+        workerId: id, 
+        workerName: workerName,
+        dates: missing,
+        submittedCount: submittedDates.size,
+        totalDays: allDates.length
+    };
+  }, [rows, missingWorkerId, dateFrom, dateTo, workerOptions]);
+
+  function exportMissingXLSX() {
+    if (!missingReport || !missingReport.dates.length) {
+        return alert("Không có ngày thiếu KPI để xuất.");
+    }
+    
+    const data = missingReport.dates.map(date => ({
+        "SECTION": viSection(section),
+        "MSNV": missingReport.workerId,
+        "HỌ VÀ TÊN": missingReport.workerName,
+        "NGÀY THIẾU KPI": date,
+        "NGÀY BẮT ĐẦU LỌC": dateFrom,
+        "NGÀY KẾT THÚC LỌC": dateTo
+    }));
+    
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "KPI_Missing_Dates");
+    
+    XLSX.writeFile(wb, `kpi_missing_${section}_${missingReport.workerId}_${dateFrom}_to_${dateTo}.xlsx`);
+  }
+  /* ---------- END Missing KPI Logic ---------- */
 
   /* ---------- TOP 5 & summary (Giữ nguyên) ---------- */
   const top5 = useMemo(() => {
@@ -217,6 +276,9 @@ function ReportContent() {
     return [...idx.values()].sort((a,b) => a.date.localeCompare(b.date));
   }, [rows, chartWorker, teamMode, approverId, isMolding]);
 
+  const [chartWorker, setChartWorker] = useState("");
+  useEffect(() => { if (!chartWorker && workerOptions.length) setChartWorker(workerOptions[0][0]); }, [workerOptions, chartWorker]);
+
   /* ---------- Paging bảng (Giữ nguyên) ---------- */
   const [page, setPage] = useState(1);
   const pageSize = 100;
@@ -224,145 +286,13 @@ function ReportContent() {
   const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
   const pageRows = useMemo(() => rows.slice((page-1)*pageSize, page*pageSize), [rows, page]);
 
-  /* ---------- Export XLSX (Giữ nguyên logic) ---------- */
-  function exportXLSX() {
-    if (!rows.length) return alert("Không có dữ liệu để xuất.");
-  
-    const titleCase = (s) =>
-      s ? s.toString().toLowerCase().replace(/^\w/u, (c) => c.toUpperCase()) : "";
-    const complianceLabel = (code) => {
-      switch ((code || "NONE").toUpperCase()) {
-        case "NONE": return "Không vi phạm";
-        case "KÝ MẪU ĐẦU CHUYỀN TRƯỚC KHI SỬ DỤNG":
-        case "LATE": return "Ký mẫu đầu chuyền trước khi sử dụng";
-        case "QUY ĐỊNH VỀ KIỂM TRA ĐIỀU KIỆN MÁY TRƯỚC/TRONG KHI SẢN XUẤT":
-        case "PPE":  return "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất";
-        case "QUY ĐỊNH VỀ KIỂM TRA NGUYÊN LIỆU TRƯỚC/TRONG KHI SẢN XUẤT":
-        case "MAT":  return "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất";
-        case "QUY ĐỊNH VỀ KIỂM TRA QUY CÁCH/TIÊU CHUẨN SẢN PHẨM TRƯỚC/TRONG KHI SẢN XUẤT":
-        case "SPEC": return "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất";
-        case "VI PHẠM NỘI QUY BỘ PHẬN/CÔNG TY":
-        case "RULE": return "Vi phạm nội quy bộ phận/công ty";
-        default:     return code;
-      }
-    };
-    
-  
-    let data;
-    if (isMolding) {
-      // Logic Export Molding
-      data = rows.map((r) => {
-        const p = Number(r.p_score || 0);
-        const q = Number(r.q_score || 0);
-        const day = Number(r.day_score || 0);
-        const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
-        const total = day + overflow;
-  
-        return {
-          "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "MOLDING")),
-          "MSNV": r.worker_id || "",
-          "HỌ VÀ TÊN": r.worker_name || "",
-          "CA LÀM VIỆC": r.ca || "",
-          "NGÀY LÀM VIỆC": fmtDate(r.date),
-          "THỜI GIAN LÀM VIỆC": Number(r.working_input ?? 0),
-          "Số đôi phế": Number(r.defects ?? 0),
-          "Điểm chất lượng": q,
-          "Sản lượng/ca": Number(r.output ?? 0),
-          "Điểm Sản lượng": p,
-          "Tuân thủ": complianceLabel(r.compliance_code),
-          "Vi phạm": r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0),
-          "Điểm KPI ngày": day,
-          "Điểm dư": overflow,
-          "Điểm tổng": total,
-          "Loại hàng": r.category || "",
-          "Số giờ khuôn chạy thực tế": Number(r.mold_hours ?? 0),
-          "Thời gian dừng /24 khuôn (h)": Number(r.downtime ?? 0),
-          "MSNV người duyệt": r.approver_msnv || "",
-          "Người duyệt": r.approver_name || ""
-        };
-      });
-    } else if (isHybrid) {
-      // Logic Export HYBRID (LAMINATION, PREFITTING, BÀO, TÁCH)
-      data = rows.map((r) => {
-        const p = Number(r.p_score || 0);
-        const q = Number(r.q_score || 0);
-        const day = Number(r.day_score || 0);
-        const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
-        const exactHours = Math.max(0, Number(r.working_real || 0) - Number(r.stop_hours || 0));
-        const prodRate = exactHours > 0 ? Number(r.output || 0) / exactHours : 0;
-  
-        return {
-          "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "")),
-          "MSNV": r.worker_id || "",
-          "HỌ VÀ TÊN": r.worker_name || "",
-          "CA LÀM VIỆC": r.ca || "",
-          "NGÀY LÀM VIỆC": fmtDate(r.date),
-          "THỜI GIAN LÀM VIỆC (Nhập)": Number(r.work_hours ?? 0),
-          "THỜI GIAN THỰC TẾ (Quy đổi)": Number(r.working_real ?? 0),
-          "THỜI GIAN CHÍNH XÁC": exactHours,
-          "Số đôi phế": Number(r.defects ?? 0),
-          "Điểm chất lượng": q,
-          "Sản lượng (Output)": Number(r.output ?? 0),
-          "Tỷ lệ Năng suất": Number(prodRate),
-          "Loại năng suất": r.category || "",
-          "Điểm Sản lượng": p,
-          "Tuân thủ": complianceLabel(r.compliance_code),
-          "Vi phạm": r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0),
-          "Điểm KPI ngày": day,
-          "Điểm dư": overflow,
-          "MSNV người duyệt": r.approver_id || "",
-          "Họ và Tên Người duyệt": r.approver_name || "",
-          "Máy làm việc": r.line || "",
-          "THỜI GIAN DỪNG MÁY": Number(r.stop_hours ?? 0),
-        };
-      });
-
-    } else {
-      // Logic Export LEANLINE DC & LEANLINE MOLDED
-      data = rows.map((r) => {
-        const p = Number(r.p_score || 0);
-        const q = Number(r.q_score || 0);
-        const day = Number(r.day_score || 0);
-        const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
-        const totalMonth = day + overflow;
-  
-        return {
-          "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "")),
-          "MSNV": r.worker_id || "",
-          "HỌ VÀ TÊN": r.worker_name || "",
-          "CA LÀM VIỆC": r.ca || "",
-          "NGÀY LÀM VIỆC": fmtDate(r.date),
-          "THỜI GIAN LÀM VIỆC": Number(r.work_hours ?? 0),
-          "Số đôi phế": Number(r.defects ?? 0),
-          "Điểm chất lượng": q,
-          "%OE": Number(r.oe ?? 0),
-          "Điểm sản lượng": p,
-          "Tuân thủ": complianceLabel(r.compliance_code),
-          "Vi phạm": r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0),
-          "Điểm KPI ngày": day,
-          "Điểm dư": overflow,
-          "Điểm KPI tổng tháng": totalMonth,
-          "THỜI GIAN DOWNTIME": Number(r.stop_hours ?? 0),
-          "MSNV người duyệt": r.approver_id || "",
-          "Họ và Tên Người duyệt": r.approver_name || "",
-          "Line làm việc": r.line || ""
-        };
-      });
-    }
-  
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, viSection(section));
-    XLSX.writeFile(wb, `kpi_report_${section}_${dateFrom}_to_${dateTo}.xlsx`);
-  }
-
   const fmt = (n, d=2) => (Number.isFinite(Number(n)) ? Number(n).toLocaleString("en-US",{maximumFractionDigits:d}) : "");
 
   return (
     <div className="p-4 space-y-6">
       <h2 className="text-xl font-semibold">Báo cáo KPI – {viSection(section)}</h2>
 
-      {/* Bộ lọc (Giữ nguyên) */}
+      {/* Bộ lọc */}
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-3">
         <label> Từ ngày
           <input type="date" className="input" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} />
@@ -379,7 +309,7 @@ function ReportContent() {
             placeholder={isMolding ? "VD: 04126 (approver_msnv)" : "VD: 04126 (approver_id)"} />
         </label>
 
-        <label> MSNV nhân viên (tuỳ chọn)
+        <label> MSNV nhân viên (Lọc chính/Biểu đồ)
           <input className="input" value={workerId} onChange={e=>setWorkerId(e.target.value)} placeholder="VD: 04126" />
         </label>
 
@@ -412,7 +342,7 @@ function ReportContent() {
         </div>
       </div>
 
-      {/* Summary, Chart, TOP 5, Bảng chi tiết (Giữ nguyên) */}
+      {/* Summary nhanh */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <SummaryCard title="Số bản ghi" value={summary.records} />
         <SummaryCard title="Điểm tổng"  value={summary.total.toFixed(1)} />
@@ -421,12 +351,58 @@ function ReportContent() {
         <SummaryCard title="Số nhân viên" value={summary.workers} />
       </div>
 
+      {/* Tra cứu ngày thiếu KPI */}
+      <div className="p-4 border rounded bg-white space-y-3">
+        <h3 className="text-lg font-semibold">Tra cứu ngày thiếu KPI</h3>
+        <div className="flex items-center gap-3">
+          <label className="flex items-center gap-2">
+            Chọn Nhân viên:
+            <select 
+                className="input w-48" 
+                value={missingWorkerId} 
+                onChange={e => setMissingWorkerId(e.target.value)}
+            >
+                <option value="">-- Chọn MSNV --</option>
+                {workerOptions.map(([id, name]) => (
+                    <option key={id} value={id}>{id} — {name}</option>
+                ))}
+            </select>
+          </label>
+          <button 
+            className="btn" 
+            onClick={exportMissingXLSX} 
+            disabled={!missingReport || missingReport.dates.length === 0}
+          >
+            Xuất XLSX ngày thiếu
+          </button>
+        </div>
+        
+        {missingReport && (
+            <div className="pt-2">
+                <p className="font-medium mb-2">
+                    {missingReport.workerName} ({missingReport.workerId}): 
+                    <span className="ml-2">Đã gửi {missingReport.submittedCount}/{missingReport.totalDays} ngày.</span>
+                </p>
+                {missingReport.dates.length > 0 ? (
+                    <div className="text-red-600 border border-red-300 p-2 rounded max-h-32 overflow-y-auto">
+                        <span className="font-semibold mr-2">THIẾU KPI CÁC NGÀY:</span> 
+                        {missingReport.dates.join(", ")}
+                    </div>
+                ) : (
+                    <p className="text-green-600">✅ Đã gửi KPI đủ {missingReport.totalDays} ngày trong khoảng.</p>
+                )}
+            </div>
+        )}
+        {!rows.length && <p className="text-gray-500">Tải dữ liệu báo cáo trước để xem danh sách nhân viên.</p>}
+      </div>
+
+      {/* Chart */}
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2">
             Nhân viên:
             <select className="input" value={chartWorker} onChange={e=>setChartWorker(e.target.value)}>
-              {workerList.map(([id, name]) => (
+              {workerOptions.map(([id, name]) => (
                 <option key={id} value={id}>{id} — {name}</option>
               ))}
             </select>
@@ -459,6 +435,7 @@ function ReportContent() {
         </div>
       </div>
 
+      {/* TOP 5 */}
       <div>
         <h3 className="font-semibold mb-2">TOP 5 tổng điểm cao nhất</h3>
         <div className="overflow-auto">
@@ -490,6 +467,7 @@ function ReportContent() {
         </div>
       </div>
 
+      {/* Bảng dữ liệu chi tiết */}
       <div>
         <div className="mb-2 flex items-center gap-3">
           <span>Kết quả: {rows.length} dòng</span>
