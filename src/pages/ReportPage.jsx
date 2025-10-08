@@ -77,11 +77,13 @@ function ReportContent() {
   const isHybrid = isHybridSection(section);
   const tableName = getTableName(section);
 
-  // Constants
+  // Constants & Initializers (MOVED TO TOP FOR TDZ SAFETY)
   const today = () => new Date().toISOString().slice(0,10);
   const firstDayOfMonth = () => {
     const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1).toISOString().slice(0,10);
   };
+  const pageSize = 100;
+  const missingPageSize = 10; 
   
   // ----- 1. State Declarations (All useState Hooks) -----
   const [dateFrom, setDateFrom] = useState(firstDayOfMonth());
@@ -96,13 +98,11 @@ function ReportContent() {
   const [catOptions, setCatOptions] = useState([]);
   const [missingWorkerId, setMissingWorkerId] = useState("");
   
-  // States liên quan đến Chart/Table
   const [chartWorker, setChartWorker] = useState("");
   const [teamMode, setTeamMode] = useState("global");
   const [page, setPage] = useState(1);
   const [approverWorkers, setApproverWorkers] = useState([]);
-  const pageSize = 100;
-  const missingPageSize = 10;
+  const [missingPage, setMissingPage] = useState(1); // MOVED UP
 
 
   // ----- 2. Helpers & Derived States (useMemo Hooks) -----
@@ -189,9 +189,9 @@ function ReportContent() {
     }
     return [...idx.values()].sort((a,b) => a.date.localeCompare(b.date));
   }, [rows, chartWorker, teamMode, approverId, isMolding]);
-  
+
   const missingReportFull = useMemo(() => {
-    if (!approverWorkers.length || !dateFrom || !dateTo) return []; // FIX: BỎ !rows.length
+    if (!approverWorkers.length || !dateFrom || !dateTo) return [];
 
     const submittedMap = new Map(); 
     for (const r of rows) {
@@ -212,15 +212,15 @@ function ReportContent() {
             report.push({
                 msnv: w.msnv,
                 name: w.full_name,
-                missing: missingDates, // LƯU DƯỚI DẠNG MẢNG ĐỂ DÙNG TRONG EXPORT
-                missingDisplay: missingDates.join(", "), // LƯU DƯỚI DẠNG CHUỖI ĐỂ HIỂN THỊ TRÊN BẢNG
+                missing: missingDates, // LƯU DƯỚI DẠNG MẢNG
+                missingDisplay: missingDates.join(", "), // LƯU DƯỚI DẠNG CHUỖI
                 missingCount: missingDates.length,
                 totalDays: allDates.length
             });
         }
     });
 
-    return report.sort((a, b) => b.missingCount - a.missingCount); // Sắp xếp giảm dần theo số ngày thiếu
+    return report.sort((a, b) => b.missingCount - a.missingCount); 
   }, [approverWorkers, rows, dateFrom, dateTo]);
 
   const missingTotalPages = useMemo(() => Math.max(1, Math.ceil(missingReportFull.length / missingPageSize)), [missingReportFull.length]);
@@ -393,7 +393,7 @@ function ReportContent() {
   function exportMissingXLSXFull() {
     if (!missingReportFull.length) return alert("Không có nhân viên nào thiếu KPI để xuất.");
     
-    // SỬA LỖI: flatMap giờ sử dụng trường 'missing' (mảng) thay vì chuỗi
+    // SỬA LỖI: flatMap sử dụng trường 'missing' (mảng)
     const data = missingReportFull.flatMap(r => 
         r.missing.map(date => ({
             "SECTION": viSection(section),
