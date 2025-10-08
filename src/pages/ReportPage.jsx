@@ -71,11 +71,13 @@ export default function ReportPage() {
 
 /* =============== Trang báo cáo =============== */
 function ReportContent() {
+  // Lấy Context
   const { section } = useKpiSection();               
   const isMolding = section === "MOLDING";
   const isHybrid = isHybridSection(section);
   const tableName = getTableName(section);
 
+  // Constants
   const today = () => new Date().toISOString().slice(0,10);
   const firstDayOfMonth = () => {
     const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), 1).toISOString().slice(0,10);
@@ -92,11 +94,14 @@ function ReportContent() {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [catOptions, setCatOptions] = useState([]);
+  const [missingWorkerId, setMissingWorkerId] = useState("");
+  
+  // States liên quan đến Chart/Table
   const [chartWorker, setChartWorker] = useState("");
   const [teamMode, setTeamMode] = useState("global");
   const [page, setPage] = useState(1);
-  const [missingWorkerId, setMissingWorkerId] = useState("");
   const pageSize = 100;
+
 
   // ----- 2. Helpers & Derived States (useMemo Hooks) -----
   const viSection = (s) => {
@@ -120,6 +125,9 @@ function ReportContent() {
   const workerOptions = useMemo(() => {
     return Array.from(new Map(rows.map(r => [r.worker_id, r.worker_name || r.worker_id])).entries());
   }, [rows]); 
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(rows.length / pageSize)), [rows.length]);
+  const pageRows = useMemo(() => rows.slice((page-1)*pageSize, page*pageSize), [rows, page]);
 
   const top5 = useMemo(() => {
     const map = new Map();
@@ -180,9 +188,6 @@ function ReportContent() {
     return [...idx.values()].sort((a,b) => a.date.localeCompare(b.date));
   }, [rows, chartWorker, teamMode, approverId, isMolding]);
 
-  const totalPages = Math.max(1, Math.ceil(rows.length / pageSize));
-  const pageRows = useMemo(() => rows.slice((page-1)*pageSize, page*pageSize), [rows, page]);
-
   const missingReport = useMemo(() => {
     const id = missingWorkerId.trim();
     if (!id || !dateFrom || !dateTo) return null;
@@ -222,7 +227,7 @@ function ReportContent() {
       });
   }, [section, isMolding, isHybrid]);
 
-  useEffect(() => { if (!chartWorker && workerOptions.length) setChartWorker(workerOptions[0][0]); }, [workerOptions, chartWorker]);
+  useEffect(() => { if (!chartWorker && workerOptions.length) setChartWorker(workerOptions[0]?.[0] || ""); }, [workerOptions]);
   
   useEffect(() => { setPage(1); }, [rows]);
   
@@ -264,6 +269,7 @@ function ReportContent() {
         return alert("Không có ngày thiếu KPI để xuất.");
     }
     
+    // Tùy chỉnh Export XLSX cho Missing Report (Giữ nguyên)
     const data = missingReport.dates.map(date => ({
         "SECTION": viSection(section),
         "MSNV": missingReport.workerId,
@@ -508,7 +514,7 @@ function ReportContent() {
             </table>
           )}
 
-          {isHybrid && ( // Bảng cho Hybrid Sections...
+          {isHybrid && ( // Bảng cho Hybrid Sections
             <table className="min-w-[1300px] text-sm">
               <thead className="bg-gray-100 text-xs uppercase">
                 <tr>
