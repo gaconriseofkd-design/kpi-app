@@ -5,7 +5,7 @@ import { useKpiSection } from "../context/KpiSectionContext";
 
 /* ================= Helpers & Scoring ================= */
 
-// Machine Map (Giữ nguyên)
+// Machine Map (Mới)
 const MACHINE_MAP = {
     "LAMINATION": ["Máy dán 1", "Máy dán 2", "Máy dán 3", "Máy dán 4", "Máy dán 5", "Máy dán 6", "Máy dán 7"],
     "PREFITTING": ["Máy cắt 1", "Máy cắt 2", "Máy cắt 3", "Máy cắt 4", "Máy cắt 5", "Máy cắt 6"],
@@ -17,10 +17,10 @@ const MACHINE_MAP = {
 const HYBRID_SECTIONS = ["LAMINATION", "PREFITTING", "BÀO", "TÁCH"];
 const isHybridSection = (sectionKey) => HYBRID_SECTIONS.includes(sectionKey);
 
-// SỬA LỖI: Chuyển tên bảng thành chữ thường (kpi_lps_entries)
 const getTableName = (sectionKey) => 
   isHybridSection(sectionKey) ? "kpi_lps_entries" : "kpi_entries";
 
+/** Quy đổi giờ làm việc thực tế từ giờ nhập + ca làm việc (Logic Molding/Hybrid) */
 function calcWorkingReal(shift, inputHours) {
   const h = Number(inputHours || 0);
   if (h < 8) return h;
@@ -152,7 +152,7 @@ export default function EntryPage() {
         line: defaultLine,
         category: isHybridSection(section) ? f.category : "", 
         output: isHybridSection(section) ? f.output : 0, 
-        oe: isHybridSection(section) ? 0 : f.oe,
+        oe: isHybridSection(section) ? f.oe : 100, // Đảm bảo OE có giá trị nếu là Leanline
     })); 
 
     (async () => {
@@ -241,8 +241,9 @@ export default function EntryPage() {
     const now = new Date().toISOString();
     const violations = form.compliance === "NONE" ? 0 : 1;
     const isUpdate = await findExisting(form.workerId, form.date, section);
-
-    const payload = {
+    
+    // Khối payload chung
+    const basePayload = {
       date: form.date,
       worker_id: form.workerId,
       worker_name: form.workerName || null,
@@ -254,22 +255,37 @@ export default function EntryPage() {
       stop_hours: Number(form.stopHours || 0),
       defects: Number(form.defects || 0),
       compliance_code: form.compliance,
-
-      // Dữ liệu tùy thuộc vào loại Section
-      oe: isHybrid ? null : Number(form.oe || 0),
-      output: isHybrid ? Number(form.output || 0) : null,
-      category: isHybrid ? form.category : null,
-      working_real: isHybrid ? scores.workingReal : null, 
-      
-      p_score: scores.p_score,
-      q_score: scores.q_score,
-      day_score: scores.day_score,
-      overflow: scores.overflow,
-
       section,
       status: "pending", 
       violations,
       created_at: now,
+      // Điểm luôn được thêm
+      p_score: scores.p_score,
+      q_score: scores.q_score,
+      day_score: scores.day_score,
+      overflow: scores.overflow,
+    };
+    
+    // Khối payload TÙY CHỌN (để tránh gửi NULL cho cột không tồn tại)
+    let sectionPayload = {};
+    if (isHybrid) {
+      // Hybrid/LPS: Gửi Output, Category, Working Real
+      sectionPayload = {
+        output: Number(form.output || 0),
+        category: form.category,
+        working_real: scores.workingReal,
+      };
+    } else {
+      // Leanline: Gửi %OE
+      sectionPayload = {
+        oe: Number(form.oe || 0),
+      };
+    }
+    
+    // Gộp tất cả payload (chỉ những field có trong sectionPayload mới được thêm vào)
+    const payload = {
+      ...basePayload,
+      ...sectionPayload
     };
 
     try {
@@ -310,8 +326,8 @@ export default function EntryPage() {
         workHours: 8,
         stopHours: 0,
         defects: 0,
-        oe: isHybrid ? DEFAULT_FORM.oe : 100,
-        output: isHybrid ? DEFAULT_FORM.output : 0,
+        oe: isHybrid ? 100 : DEFAULT_FORM.oe,
+        output: isHybrid ? 0 : DEFAULT_FORM.output,
         compliance: "NONE",
       }));
     } catch (e) {
@@ -337,25 +353,26 @@ export default function EntryPage() {
           />
         </label>
 
-        <label>MSNV:
+        <div>
+          <label>MSNV:</label>
           <input
             className="input"
             value={form.workerId}
             onChange={(e) => handleChange("workerId", e.target.value.trim())}
             placeholder="vd: 04126"
           />
-        </label>
+        </div>
 
         <label>Họ & tên:
-          <input className="input" value={form.workerName} readOnly />
+          <input className="input" value={form.workerName} disabled />
         </label>
 
         <label>Người duyệt (MSNV):
-          <input className="input" value={form.approverId} readOnly />
+          <input className="input" value={form.approverId} disabled />
         </label>
 
         <label>Người duyệt (Họ tên):
-          <input className="input" value={form.approverName} readOnly />
+          <input className="input" value={form.approverName} disabled />
         </label>
 
         <label>Máy làm việc:
