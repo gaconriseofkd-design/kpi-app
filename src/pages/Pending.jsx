@@ -1,6 +1,21 @@
+// src/pages/Pending.jsx
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useKpiSection } from "../context/KpiSectionContext";
+
+/* =============== Helper Logic =============== */
+const HYBRID_SECTIONS = ["LAMINATION", "PREFITTING", "BÀO", "TÁCH"];
+const isHybridSection = (s) => HYBRID_SECTIONS.includes(s);
+
+// FIX: Xác định tên bảng và section type
+function getTableName(s) {
+  const sectionKey = (s || "").toUpperCase();
+  if (sectionKey === "MOLDING") return "kpi_entries_molding";
+  if (isHybridSection(sectionKey)) return "kpi_lps_entries";
+  return "kpi_entries"; 
+}
+const isBaseLeanline = (s) => (s === "LEANLINE_DC" || s === "LEANLINE_MOLDED");
+
 
 function fmt(dt) {
   if (!dt) return "";
@@ -10,6 +25,7 @@ function fmt(dt) {
 export default function Pending() {
   const { section } = useKpiSection();
   const isMolding = section === "MOLDING";
+  const isHybrid = isHybridSection(section);
 
   // 🔐 Password
   const [auth, setAuth] = useState(false);
@@ -72,7 +88,7 @@ export default function Pending() {
     const approver = approverId.trim();
     if (!approver) return alert("Nhập MSNV người duyệt để xem danh sách.");
 
-    const table = isMolding ? "kpi_entries_molding" : "kpi_entries";
+    const table = getTableName(section); // Dùng hàm dynamic getTableName
     const approverCol = isMolding ? "approver_msnv" : "approver_id";
 
     let query = supabase.from(table).select("*").eq("status", "pending").eq(approverCol, approver);
@@ -114,17 +130,30 @@ export default function Pending() {
       ? prompt("Lý do từ chối:", "")
       : prompt("Ghi chú (tuỳ chọn):", "");
     const status = type === "reject" ? "rejected" : "approved";
-    const violations = row?.compliance_code === "NONE" ? 0 : 1;
-    const table = isMolding ? "kpi_entries_molding" : "kpi_entries";
+    
+    // Lấy tên bảng
+    const table = getTableName(section);
+    // Xác định xem có phải bảng cơ sở Leanline (kpi_entries) không
+    const isBaseLeanline = table === "kpi_entries";
+    
+    // 1. Payload chung
+    let updatePayload = {
+      status,
+      approver_note: note || null,
+      approved_at: new Date().toISOString(),
+    };
+    
+    // 2. Thêm cột violations nếu không phải bảng kpi_entries
+    if (!isBaseLeanline) {
+        // Cột violations chỉ tồn tại trong Molding và Hybrid
+        const violations = row?.compliance_code === "NONE" ? 0 : 1;
+        updatePayload.violations = violations;
+    }
+
 
     const { error } = await supabase
       .from(table)
-      .update({
-        status,
-        violations,
-        approver_note: note || null,
-        approved_at: new Date().toISOString(),
-      })
+      .update(updatePayload)
       .eq("id", row.id);
 
     if (error) return alert("Lỗi khi duyệt: " + error.message);
@@ -136,24 +165,37 @@ export default function Pending() {
     const ids = Array.from(selected);
     if (!ids.length) return alert("Chưa chọn đơn nào.");
     const note = prompt("Ghi chú chung (tuỳ chọn):", "") || null;
-    const table = isMolding ? "kpi_entries_molding" : "kpi_entries";
+    
+    const table = getTableName(section);
+    const isBaseLeanline = table === "kpi_entries";
 
+    // Phân loại thành nhóm 0 (NONE) và nhóm 1 (Violation)
     const idZero = rows.filter(r => selected.has(r.id) && r.compliance_code === "NONE").map(r => r.id);
     const idOne  = rows.filter(r => selected.has(r.id) && r.compliance_code !== "NONE").map(r => r.id);
 
     setLoading(true);
+    
+    // Payload chỉ chứa những cột mà bảng đích hỗ trợ
+    const baseUpdatePayload = { status: "approved", approver_note: note, approved_at: new Date().toISOString() };
+
+    // Xử lý Nhóm 0 (NONE): violations = 0 (Chỉ thêm nếu không phải kpi_entries)
     if (idZero.length) {
-      const { error } = await supabase.from(table)
-        .update({ status: "approved", violations: 0, approver_note: note, approved_at: new Date().toISOString() })
-        .in("id", idZero);
+      let payload0 = { ...baseUpdatePayload };
+      if (!isBaseLeanline) payload0.violations = 0;
+      
+      const { error } = await supabase.from(table).update(payload0).in("id", idZero);
       if (error) { setLoading(false); return alert("Lỗi khi duyệt nhóm 0: " + error.message); }
     }
+    
+    // Xử lý Nhóm 1 (Violation): violations = 1 (Chỉ thêm nếu không phải kpi_entries)
     if (idOne.length) {
-      const { error } = await supabase.from(table)
-        .update({ status: "approved", violations: 1, approver_note: note, approved_at: new Date().toISOString() })
-        .in("id", idOne);
+      let payload1 = { ...baseUpdatePayload };
+      if (!isBaseLeanline) payload1.violations = 1;
+      
+      const { error } = await supabase.from(table).update(payload1).in("id", idOne);
       if (error) { setLoading(false); return alert("Lỗi khi duyệt nhóm 1: " + error.message); }
     }
+    
     setLoading(false);
     await load();
   }
@@ -165,21 +207,33 @@ export default function Pending() {
     if (!confirm("Duyệt TẤT CẢ đơn đang chờ của người duyệt này?")) return;
 
     const note = prompt("Ghi chú chung (tuỳ chọn):", "") || null;
-    const table = isMolding ? "kpi_entries_molding" : "kpi_entries";
+    const table = getTableName(section);
     const approverCol = isMolding ? "approver_msnv" : "approver_id";
+    const isBaseLeanline = table === "kpi_entries";
 
     const now = new Date().toISOString();
     setLoading(true);
 
+    const baseUpdatePayload = { status: "approved", approver_note: note, approved_at: now };
+
+    // 1. Duyệt nhóm NONE (violations = 0)
     {
+      let payload0 = { ...baseUpdatePayload };
+      if (!isBaseLeanline) payload0.violations = 0;
+      
       const { error } = await supabase.from(table)
-        .update({ status: "approved", violations: 0, approver_note: note, approved_at: now })
+        .update(payload0)
         .eq("status", "pending").eq(approverCol, approver).eq("compliance_code", "NONE");
       if (error) { setLoading(false); return alert("Lỗi duyệt (NONE): " + error.message); }
     }
+    
+    // 2. Duyệt nhóm VIOLATION (violations = 1)
     {
+      let payload1 = { ...baseUpdatePayload };
+      if (!isBaseLeanline) payload1.violations = 1;
+      
       const { error } = await supabase.from(table)
-        .update({ status: "approved", violations: 1, approver_note: note, approved_at: now })
+        .update(payload1)
         .eq("status", "pending").eq(approverCol, approver).neq("compliance_code", "NONE");
       if (error) { setLoading(false); return alert("Lỗi duyệt (!NONE): " + error.message); }
     }
