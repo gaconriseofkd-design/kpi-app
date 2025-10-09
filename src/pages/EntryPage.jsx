@@ -152,7 +152,7 @@ export default function EntryPage() {
         line: defaultLine,
         category: isHybridSection(section) ? f.category : "", 
         output: isHybridSection(section) ? f.output : 0, 
-        oe: isHybridSection(section) ? f.oe : 100, // Đảm bảo OE có giá trị nếu là Leanline
+        oe: isHybridSection(section) ? 100 : f.oe,
     })); 
 
     (async () => {
@@ -238,12 +238,12 @@ export default function EntryPage() {
     if (!form.date) return alert("Chọn ngày.");
     if (isHybrid && !form.category) return alert("Vui lòng chọn Loại năng suất (Category).");
 
-    const now = new Date().toISOString();
-    const violations = form.compliance === "NONE" ? 0 : 1;
+    const violationsValue = form.compliance === "NONE" ? 0 : 1;
     const isUpdate = await findExisting(form.workerId, form.date, section);
+    const now = new Date().toISOString();
     
-    // Khối payload chung
-    const basePayload = {
+    // 1. Khối payload CHUNG (Các cột có mặt trong tất cả 3 bảng)
+    const commonFields = {
       date: form.date,
       worker_id: form.workerId,
       worker_name: form.workerName || null,
@@ -257,34 +257,35 @@ export default function EntryPage() {
       compliance_code: form.compliance,
       section,
       status: "pending", 
-      violations,
       created_at: now,
-      // Điểm luôn được thêm
       p_score: scores.p_score,
       q_score: scores.q_score,
       day_score: scores.day_score,
       overflow: scores.overflow,
     };
     
-    // Khối payload TÙY CHỌN (để tránh gửi NULL cho cột không tồn tại)
+    // 2. Khối payload TÙY CHỌN (Gửi các cột chỉ khi bảng đích có nó)
     let sectionPayload = {};
+    
     if (isHybrid) {
-      // Hybrid/LPS: Gửi Output, Category, Working Real
+      // Hybrid/LPS: Gửi Output, Category, Working Real, violations
       sectionPayload = {
         output: Number(form.output || 0),
         category: form.category,
         working_real: scores.workingReal,
+        violations: violationsValue,
       };
     } else {
-      // Leanline: Gửi %OE
+      // Leanline (kpi_entries): Chỉ gửi %OE và KHÔNG gửi violations
       sectionPayload = {
         oe: Number(form.oe || 0),
+        // KHÔNG BAO GỒM violations (1/0)
       };
     }
     
-    // Gộp tất cả payload (chỉ những field có trong sectionPayload mới được thêm vào)
+    // Gộp tất cả payload
     const payload = {
-      ...basePayload,
+      ...commonFields,
       ...sectionPayload
     };
 
@@ -338,7 +339,7 @@ export default function EntryPage() {
     }
   }
 
-  // ... (Giao diện JSX)
+  // ... (Giao diện JSX giữ nguyên)
   return (
     <div className="p-4 space-y-4">
       <h2 className="text-xl font-bold">Nhập KPI - {section}</h2>

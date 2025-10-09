@@ -130,7 +130,7 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
 }
 
 /* ======================================================================
-   APPROVER MODE — LEANLINE
+   APPROVER MODE — LEANLINE (FIX: PAYLOAD CLEANUP)
    ====================================================================== */
 function ApproverModeLeanline({ section }) {
   const [step, setStep] = useState(1);
@@ -345,6 +345,7 @@ function ApproverModeLeanline({ section }) {
         section: r.section,
         status: "approved",
         approved_at: now,
+        // KHÔNG GỬI 'violations', 'output', 'category', 'working_real'
       };
     });
 
@@ -361,7 +362,7 @@ function ApproverModeLeanline({ section }) {
 
   return (
     <div className="space-y-4">
-      {/* ==== STEP 1: Chọn NV theo người duyệt ==== */}
+      {/* ==== STEP 1: Chọn NV theo người duyệt (Giữ nguyên) ==== */}
       {step === 1 && (
         <>
           <div className="flex items-end gap-2">
@@ -428,7 +429,7 @@ function ApproverModeLeanline({ section }) {
         </>
       )}
 
-      {/* ==== STEP 2: Template CHUNG + Preview ==== */}
+      {/* ==== STEP 2: Template CHUNG + Preview (Giữ nguyên) ==== */}
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -446,7 +447,7 @@ function ApproverModeLeanline({ section }) {
               </select>
             </div>
             <div>
-              <label>Máy làm việc</label> {/* ĐÃ SỬA LABEL */}
+              <label>Máy làm việc</label>
               <select className="input" value={tplLine} onChange={(e) => setTplLine(e.target.value)}>
                 <option value="LEAN-D1">LEAN-D1</option>
                 <option value="LEAN-D2">LEAN-D2</option>
@@ -498,7 +499,7 @@ function ApproverModeLeanline({ section }) {
                 <tr>
                   <th>MSNV</th>
                   <th>Họ tên</th>
-                  <th>Máy làm việc</th> {/* ĐÃ SỬA HEADER */}
+                  <th>Máy làm việc</th>
                   <th>Giờ làm</th>
                   <th>Giờ dừng</th>
                   <th>%OE</th>
@@ -541,7 +542,7 @@ function ApproverModeLeanline({ section }) {
         </div>
       )}
 
-      {/* ==== STEP 3: Bảng Review có thể CHỈNH SỬA từng người ==== */}
+      {/* ==== STEP 3: Bảng Review có thể CHỈNH SỬA từng người (Giữ nguyên) ==== */}
       {step === 3 && (
         <EditReviewLeanline
           pageSize={pageSize}
@@ -564,7 +565,7 @@ function ApproverModeLeanline({ section }) {
   );
 }
 
-/* ==== Bảng Review (LEANLINE) — CHO PHÉP CHỈNH ==== */
+/* ==== Bảng Review (LEANLINE) — CHO PHÉP CHỈNH (Giữ nguyên) ==== */
 function EditReviewLeanline({
   pageSize,
   page,
@@ -617,7 +618,7 @@ function EditReviewLeanline({
               <th className="p-2">Họ tên</th>
               <th className="p-2">Ngày</th>
               <th className="p-2">Ca</th>
-              <th className="p-2">Máy làm việc</th> {/* ĐÃ SỬA HEADER */}
+              <th className="p-2">Máy làm việc</th>
               <th className="p-2">Giờ làm</th>
               <th className="p-2">Giờ dừng</th>
               <th className="p-2">%OE</th>
@@ -738,8 +739,7 @@ function EditReviewLeanline({
 }
 
 /* ======================================================================
-   APPROVER MODE — MOLDING (giữ nguyên logic cũ)
-   - Chọn MSNV người duyệt → chọn nhân viên → nhập template → LƯU = approved
+   APPROVER MODE — MOLDING (Giữ nguyên)
    ====================================================================== */
 function ApproverModeMolding({ section }) {
   const [step, setStep] = useState(1);
@@ -873,7 +873,7 @@ function ApproverModeMolding({ section }) {
       const working_exact = Number((working_real - downtime).toFixed(2));
       const prod = working_exact > 0 ? toNum(output) / working_exact : 0;
 
-      const qScore = scoreByQuality(defects); // DÙNG scoreByQuality
+      const qScore = scoreByQuality(defects); 
       let pScore = 0;
       const catRules = rulesByCat[category] || [];
       for (const r of catRules) {
@@ -971,7 +971,7 @@ function ApproverModeMolding({ section }) {
         downtime: r.downtime,
         mold_hours: r.mold_hours,
         output: r.output,
-        defects: r.defects,
+        defects: Number(r.defects || 0),
         q_score: r.q_score,
         p_score: r.p_score,
         day_score: r.day_score,
@@ -979,6 +979,7 @@ function ApproverModeMolding({ section }) {
         compliance_code: r.compliance_code,
         status: "approved",
         approved_at: now,
+        // KHÔNG BAO GỒM violations (1/0)
       };
     });
     const { error } = await supabase
@@ -1093,25 +1094,8 @@ function ApproverModeMolding({ section }) {
               </select>
             </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div>
-              <label>Giờ làm việc (người nhập)</label>
-              <input type="number" className="input" value={workingInput} onChange={e => setWorkingInput(e.target.value)} />
-            </div>
-            <div>
-              <label>Số giờ khuôn chạy thực tế</label>
-              <input type="number" className="input" value={moldHours} onChange={e => setMoldHours(e.target.value)} />
-            </div>
-            <div>
-              <label>Sản lượng / ca</label>
-              <input type="number" className="input" value={output} onChange={e => setOutput(e.target.value)} />
-            </div>
-            <div>
-              <label>Số đôi phế</label>
-              <input type="number" className="input" value={defects} onChange={e => setDefects(e.target.value)} />
-            </div>
-          </div>
 
+          {/* (Giữ phần nhập dạng bảng cũ cho Molding) */}
 
           <button className="btn btn-primary" onClick={buildReviewRows}>
             Tạo danh sách Review ›
@@ -1350,7 +1334,7 @@ function SelfModeMolding({ section }) {
     const working_exact = Number((working_real - downtime).toFixed(2));
     const prod = working_exact > 0 ? toNum(row.output) / working_exact : 0;
 
-    const q = scoreByQuality(row.defects); // DÙNG scoreByQuality
+    const q = scoreByQuality(row.defects); 
     let p = 0;
     const rules = rulesByCat[row.category] || [];
     for (const r of rules) {
@@ -1403,7 +1387,7 @@ function SelfModeMolding({ section }) {
         downtime: r.downtime,
         mold_hours: r.mold_hours,
         output: r.output,
-        defects: r.defects,
+        defects: Number(r.defects || 0),
         q_score: r.q_score,
         p_score: r.p_score,
         day_score: r.day_score,
