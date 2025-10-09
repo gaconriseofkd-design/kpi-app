@@ -485,8 +485,14 @@ function ApproverModeLeanline({ section }) {
               <input type="number" className="input" value={tplStopHours} onChange={(e) => setTplStopHours(e.target.value)} />
             </div>
             <div>
-              <label>%OE</label>
-              <input type="number" className="input" value={tplOE} onChange={(e) => setTplOE(e.target.value)} />
+            <label>%OE</label>
+              <input 
+                type="number" 
+                className="input" 
+                value={tplOE} 
+                onChange={(e) => setTplOE(e.target.value)} 
+                step="0.01" // <-- ĐÃ THÊM STEP
+              />
             </div>
             <div>
               <label>Phế</label>
@@ -704,6 +710,7 @@ function EditReviewLeanline({
                       className="input text-center"
                       value={r.oe}
                       onChange={(e) => updateRow(gi, "oe", e.target.value)}
+                      step="0.01" // <-- ĐÃ THÊM STEP
                     />
                   </td>
                   <td className="p-2">

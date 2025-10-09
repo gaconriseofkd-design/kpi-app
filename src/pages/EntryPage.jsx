@@ -453,14 +453,15 @@ export default function EntryPage() {
             </label>
             </>
         ) : (
-            <label>%OE:
-                <input
-                    type="number"
-                    className="input"
-                    value={form.oe}
-                    onChange={(e) => handleChange("oe", Number(e.target.value))}
-                />
-            </label>
+          <label>%OE:
+              <input
+                  type="number"
+                  className="input"
+                  value={form.oe}
+                  onChange={(e) => handleChange("oe", Number(e.target.value))}
+                  step="0.01" // <-- ĐÃ THÊM STEP
+              />
+          </label>
         )}
 
         <label>Vi phạm:
