@@ -13,6 +13,7 @@ import ApprovePage from "./pages/ApprovePage";
 import AdminPage from "./pages/AdminPage";
 import ReportPage from "./pages/ReportPage";
 import RulesPage from "./pages/RulesPage";
+import HelpPage from "./pages/HelpPage"; // <-- Import trang mới
 
 
 function Shell() {
@@ -42,6 +43,7 @@ function Shell() {
           { to: "/report", label: "Báo cáo" },
           { to: "/admin", label: "Quản lý User" },
           { to: "/rules", label: "Rules điểm SX" },
+          { to: "/help", label: "Hướng dẫn" }, // <-- Thêm link Hướng dẫn
         ].map((item) => (
           <NavLink
             key={item.to}
@@ -78,6 +80,7 @@ function Shell() {
         <Route path="/report" element={<ReportPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/rules" element={<RulesPage />} />
+        <Route path="/help" element={<HelpPage />} /> {/* <-- Thêm Route */}
       </Routes>
     </>
   );
