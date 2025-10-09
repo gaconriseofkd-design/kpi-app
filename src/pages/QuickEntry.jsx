@@ -129,13 +129,26 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
   );
 }
 
+// Map để xác định line cho Leanline (DC vs MOLDED)
+const LEANLINE_MACHINES = {
+    "LEANLINE_MOLDED": ["M1", "M2", "M3", "M4", "M5"],
+    "LEANLINE_DC": ["LEAN-D1", "LEAN-D2", "LEAN-D3", "LEAN-D4", "LEAN-H1", "LEAN-H2"],
+    // Thêm các Leanline khác nếu cần
+    "DEFAULT": ["LEAN-D1", "LEAN-D2", "LEAN-D3", "LEAN-D4", "LEAN-H1", "LEAN-H2"],
+}
+const getLeanlineMachines = (section) => LEANLINE_MACHINES[section] || LEANLINE_MACHINES.DEFAULT;
+
+
 /* ======================================================================
-   APPROVER MODE — LEANLINE (FIX: PAYLOAD CLEANUP)
+   APPROVER MODE — LEANLINE
    ====================================================================== */
 function ApproverModeLeanline({ section }) {
   const [step, setStep] = useState(1);
 
   const [prodRules, setProdRules] = useState([]); 
+  
+  // DYNAMICALLY DETERMINE MACHINES FOR LEANLINE
+  const currentMachines = useMemo(() => getLeanlineMachines(section), [section]);
 
   useEffect(() => {
     let cancelled = false;
@@ -203,7 +216,7 @@ function ApproverModeLeanline({ section }) {
   // ---- B2: Template KPI CHUNG ----
   const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [tplShift, setTplShift] = useState("Ca 1");
-  const [tplLine, setTplLine] = useState("LEAN-D1");
+  const [tplLine, setTplLine] = useState(currentMachines[0] || "LEAN-D1"); // Default line based on section
   const [tplWorkHours, setTplWorkHours] = useState(8);
   const [tplStopHours, setTplStopHours] = useState(0);
   const [tplOE, setTplOE] = useState(100);
@@ -253,6 +266,7 @@ function ApproverModeLeanline({ section }) {
       total_score: Math.min(15, totalScore),
       compliance: tplCompliance,
       status: "approved",
+      // Payload sạch
     }});
 
     setReviewRows(rows);
@@ -345,7 +359,6 @@ function ApproverModeLeanline({ section }) {
         section: r.section,
         status: "approved",
         approved_at: now,
-        // KHÔNG GỬI 'violations', 'output', 'category', 'working_real'
       };
     });
 
@@ -362,7 +375,7 @@ function ApproverModeLeanline({ section }) {
 
   return (
     <div className="space-y-4">
-      {/* ==== STEP 1: Chọn NV theo người duyệt (Giữ nguyên) ==== */}
+      {/* ==== STEP 1: Chọn NV theo người duyệt ==== */}
       {step === 1 && (
         <>
           <div className="flex items-end gap-2">
@@ -429,7 +442,7 @@ function ApproverModeLeanline({ section }) {
         </>
       )}
 
-      {/* ==== STEP 2: Template CHUNG + Preview (Giữ nguyên) ==== */}
+      {/* ==== STEP 2: Template CHUNG + Preview ==== */}
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -449,12 +462,9 @@ function ApproverModeLeanline({ section }) {
             <div>
               <label>Máy làm việc</label>
               <select className="input" value={tplLine} onChange={(e) => setTplLine(e.target.value)}>
-                <option value="LEAN-D1">LEAN-D1</option>
-                <option value="LEAN-D2">LEAN-D2</option>
-                <option value="LEAN-D3">LEAN-D3</option>
-                <option value="LEAN-D4">LEAN-D4</option>
-                <option value="LEAN-H1">LEAN-H1</option>
-                <option value="LEAN-H2">LEAN-H2</option>
+                {currentMachines.map(m => ( // DYNAMIC DROPDOWN
+                    <option key={m} value={m}>{m}</option>
+                ))}
               </select>
             </div>
             <div>
@@ -565,7 +575,7 @@ function ApproverModeLeanline({ section }) {
   );
 }
 
-/* ==== Bảng Review (LEANLINE) — CHO PHÉP CHỈNH (Giữ nguyên) ==== */
+/* ==== Bảng Review (LEANLINE) — CHO PHÉP CHỈNH (Đã cập nhật Line) ==== */
 function EditReviewLeanline({
   pageSize,
   page,
@@ -582,6 +592,8 @@ function EditReviewLeanline({
   saveBatch,
   saving,
 }) {
+  const { section } = useKpiSection();
+  const currentMachines = useMemo(() => getLeanlineMachines(section), [section]);
   const globalIndex = (idx) => (page - 1) * pageSize + idx;
 
   return (
@@ -660,17 +672,14 @@ function EditReviewLeanline({
                     </select>
                   </td>
                   <td className="p-2">
-                    <select
+                    <select // DYNAMIC DROPDOWN
                       className="input text-center"
                       value={r.line || ""}
                       onChange={(e) => updateRow(gi, "line", e.target.value)}
                     >
-                      <option value="LEAN-D1">LEAN-D1</option>
-                      <option value="LEAN-D2">LEAN-D2</option>
-                      <option value="LEAN-D3">LEAN-D3</option>
-                      <option value="LEAN-D4">LEAN-D4</option>
-                      <option value="LEAN-H1">LEAN-H1</option>
-                      <option value="LEAN-H2">LEAN-H2</option>
+                      {currentMachines.map(m => (
+                        <option key={m} value={m}>{m}</option>
+                      ))}
                     </select>
                   </td>
                   <td className="p-2">
