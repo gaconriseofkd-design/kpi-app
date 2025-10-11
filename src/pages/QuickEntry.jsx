@@ -166,13 +166,16 @@ function ApproverModeLeanline({ section }) {
   const [search, setSearch] = useState("");
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
+  
+  // Biến Template (Phải khai báo State trước khi dùng trong useMemo)
   const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [tplShift, setTplShift] = useState("Ca 1");
   const [tplWorkHours, setTplWorkHours] = useState(8);
   const [tplStopHours, setTplStopHours] = useState(0);
-  const [tplOE, setTplOE] = useState(100);
+  const [tplOE, setTplOE] = useState(100); // FIX: TPLOE đã được khai báo
   const [tplDefects, setTplDefects] = useState(0);
   const [tplCompliance, setTplCompliance] = useState("NONE");
+
   const [saving, setSaving] = useState(false);
   const pageSize = 50;
   const [page, setPage] = useState(1);
@@ -527,7 +530,7 @@ function ApproverModeLeanline({ section }) {
                   <th>Tuân thủ</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="text-center">
                 {Array.from(checked)
                   .map((id) => workers.find((w) => w.msnv === id))
                   .filter(Boolean)
@@ -572,7 +575,6 @@ function ApproverModeLeanline({ section }) {
           selReview={selReview}
           setSelReview={setSelReview}
           toggleAllReviewOnPage={toggleAllReviewOnPage}
-          toggleOneReview={toggleOneReview}
           updateRow={updateRow}
           saveBatch={saveBatch}
           saving={saving}
@@ -581,6 +583,8 @@ function ApproverModeLeanline({ section }) {
     </div>
   );
 }
+
+/* ... (Các component khác giữ nguyên) ... */
 
 
 /* ==== Bảng Review (LEANLINE) — CHO PHÉP CHỈNH (Đã cập nhật Line) ==== */
