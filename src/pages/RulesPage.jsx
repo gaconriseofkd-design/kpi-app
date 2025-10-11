@@ -5,6 +5,23 @@ import { scoreByProductivity } from "../lib/scoring";
 import { useKpiSection } from "../context/KpiSectionContext";
 import * as XLSX from "xlsx";
 
+/* =============== Helper: Chuẩn hóa Section và Nhận diện Loại Rule =============== */
+const HYBRID_SECTIONS = ["LAMINATION", "PREFITTING", "BÀO", "TÁCH"];
+const isHybridSection = (s) => HYBRID_SECTIONS.includes(s);
+const normalizeSection = (s, currentSection) => {
+    if (!s) return currentSection.toUpperCase() || "MOLDING";
+    const cleaned = s.toString().trim().toUpperCase();
+    
+    // Nếu là loại Leanline, thay thế khoảng trắng bằng gạch dưới
+    if (cleaned.startsWith("LEANLINE")) {
+        return cleaned.replace(/\s/g, '_');
+    }
+    return cleaned;
+}
+// Các Section cần nhập Category (Molding, Hybrid, và Leanline Molded)
+const requiresCategory = (s) => s === "MOLDING" || isHybridSection(s) || s === "LEANLINE_MOLDED";
+/* =============== Helper: Lỗi RLS (Giữ nguyên) =============== */
+
 export default function RulesPage() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("rules_authed") === "1");
   const [pwd, setPwd] = useState("");
@@ -45,14 +62,18 @@ function RulesContent() {
   const [saving, setSaving] = useState(false);
   const [testOE, setTestOE] = useState(100);
   const [testCat, setTestCat] = useState("");
+  
+  const needsCategory = requiresCategory(section.toUpperCase());
 
   // 📥 Load rule hiện có
   async function load() {
     setLoading(true);
+    const dbSection = section.toUpperCase(); 
+
     const { data, error } = await supabase
       .from("kpi_rule_productivity")
       .select("*")
-      .eq("section", section)
+      .eq("section", dbSection) 
       .order("category", { ascending: true })
       .order("threshold", { ascending: false });
     setLoading(false);
@@ -66,7 +87,7 @@ function RulesContent() {
   // ➕ Thêm dòng mới
   function addRow() {
     const newRow =
-      section === "MOLDING"
+      needsCategory
         ? { category: "", threshold: 100, score: 7, note: "", active: true }
         : { threshold: 100, score: 7, note: "", active: true };
     setRows((r) => [newRow, ...r]);
@@ -102,7 +123,7 @@ function RulesContent() {
 
       // Chuẩn hoá
       const raw = json.map(r => ({
-        section: (r.section?.toString().trim() || section || "MOLDING").toUpperCase(),
+        section: normalizeSection(r.section, section),
         category: (r.category ?? "").toString().trim().replace(/\s+/g, " "),
         threshold: Number(r.threshold || 0),
         score: Number(r.score || 0),
@@ -114,15 +135,19 @@ function RulesContent() {
       const seen = new Set();
       const payload = [];
       for (const row of raw) {
-        const key = `${row.section}|${row.category}|${row.threshold}`;
+        const catKey = needsCategory ? row.category : ""; 
+        const key = `${row.section}|${catKey}|${row.threshold}`;
+        
         if (!seen.has(key)) { seen.add(key); payload.push(row); }
       }
 
       if (!confirm(`Nhập/cập nhật ${payload.length} rule vào database?`)) return;
 
+      setSaving(true);
       const { error } = await supabase
         .from("kpi_rule_productivity")
         .upsert(payload, { onConflict: 'section,category,threshold' });
+      setSaving(false);
 
       if (error) {
         console.error(error);
@@ -153,14 +178,17 @@ function RulesContent() {
     // Kiểm tra trùng trong payload
     const seen = new Set();
     for (const r of payload) {
-      const key = `${r.section}|${r.category}|${r.threshold}`;
+      const catKey = needsCategory ? r.category : "";
+      const key = `${r.section}|${catKey}|${r.threshold}`;
       if (seen.has(key)) return alert("Rule bị trùng trong bảng: " + key);
       seen.add(key);
     }
 
+    setSaving(true);
     const { error } = await supabase
     .from("kpi_rule_productivity")
     .upsert(payload, { onConflict: 'section,category,threshold' });
+    setSaving(false);
 
     if (error) return alert("Lưu lỗi: " + error.message);
     await load();
@@ -169,13 +197,18 @@ function RulesContent() {
 
   // 🧮 Test nhanh điểm
   const testScore = useMemo(() => {
-    if (section === "MOLDING") {
+    const currentSection = section.toUpperCase();
+    const isMolding = currentSection === "MOLDING";
+
+    if (needsCategory) { 
       const list = rows.filter((r) => r.active && r.category === testCat);
       const v = Number(testOE);
       const sorted = [...list].sort((a, b) => b.threshold - a.threshold);
       for (const r of sorted) if (v >= r.threshold) return r.score;
       return 0;
     }
+    
+    // Leanline DC
     return scoreByProductivity(testOE, rows);
   }, [testOE, rows, testCat, section]);
 
@@ -184,8 +217,8 @@ function RulesContent() {
     <div className="p-4 space-y-4">
       <div className="flex items-center gap-2 flex-wrap">
         <h2 className="text-xl font-semibold">
-          {section === "MOLDING"
-            ? "Rule điểm sản lượng (Loại hàng → Pair/h → Điểm)"
+          {needsCategory
+            ? "Rule điểm sản lượng (Loại hàng/Line → Điểm)"
             : "Rule điểm sản lượng (%OE → Điểm)"}
         </h2>
         <span className="px-2 py-1 text-xs rounded bg-slate-100">
@@ -208,21 +241,25 @@ function RulesContent() {
 
       {/* Test nhanh */}
       <div className="p-3 rounded border bg-white inline-flex items-center gap-2 flex-wrap">
-        {section === "MOLDING" && (
-          <select
-            className="input w-36"
-            value={testCat}
-            onChange={(e) => setTestCat(e.target.value)}
-          >
-            <option value="">-- Loại hàng --</option>
-            {[...new Set(rows.map((r) => r.category).filter(Boolean))].map((c) => (
-              <option key={c} value={c}>
-                {c}
-              </option>
-            ))}
-          </select>
+        {needsCategory ? (
+          <>
+            <select
+              className="input w-36"
+              value={testCat}
+              onChange={(e) => setTestCat(e.target.value)}
+            >
+              <option value="">-- Loại hàng/Line --</option>
+              {[...new Set(rows.map((r) => r.category).filter(Boolean))].map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <span>%OE/Tỷ lệ NS:</span>
+          </>
+        ) : (
+          <span>Test %OE:</span>
         )}
-        <span>{section === "MOLDING" ? "Số đôi/giờ:" : "Test %OE:"}</span>
         <input
           type="number"
           className="input w-28"
@@ -236,12 +273,12 @@ function RulesContent() {
 
       {/* Bảng Rule */}
       <div className="overflow-auto">
-        {section === "MOLDING" ? (
+        {needsCategory ? (
           <table className="min-w-[800px] text-sm">
             <thead>
               <tr className="text-left border-b">
-                <th className="p-2">Loại hàng</th>
-                <th className="p-2">Số đôi/h ≥</th>
+                <th className="p-2">Loại hàng/Line</th>
+                <th className="p-2">Ngưỡng (≥)</th>
                 <th className="p-2">Điểm</th>
                 <th className="p-2">Ghi chú</th>
                 <th className="p-2">Active</th>
@@ -250,7 +287,7 @@ function RulesContent() {
             </thead>
             <tbody>
               {rows.map((r, idx) => (
-                <tr key={r.id ?? `new-${idx}`} className="border-b">
+                <tr key={r.id ?? `new-${idx}`} className="border-b hover:bg-gray-50">
                   <td className="p-2">
                     <input
                       className="input w-40"
@@ -347,7 +384,7 @@ function RulesContent() {
             </thead>
             <tbody>
               {rows.map((r, idx) => (
-                <tr key={r.id ?? `new-${idx}`} className="border-b">
+                <tr key={r.id ?? `new-${idx}`} className="border-b hover:bg-gray-50">
                   <td className="p-2">
                     <input
                       type="number"
@@ -356,7 +393,7 @@ function RulesContent() {
                       onChange={(e) =>
                         setRows((list) =>
                           list.map((x, i) =>
-                            i === idx ? { ...x, threshold: e.target.value } : x
+                            i === idx ? { ...x, threshold: Number(e.target.value) } : x
                           )
                         )
                       }
@@ -370,7 +407,7 @@ function RulesContent() {
                       onChange={(e) =>
                         setRows((list) =>
                           list.map((x, i) =>
-                            i === idx ? { ...x, score: e.target.value } : x
+                            i === idx ? { ...x, score: Number(e.target.value) } : x
                           )
                         )
                       }

@@ -5,16 +5,22 @@ import { useKpiSection } from "../context/KpiSectionContext";
 
 /* ================= Helpers & Scoring ================= */
 
-// Machine Map (Mới)
-const MACHINE_MAP = {
-  "LAMINATION": ["Máy dán 1", "Máy dán 2", "Máy dán 3", "Máy dán 4", "Máy dán 5", "Máy dán 6", "Máy dán 7"],
-  "PREFITTING": ["Máy cắt 1", "Máy cắt 2", "Máy cắt 3", "Máy cắt 4", "Máy cắt 5", "Máy cắt 6"],
-  "BÀO": ["Máy bào 1", "Máy bào 2", "Máy bào 3", "Máy bào 4"],
-  "TÁCH": ["Máy tách 1", "Máy tách 2", "Máy tách 3", "Máy tách 4"],
-  "LEANLINE_MOLDED": ["M1", "M2", "M3", "M4", "M5"], // <-- DÒNG MỚI
-  "LEANLINE_DEFAULT": ["LEAN-D1", "LEAN-D2", "LEAN-D3", "LEAN-D4", "LEAN-H1", "LEAN-H2"],
+// Rule mapping helper cho LEANLINE_MOLDED
+const getMoldedCategoryFromLine = (line) => {
+    if (line === 'M4' || line === 'M5') return 'M4 & M5 %OE';
+    if (line === 'M1' || line === 'M2' || line === 'M3') return 'M1 M2 M3 %OE';
+    return ''; 
 };
 
+// Machine Map (Mới)
+const MACHINE_MAP = {
+    "LAMINATION": ["Máy dán 1", "Máy dán 2", "Máy dán 3", "Máy dán 4", "Máy dán 5", "Máy dán 6", "Máy dán 7"],
+    "PREFITTING": ["Máy cắt 1", "Máy cắt 2", "Máy cắt 3", "Máy cắt 4", "Máy cắt 5", "Máy cắt 6"],
+    "BÀO": ["Máy bào 1", "Máy bào 2", "Máy bào 3", "Máy bào 4"],
+    "TÁCH": ["Máy tách 1", "Máy tách 2", "Máy tách 3", "Máy tách 4"],
+    "LEANLINE_MOLDED": ["M1", "M2", "M3", "M4", "M5"],
+    "LEANLINE_DEFAULT": ["LEAN-D1", "LEAN-D2", "LEAN-D3", "LEAN-D4", "LEAN-H1", "LEAN-H2"],
+};
 
 const HYBRID_SECTIONS = ["LAMINATION", "PREFITTING", "BÀO", "TÁCH"];
 const isHybridSection = (sectionKey) => HYBRID_SECTIONS.includes(sectionKey);
@@ -52,12 +58,27 @@ function scoreByQuality(defects) {
   return 0;
 }
 
-function scoreByProductivityLeanline(oe, allRules) {
+// FIX: Hàm tính điểm Sản lượng Leanline (Dùng Rule DB dựa trên Line)
+function scoreByProductivityLeanline(oe, allRules, section, line) {
   const val = Number(oe ?? 0);
-  const list = (allRules || [])
-    .filter(r => r.active !== false && !r.category)
-    .sort((a, b) => Number(b.threshold) - Number(a.threshold));
-  for (const r of list) {
+  let rules = [];
+  let category = '';
+
+  if (section === "LEANLINE_MOLDED") {
+    // 1. Map line to category 
+    category = getMoldedCategoryFromLine(line);
+    // 2. Lọc Rule theo Category
+    rules = (allRules || [])
+      .filter(r => r.active !== false && r.category === category)
+      .sort((a, b) => Number(b.threshold) - Number(a.threshold));
+  } else {
+    // 3. Default Leanline DC (no category filter)
+    rules = (allRules || [])
+      .filter(r => r.active !== false && !r.category)
+      .sort((a, b) => Number(b.threshold) - Number(a.threshold));
+  }
+  
+  for (const r of rules) {
     if (val >= Number(r.threshold)) return Number(r.score || 0);
   }
   return 0;
@@ -76,7 +97,7 @@ function scoreByProductivityHybrid(prodRate, category, allRules) {
   return 0;
 }
 
-function deriveDayScores({ section, oe, defects, category, output, workHours, stopHours, ca }, prodRules) {
+function deriveDayScores({ section, oe, defects, category, output, workHours, stopHours, ca, line }, prodRules) {
   const isHybrid = isHybridSection(section);
   const q = scoreByQuality(defects);
   let p = 0;
@@ -93,7 +114,8 @@ function deriveDayScores({ section, oe, defects, category, output, workHours, st
 
   } else {
     prodRate = Number(oe || 0);
-    p = scoreByProductivityLeanline(prodRate, prodRules);
+    // Cập nhật: Truyền section và line vào hàm tính điểm Leanline
+    p = scoreByProductivityLeanline(prodRate, prodRules, section, line); 
     workingReal = Number(workHours || 0);
   }
 
@@ -141,7 +163,6 @@ export default function EntryPage() {
   const currentMachines = useMemo(() => {
     return MACHINE_MAP[section] || MACHINE_MAP.LEANLINE_DEFAULT;
   }, [section]);
-
 
   // ====== tải rule theo section ======
   useEffect(() => {
@@ -210,10 +231,11 @@ export default function EntryPage() {
     return () => clearTimeout(t);
   }, [form.workerId]);
 
-  // ====== tính điểm động (Giữ nguyên) ======
+  // ====== tính điểm động ======
   const scores = useMemo(
-    () => deriveDayScores({ section, oe: form.oe, defects: form.defects, category: form.category, output: form.output, workHours: form.workHours, stopHours: form.stopHours, ca: form.ca }, prodRules),
-    [section, form.oe, form.defects, form.category, form.output, form.workHours, form.stopHours, form.ca, prodRules]
+    // Cập nhật: Truyền form.line vào dependency list
+    () => deriveDayScores({ section, oe: form.oe, defects: form.defects, category: form.category, output: form.output, workHours: form.workHours, stopHours: form.stopHours, ca: form.ca, line: form.line }, prodRules),
+    [section, form.oe, form.defects, form.category, form.output, form.workHours, form.stopHours, form.ca, form.line, prodRules]
   );
 
   function handleChange(key, val) {
@@ -245,7 +267,7 @@ export default function EntryPage() {
     const now = new Date().toISOString();
     
     // 1. Khối payload CHUNG (Các cột có mặt trong tất cả 3 bảng)
-    const commonFields = {
+    const basePayload = {
       date: form.date,
       worker_id: form.workerId,
       worker_name: form.workerName || null,
@@ -270,7 +292,7 @@ export default function EntryPage() {
     let sectionPayload = {};
     
     if (isHybrid) {
-      // Hybrid/LPS: Gửi Output, Category, Working Real, violations
+      // Hybrid/LPS: Gửi output, category, working_real, violations
       sectionPayload = {
         output: Number(form.output || 0),
         category: form.category,
@@ -278,16 +300,16 @@ export default function EntryPage() {
         violations: violationsValue,
       };
     } else {
-      // Leanline (kpi_entries): Chỉ gửi %OE và KHÔNG gửi violations
+      // Leanline: Chỉ gửi %OE (và violations cho Leanline Molded nếu có cột đó, nhưng tạm thời chỉ gửi OE cho kpi_entries)
       sectionPayload = {
         oe: Number(form.oe || 0),
-        // KHÔNG BAO GỒM violations (1/0)
+        // KHÔNG GỬI violations, output, category, working_real
       };
     }
     
     // Gộp tất cả payload
     const payload = {
-      ...commonFields,
+      ...basePayload,
       ...sectionPayload
     };
 
@@ -453,15 +475,15 @@ export default function EntryPage() {
             </label>
             </>
         ) : (
-          <label>%OE:
-              <input
-                  type="number"
-                  className="input"
-                  value={form.oe}
-                  onChange={(e) => handleChange("oe", Number(e.target.value))}
-                  step="0.01" // <-- ĐÃ THÊM STEP
-              />
-          </label>
+            <label>%OE:
+                <input
+                    type="number"
+                    className="input"
+                    value={form.oe}
+                    onChange={(e) => handleChange("oe", Number(e.target.value))}
+                    step="0.01"
+                />
+            </label>
         )}
 
         <label>Vi phạm:
@@ -483,6 +505,9 @@ export default function EntryPage() {
       <div className="mt-3 p-4 rounded bg-gray-50">
         <p>Giờ làm việc nhập: <b>{Number(form.workHours || 0)}</b></p>
         <p>Giờ dừng máy: <b>{Number(form.stopHours || 0)}</b></p>
+        {section === "LEANLINE_MOLDED" && (
+            <p>Rule: Line M1-M3: 77.0-109.8% | Line M4-M5: 74.5-110.9%</p>
+        )}
         {isHybrid && (
             <>
                 <p>Giờ thực tế (Quy đổi): <b>{scores.workingReal.toFixed(2)}</b></p>

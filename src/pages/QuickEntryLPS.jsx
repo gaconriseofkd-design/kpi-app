@@ -1,9 +1,9 @@
-// src/pages/QuickEntryLPS.jsx
-
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
-
-/* ================= Scoring & Helpers ================= */
+// Rule mapping helper cho LEANLINE_MOLDED
+const getMoldedCategoryFromLine = (line) => {
+    if (line === 'M4' || line === 'M5') return 'M4 & M5 %OE';
+    if (line === 'M1' || line === 'M2' || line === 'M3') return 'M1 M2 M3 %OE';
+    return ''; 
+};
 
 // Machine Map (Giữ nguyên)
 const MACHINE_MAP = {
@@ -46,17 +46,17 @@ function scoreByQuality(defects) {
 }
 
 function scoreByProductivityHybrid(prodRate, category, allRules) {
-  const val = Number(prodRate ?? 0);
-  const rules = (allRules || []).filter(r => 
-    r.active !== false && 
-    r.category === category
-  ).sort((a, b) => Number(b.threshold) - Number(a.threshold)); 
-  
-  for (const r of rules) {
-    if (val >= Number(r.threshold)) return Number(r.score || 0);
+    const val = Number(prodRate ?? 0);
+    const rules = (allRules || []).filter(r => 
+      r.active !== false && 
+      r.category === category
+    ).sort((a, b) => Number(b.threshold) - Number(a.threshold)); 
+    
+    for (const r of rules) {
+      if (val >= Number(r.threshold)) return Number(r.score || 0);
+    }
+    return 0;
   }
-  return 0;
-}
 
 function deriveDayScoresHybrid({ section, defects, category, output, workHours, stopHours, shift }, prodRules) {
   const q = scoreByQuality(defects);
@@ -96,40 +96,40 @@ const toNum = (v, d = 0) => {
 /* ================= Approver Mode HYBRID ================= */
 
 export default function ApproverModeHybrid({ section }) {
-  const [step, setStep] = useState(1);
-  const [prodRules, setProdRules] = useState([]); 
-  const [categoryOptions, setCategoryOptions] = useState([]);
-  const tableName = getTableName(section);
-
-  // Lấy danh sách máy cho section hiện tại
-  const currentMachines = useMemo(() => {
-    return MACHINE_MAP[section] || [];
-  }, [section]);
-
-  // THÊM useEffect để Tải Rule điểm sản lượng cho Hybrid Sections (ĐÃ SỬA CHUẨN HÓA)
-  useEffect(() => {
-    let cancelled = false;
-    const dbSection = section.toUpperCase(); // CHUẨN HÓA SANG IN HOA
-    
-    (async () => {
-      const { data, error } = await supabase
-        .from("kpi_rule_productivity")
-        .select("*")
-        .eq("active", true)
-        .eq("section", dbSection) 
-        .order("threshold", { ascending: false });
-      if (!cancelled) {
-        if (error) console.error("Load rules error:", error);
-        setProdRules(data || []);
-        
-        const opts = [...new Set((data || []).map(r => r.category).filter(Boolean))].sort();
-        setCategoryOptions(opts);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [section]);
+    const [step, setStep] = useState(1);
+    const [prodRules, setProdRules] = useState([]); 
+    const [categoryOptions, setCategoryOptions] = useState([]);
+    const tableName = getTableName(section);
+  
+    // Lấy danh sách máy cho section hiện tại
+    const currentMachines = useMemo(() => {
+      return MACHINE_MAP[section] || [];
+    }, [section]);
+  
+    // THÊM useEffect để Tải Rule điểm sản lượng cho Hybrid Sections (ĐÃ SỬA CHUẨN HÓA)
+    useEffect(() => {
+      let cancelled = false;
+      const dbSection = section.toUpperCase(); // CHUẨN HÓA SANG IN HOA
+      
+      (async () => {
+        const { data, error } = await supabase
+          .from("kpi_rule_productivity")
+          .select("*")
+          .eq("active", true)
+          .eq("section", dbSection) 
+          .order("threshold", { ascending: false });
+        if (!cancelled) {
+          if (error) console.error("Load rules error:", error);
+          setProdRules(data || []);
+          
+          const opts = [...new Set((data || []).map(r => r.category).filter(Boolean))].sort();
+          setCategoryOptions(opts);
+        }
+      })();
+      return () => {
+        cancelled = true;
+      };
+    }, [section]);
   
   // ---- B1: Chọn nhân viên theo Người duyệt ----
   const [approverId, setApproverId] = useState("");
@@ -513,9 +513,9 @@ export default function ApproverModeHybrid({ section }) {
 
 /* ==== Bảng Review (HYBRID) — CHO PHÉP CHỈNH ==== */
 function EditReviewHybrid({
-  pageSize, page, setPage, totalPages, pageRows, selReview,
-  toggleAllReviewOnPage, toggleOneReview, updateRow, saveBatch, saving, categoryOptions
-}) {
+    pageSize, page, setPage, totalPages, pageRows, selReview,
+    toggleAllReviewOnPage, toggleOneReview, updateRow, saveBatch, saving, categoryOptions
+  }) {
   const globalIndex = (idx) => (page - 1) * pageSize + idx;
   const allMachines = MACHINE_MAP.LAMINATION.concat(
     MACHINE_MAP.PREFITTING, 
