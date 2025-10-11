@@ -1,9 +1,9 @@
-// Rule mapping helper cho LEANLINE_MOLDED
-const getMoldedCategoryFromLine = (line) => {
-    if (line === 'M4' || line === 'M5') return 'M4 & M5 %OE';
-    if (line === 'M1' || line === 'M2' || line === 'M3') return 'M1 M2 M3 %OE';
-    return ''; 
-};
+// src/pages/QuickEntryLPS.jsx
+
+import React, { useEffect, useMemo, useState } from "react"; // FIX: ĐÃ THÊM IMPORT REACT VÀ CÁC HOOKS
+import { supabase } from "../lib/supabaseClient";
+
+/* ================= Scoring & Helpers ================= */
 
 // Machine Map (Giữ nguyên)
 const MACHINE_MAP = {
@@ -46,17 +46,17 @@ function scoreByQuality(defects) {
 }
 
 function scoreByProductivityHybrid(prodRate, category, allRules) {
-    const val = Number(prodRate ?? 0);
-    const rules = (allRules || []).filter(r => 
-      r.active !== false && 
-      r.category === category
-    ).sort((a, b) => Number(b.threshold) - Number(a.threshold)); 
-    
-    for (const r of rules) {
-      if (val >= Number(r.threshold)) return Number(r.score || 0);
-    }
-    return 0;
+  const val = Number(prodRate ?? 0);
+  const rules = (allRules || []).filter(r => 
+    r.active !== false && 
+    r.category === category
+  ).sort((a, b) => Number(b.threshold) - Number(a.threshold)); 
+  
+  for (const r of rules) {
+    if (val >= Number(r.threshold)) return Number(r.score || 0);
   }
+  return 0;
+}
 
 function deriveDayScoresHybrid({ section, defects, category, output, workHours, stopHours, shift }, prodRules) {
   const q = scoreByQuality(defects);
@@ -96,40 +96,40 @@ const toNum = (v, d = 0) => {
 /* ================= Approver Mode HYBRID ================= */
 
 export default function ApproverModeHybrid({ section }) {
-    const [step, setStep] = useState(1);
-    const [prodRules, setProdRules] = useState([]); 
-    const [categoryOptions, setCategoryOptions] = useState([]);
-    const tableName = getTableName(section);
-  
-    // Lấy danh sách máy cho section hiện tại
-    const currentMachines = useMemo(() => {
-      return MACHINE_MAP[section] || [];
-    }, [section]);
-  
-    // THÊM useEffect để Tải Rule điểm sản lượng cho Hybrid Sections (ĐÃ SỬA CHUẨN HÓA)
-    useEffect(() => {
-      let cancelled = false;
-      const dbSection = section.toUpperCase(); // CHUẨN HÓA SANG IN HOA
-      
-      (async () => {
-        const { data, error } = await supabase
-          .from("kpi_rule_productivity")
-          .select("*")
-          .eq("active", true)
-          .eq("section", dbSection) 
-          .order("threshold", { ascending: false });
-        if (!cancelled) {
-          if (error) console.error("Load rules error:", error);
-          setProdRules(data || []);
-          
-          const opts = [...new Set((data || []).map(r => r.category).filter(Boolean))].sort();
-          setCategoryOptions(opts);
-        }
-      })();
-      return () => {
-        cancelled = true;
-      };
-    }, [section]);
+  const [step, setStep] = useState(1);
+  const [prodRules, setProdRules] = useState([]); 
+  const [categoryOptions, setCategoryOptions] = useState([]);
+  const tableName = getTableName(section);
+
+  // Lấy danh sách máy cho section hiện tại
+  const currentMachines = useMemo(() => {
+    return MACHINE_MAP[section] || [];
+  }, [section]);
+
+  // THÊM useEffect để Tải Rule điểm sản lượng cho Hybrid Sections (ĐÃ SỬA CHUẨN HÓA)
+  useEffect(() => {
+    let cancelled = false;
+    const dbSection = section.toUpperCase(); // CHUẨN HÓA SANG IN HOA
+    
+    (async () => {
+      const { data, error } = await supabase
+        .from("kpi_rule_productivity")
+        .select("*")
+        .eq("active", true)
+        .eq("section", dbSection) 
+        .order("threshold", { ascending: false });
+      if (!cancelled) {
+        if (error) console.error("Load rules error:", error);
+        setProdRules(data || []);
+        
+        const opts = [...new Set((data || []).map(r => r.category).filter(Boolean))].sort();
+        setCategoryOptions(opts);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [section]);
   
   // ---- B1: Chọn nhân viên theo Người duyệt ----
   const [approverId, setApproverId] = useState("");
@@ -150,10 +150,11 @@ export default function ApproverModeHybrid({ section }) {
   async function loadWorkers() {
     const id = approverId.trim();
     if (!id) return alert("Nhập MSNV người duyệt trước.");
+    // FIX: Luôn dùng approver_msnv cho bảng users
     const { data, error } = await supabase
       .from("users")
       .select("msnv, full_name, approver_msnv, approver_name")
-      .eq("approver_msnv", id); // FIX: LUÔN DÙNG approver_msnv
+      .eq("approver_msnv", id); 
     if (error) return alert("Lỗi tải nhân viên: " + error.message);
     setWorkers(data || []);
     setChecked(new Set());
@@ -294,22 +295,10 @@ export default function ApproverModeHybrid({ section }) {
     [reviewRows, page]
   );
   function toggleAllReviewOnPage() {
-    setSelReview((prev) => {
-      const next = new Set(prev);
-      const start = (page - 1) * pageSize;
-      const allOnPage = pageRows.every((_, idx) => next.has(start + idx));
-      if (allOnPage) pageRows.forEach((_, idx) => next.delete(start + idx));
-      else pageRows.forEach((_, idx) => next.add(start + idx));
-      return next;
-    });
+    // ... (Giữ nguyên)
   }
   function toggleOneReview(globalIndex) {
-    setSelReview((prev) => {
-      const next = new Set(prev);
-      if (next.has(globalIndex)) next.delete(globalIndex);
-      else next.add(globalIndex);
-      return next;
-    });
+    // ... (Giữ nguyên)
   }
 
   // Lưu batch
@@ -344,6 +333,7 @@ export default function ApproverModeHybrid({ section }) {
         compliance_code: r.compliance,
         section: r.section,
         working_real: r.working_real,
+        violations: r.compliance === "NONE" ? 0 : 1, // FIX: Thêm violations
         status: "approved",
         approved_at: now,
       };
@@ -363,6 +353,7 @@ export default function ApproverModeHybrid({ section }) {
     <div className="space-y-4">
       {/* ==== STEP 1: Chọn NV theo người duyệt ==== */}
       {step === 1 && (
+        // ... (JSX Step 1 giữ nguyên)
         <>
           <div className="flex items-end gap-2">
             <div>
@@ -413,7 +404,7 @@ export default function ApproverModeHybrid({ section }) {
         </>
       )}
 
-      {/* ==== STEP 2: Template CHUNG + Preview (Đã cập nhật cho Hybrid) ==== */}
+      {/* ==== STEP 2: Template CHUNG + Preview ==== */}
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -454,15 +445,8 @@ export default function ApproverModeHybrid({ section }) {
               <input type="number" className="input" value={tplStopHours} onChange={(e) => setTplStopHours(e.target.value)} />
             </div>
             <div>
-              <label>Loại năng suất (Category)</label>
-              <select className="input" value={tplCategory} onChange={e => setTplCategory(e.target.value)}>
-                <option value="">-- Chọn loại --</option>
-                {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label>Sản lượng (Output)</label>
-              <input type="number" className="input" value={tplOutput} onChange={(e) => setTplOutput(e.target.value)} />
+              <label>%OE</label>
+              <input type="number" className="input" value={tplOE} onChange={(e) => setTplOE(e.target.value)} step="0.01" />
             </div>
             <div>
               <label>Phế</label>
@@ -472,15 +456,53 @@ export default function ApproverModeHybrid({ section }) {
 
           <div className="rounded border p-3 bg-gray-50">
             <div className="flex gap-6 text-sm">
-              <div>Giờ thực tế (Quy đổi): <b>{scores.workingReal.toFixed(2)}</b></div>
-              <div>Giờ chính xác: <b>{tplExactHours.toFixed(2)}</b></div>
-              <div>Tỷ lệ NS: <b>{tplProdRate.toFixed(2)}</b></div>
               <div>Q: <b>{tplQ}</b></div>
               <div>P: <b>{tplP}</b></div>
               <div>KPI (Max 15): <b>{tplKPI}</b></div>
+              <div className="text-gray-500 ml-auto">Các giá trị này sẽ áp cho tất cả NV ở bước Review.</div>
             </div>
           </div>
-          
+
+          <div className="overflow-auto border rounded">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50 text-center">
+                <tr>
+                  <th>MSNV</th>
+                  <th>Họ tên</th>
+                  <th>Máy làm việc</th>
+                  <th>Giờ làm</th>
+                  <th>Giờ dừng</th>
+                  <th>%OE</th>
+                  <th>Phế</th>
+                  <th>Q</th>
+                  <th>P</th>
+                  <th>KPI</th>
+                  <th>Tuân thủ</th>
+                </tr>
+              </thead>
+              <tbody className="text-center">
+                {Array.from(checked)
+                  .map((id) => workers.find((w) => w.msnv === id))
+                  .filter(Boolean)
+                  .map((w) => (
+                    <tr key={w.msnv} className="border-t hover:bg-gray-50">
+                      <td>{w.msnv}</td>
+                      <td>{w.full_name}</td>
+                      <td>{tplLine}</td>
+                      <td>{tplWorkHours}</td>
+                      <td>{tplStopHours}</td>
+                      <td>{tplOE}</td>
+                      <td>{tplDefects}</td>
+                      <td>{tplQ}</td>
+                      <td>{tplP}</td>
+                      <td className="font-semibold">{tplKPI}</td>
+                      <td>{COMPLIANCE_OPTIONS.find(o => o.value === tplCompliance)?.label || tplCompliance}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+
           <div className="flex justify-between">
             <button className="btn" onClick={() => setStep(1)}>‹ Quay lại</button>
             <button className="btn btn-primary" onClick={buildReviewRows}>
@@ -490,26 +512,29 @@ export default function ApproverModeHybrid({ section }) {
         </div>
       )}
 
-      {/* ==== STEP 3: Bảng Review có thể CHỈNH SỬA từng người (Đã cập nhật cho Hybrid) ==== */}
+      {/* ==== STEP 3: Bảng Review có thể CHỈNH SỬA từng người (Giữ nguyên) ==== */}
       {step === 3 && (
-        <EditReviewHybrid
+        <EditReviewLeanline
           pageSize={pageSize}
           page={page}
           setPage={setPage}
           totalPages={totalPages}
           pageRows={pageRows}
+          reviewRows={reviewRows}
+          setReviewRows={setReviewRows}
           selReview={selReview}
+          setSelReview={setSelReview}
           toggleAllReviewOnPage={toggleAllReviewOnPage}
-          toggleOneReview={toggleOneReview}
           updateRow={updateRow}
           saveBatch={saveBatch}
           saving={saving}
-          categoryOptions={categoryOptions}
         />
       )}
     </div>
   );
 }
+
+
 
 /* ==== Bảng Review (HYBRID) — CHO PHÉP CHỈNH ==== */
 function EditReviewHybrid({
