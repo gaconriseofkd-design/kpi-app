@@ -80,6 +80,7 @@ function scoreByProductivityLeanlineQuick(oe, allRules, section, line) {
   return 0;
 }
 
+
 // Map để xác định line cho Leanline (DC vs MOLDED)
 const LEANLINE_MACHINES = {
     "LEANLINE_MOLDED": ["M1", "M2", "M3", "M4", "M5"],
@@ -89,17 +90,21 @@ const LEANLINE_MACHINES = {
 const getLeanlineMachines = (section) => LEANLINE_MACHINES[section] || LEANLINE_MACHINES.DEFAULT;
 
 
-/* ===== Main ===== */
+/* ===== Main (Đã lược bỏ SelfMode và Logic Login) ===== */
 export default function QuickEntry() {
   const { section } = useKpiSection();
   const isMolding = section === "MOLDING";
   const isHybrid = isHybridSection(section);
-  const isLeanline = String(section || "").toUpperCase().startsWith("LEANLINE");
+  // const isLeanline = String(section || "").toUpperCase().startsWith("LEANLINE"); // Unused
 
-  // ⇩⇩⇩ tất cả hooks phải khai báo trước mọi early-return
+  // Chỉ cần mode Approver cho trang QuickEntry
+  // const [authed, setAuthed] = useState(() => sessionStorage.getItem("quick_authed") === "1"); // Đã chuyển logic login xuống dưới
+  // const [pwd, setPwd] = useState(""); // Đã chuyển logic login xuống dưới
+  const [mode, setMode] = useState("approver"); // Chỉ dùng Approver Mode
+
+  // Bắt đầu với form login (vì logic ApproverModeMolding nằm bên ngoài)
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("quick_authed") === "1");
   const [pwd, setPwd] = useState("");
-  const [mode, setMode] = useState("approver"); // "approver" | "self" (self chỉ dùng cho Molding)
 
   function tryLogin(e) {
     e?.preventDefault();
@@ -109,44 +114,27 @@ export default function QuickEntry() {
     } else alert("Sai mật khẩu.");
   }
 
-  // Chưa login → chỉ hiển thị form, NHƯNG các hooks ở trên đã được gọi đủ
   if (!authed) {
     return <LoginForm pwd={pwd} setPwd={setPwd} tryLogin={tryLogin} />;
   }
-
+  
+  // Sau khi login, chỉ hiển thị Approver mode
   return (
     <div className="p-4 space-y-4">
       <div className="flex items-center gap-3">
         <h2 className="text-xl font-semibold">Nhập KPI nhanh ({section})</h2>
-        <div className="ml-auto flex gap-2">
-          <button
-            className={cx("btn", mode === "approver" && "btn-primary")}
-            onClick={() => setMode("approver")}
-          >
-            Theo người duyệt
-          </button>
-          {isMolding && (
-            <button
-              className={cx("btn", mode === "self" && "btn-primary")}
-              onClick={() => setMode("self")}
-            >
-              Tự nhập (MSNV người nhập)
-            </button>
-          )}
-        </div>
+        {/* Lược bỏ nút chuyển mode nếu không cần Self Mode */}
+        {/* Lược bỏ Mode State nếu chỉ có 1 mode */}
       </div>
 
-      {mode === "approver" ? (
-        isMolding ? (
+      {isMolding ? (
           <ApproverModeMolding section={section} />
         ) : isHybrid ? (
           <ApproverModeHybrid section={section} />
         ) : (
           <ApproverModeLeanline section={section} />
         )
-      ) : (
-        <SelfModeMolding section={section} />
-      )}
+      }
     </div>
   );
 }
@@ -254,7 +242,6 @@ function ApproverModeLeanline({ section }) {
 
   // điểm preview cho template
   const tplQ = useMemo(() => scoreByQuality(tplDefects), [tplDefects]);
-  // FIX: Dùng hàm tính điểm có Line
   const tplP = useMemo(() => scoreByProductivityLeanlineQuick(tplOE, prodRules, section, tplLine), [tplOE, prodRules, section, tplLine]);
   const tplKPI = useMemo(() => Math.min(15, tplQ + tplP), [tplQ, tplP]);
 
@@ -423,7 +410,48 @@ function ApproverModeLeanline({ section }) {
               Tiếp tục ›
             </button>
           </div>
-          {/* ... (Bảng nhân viên giữ nguyên) */}
+
+          <div className="overflow-auto border rounded">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50">
+                <tr className="text-center">
+                  <th className="p-2">
+                    <input
+                      type="checkbox"
+                      onChange={toggleAllWorkers}
+                      checked={checked.size === filteredWorkers.length && filteredWorkers.length > 0}
+                    />
+                  </th>
+                  <th className="p-2">MSNV</th>
+                  <th className="p-2">Họ & tên</th>
+                  <th className="p-2">Người duyệt phụ trách</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredWorkers.map((w) => (
+                  <tr key={w.msnv} className="border-t hover:bg-gray-50">
+                    <td className="p-2 text-center">
+                      <input
+                        type="checkbox"
+                        checked={checked.has(w.msnv)}
+                        onChange={() => toggleWorker(w.msnv)}
+                      />
+                    </td>
+                    <td className="p-2 text-center">{w.msnv}</td>
+                    <td className="p-2 text-center">{w.full_name}</td>
+                    <td className="p-2 text-center">{w.approver_name} ({w.approver_msnv})</td>
+                  </tr>
+                ))}
+                {!filteredWorkers.length && (
+                  <tr>
+                    <td colSpan={4} className="p-4 text-center text-gray-500">
+                      Không có dữ liệu
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </>
       )}
 
@@ -431,18 +459,109 @@ function ApproverModeLeanline({ section }) {
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            {/* ... (Các inputs giữ nguyên) */}
+            <div>
+              <label>Ngày</label>
+              <input type="date" className="input" value={tplDate} onChange={(e) => setTplDate(e.target.value)} />
+            </div>
+            <div>
+              <label>Ca</label>
+              <select className="input" value={tplShift} onChange={(e) => setTplShift(e.target.value)}>
+                <option value="Ca 1">Ca 1</option>
+                <option value="Ca 2">Ca 2</option>
+                <option value="Ca 3">Ca 3</option>
+                <option value="Ca HC">Ca HC</option>
+              </select>
+            </div>
             <div>
               <label>Máy làm việc</label>
               <select className="input" value={tplLine} onChange={(e) => setTplLine(e.target.value)}>
-                {currentMachines.map(m => (
+                {currentMachines.map(m => ( // DYNAMIC DROPDOWN
                     <option key={m} value={m}>{m}</option>
                 ))}
               </select>
             </div>
-            {/* ... (Phần còn lại của inputs giữ nguyên) */}
+            <div>
+              <label>Tuân thủ</label>
+              <select className="input text-center" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>
+                {COMPLIANCE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label>Giờ làm việc</label>
+              <input type="number" className="input" value={tplWorkHours} onChange={(e) => setTplWorkHours(e.target.value)} />
+            </div>
+            <div>
+              <label>Giờ dừng máy</label>
+              <input type="number" className="input" value={tplStopHours} onChange={(e) => setTplStopHours(e.target.value)} />
+            </div>
+            <div>
+              <label>%OE</label>
+              <input type="number" className="input" value={tplOE} onChange={(e) => setTplOE(e.target.value)} step="0.01" />
+            </div>
+            <div>
+              <label>Phế</label>
+              <input type="number" className="input" value={tplDefects} onChange={(e) => setTplDefects(e.target.value)} />
+            </div>
           </div>
-          {/* ... (Bảng preview và nút chuyển bước giữ nguyên) */}
+
+          <div className="rounded border p-3 bg-gray-50">
+            <div className="flex gap-6 text-sm">
+              <div>Q: <b>{tplQ}</b></div>
+              <div>P: <b>{tplP}</b></div>
+              <div>KPI (Max 15): <b>{tplKPI}</b></div>
+              <div className="text-gray-500 ml-auto">Các giá trị này sẽ áp cho tất cả NV ở bước Review.</div>
+            </div>
+          </div>
+
+          <div className="overflow-auto border rounded">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50 text-center">
+                <tr>
+                  <th>MSNV</th>
+                  <th>Họ tên</th>
+                  <th>Máy làm việc</th>
+                  <th>Giờ làm</th>
+                  <th>Giờ dừng</th>
+                  <th>%OE</th>
+                  <th>Phế</th>
+                  <th>Q</th>
+                  <th>P</th>
+                  <th>KPI</th>
+                  <th>Tuân thủ</th>
+                </tr>
+              </thead>
+              <tbody className="text-center">
+                {Array.from(checked)
+                  .map((id) => workers.find((w) => w.msnv === id))
+                  .filter(Boolean)
+                  .map((w) => (
+                    <tr key={w.msnv} className="border-t hover:bg-gray-50">
+                      <td>{w.msnv}</td>
+                      <td>{w.full_name}</td>
+                      <td>{tplLine}</td>
+                      <td>{tplWorkHours}</td>
+                      <td>{tplStopHours}</td>
+                      <td>{tplOE}</td>
+                      <td>{tplDefects}</td>
+                      <td>{tplQ}</td>
+                      <td>{tplP}</td>
+                      <td className="font-semibold">{tplKPI}</td>
+                      <td>{COMPLIANCE_OPTIONS.find(o => o.value === tplCompliance)?.label || tplCompliance}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex justify-between">
+            <button className="btn" onClick={() => setStep(1)}>‹ Quay lại</button>
+            <button className="btn btn-primary" onClick={buildReviewRows}>
+              Tạo danh sách Review ›
+            </button>
+          </div>
         </div>
       )}
 
@@ -468,8 +587,6 @@ function ApproverModeLeanline({ section }) {
     </div>
   );
 }
-
-
 
 /* ==== Bảng Review (LEANLINE) — CHO PHÉP CHỈNH (Đã cập nhật Line) ==== */
 function EditReviewLeanline({
@@ -600,7 +717,7 @@ function EditReviewLeanline({
                       className="input text-center"
                       value={r.oe}
                       onChange={(e) => updateRow(gi, "oe", e.target.value)}
-                      step="0.01" // <-- ĐÃ THÊM STEP
+                      step="0.01"
                     />
                   </td>
                   <td className="p-2">
