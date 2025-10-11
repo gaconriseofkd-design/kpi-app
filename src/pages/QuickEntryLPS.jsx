@@ -1,6 +1,6 @@
 // src/pages/QuickEntryLPS.jsx
 
-import React, { useEffect, useMemo, useState } from "react"; // FIX: ĐÃ THÊM IMPORT REACT VÀ CÁC HOOKS
+import React, { useEffect, useMemo, useState } from "react"; 
 import { supabase } from "../lib/supabaseClient";
 
 /* ================= Scoring & Helpers ================= */
@@ -96,15 +96,68 @@ const toNum = (v, d = 0) => {
 /* ================= Approver Mode HYBRID ================= */
 
 export default function ApproverModeHybrid({ section }) {
+  // --- Khai báo States/Constants ở đầu hàm ---
   const [step, setStep] = useState(1);
   const [prodRules, setProdRules] = useState([]); 
   const [categoryOptions, setCategoryOptions] = useState([]);
   const tableName = getTableName(section);
+  const [search, setSearch] = useState("");
+  const [workers, setWorkers] = useState([]);
+  const [checked, setChecked] = useState(new Set());
+  const [approverId, setApproverId] = useState("");
+  const [reviewRows, setReviewRows] = useState([]);
+  const [selReview, setSelReview] = useState(() => new Set());
 
+  // Biến Template (Đã khai báo)
+  const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [tplShift, setTplShift] = useState("Ca 1");
+  const [tplWorkHours, setTplWorkHours] = useState(8);
+  const [tplStopHours, setTplStopHours] = useState(0);
+  const [tplOutput, setTplOutput] = useState(100); 
+  const [tplCategory, setTplCategory] = useState(""); 
+  const [tplDefects, setTplDefects] = useState(0);
+  const [tplCompliance, setTplCompliance] = useState("NONE");
+  
+  const [saving, setSaving] = useState(false);
+  const pageSize = 50;
+  const [page, setPage] = useState(1);
+  
   // Lấy danh sách máy cho section hiện tại
   const currentMachines = useMemo(() => {
     return MACHINE_MAP[section] || [];
   }, [section]);
+  const [tplLine, setTplLine] = useState(currentMachines[0] || ""); 
+
+  // --- Khai báo Memoized Values (Sử dụng các biến đã khai báo) ---
+  const filteredWorkers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return workers;
+    return workers.filter(
+      (w) =>
+        String(w.msnv).toLowerCase().includes(q) ||
+        String(w.full_name || "").toLowerCase().includes(q)
+    );
+  }, [workers, search]);
+
+  const scores = useMemo(
+    () => deriveDayScoresHybrid({ 
+        section, 
+        defects: tplDefects, 
+        category: tplCategory, 
+        output: tplOutput, 
+        workHours: tplWorkHours, 
+        stopHours: tplStopHours,
+        shift: tplShift 
+    }, prodRules),
+    [section, tplDefects, tplCategory, tplOutput, tplWorkHours, tplStopHours, tplShift, prodRules]
+  );
+  
+  const tplKPI = scores.day_score;
+  const tplProdRate = scores.prodRate;
+  const tplQ = scores.q_score;
+  const tplP = scores.p_score;
+  const tplExactHours = Math.max(0, scores.workingReal - toNum(tplStopHours));
+
 
   // THÊM useEffect để Tải Rule điểm sản lượng cho Hybrid Sections (ĐÃ SỬA CHUẨN HÓA)
   useEffect(() => {
@@ -132,21 +185,7 @@ export default function ApproverModeHybrid({ section }) {
   }, [section]);
   
   // ---- B1: Chọn nhân viên theo Người duyệt ----
-  const [approverId, setApproverId] = useState("");
-  const [workers, setWorkers] = useState([]);
-  const [checked, setChecked] = useState(new Set());
-  const [search, setSearch] = useState("");
-
-  const filteredWorkers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return workers;
-    return workers.filter(
-      (w) =>
-        String(w.msnv).toLowerCase().includes(q) ||
-        String(w.full_name || "").toLowerCase().includes(q)
-    );
-  }, [workers, search]);
-
+  
   async function loadWorkers() {
     const id = approverId.trim();
     if (!id) return alert("Nhập MSNV người duyệt trước.");
@@ -169,36 +208,7 @@ export default function ApproverModeHybrid({ section }) {
   }
 
   // ---- B2: Template KPI CHUNG ----
-  const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [tplShift, setTplShift] = useState("Ca 1");
-  const [tplLine, setTplLine] = useState(currentMachines[0] || ""); 
-  const [tplWorkHours, setTplWorkHours] = useState(8);
-  const [tplStopHours, setTplStopHours] = useState(0);
-  const [tplOutput, setTplOutput] = useState(100); 
-  const [tplCategory, setTplCategory] = useState(""); 
-  const [tplDefects, setTplDefects] = useState(0);
-  const [tplCompliance, setTplCompliance] = useState("NONE");
-
-  // Điểm preview cho template
-  const scores = useMemo(
-    () => deriveDayScoresHybrid({ 
-        section, 
-        defects: tplDefects, 
-        category: tplCategory, 
-        output: tplOutput, 
-        workHours: tplWorkHours, 
-        stopHours: tplStopHours,
-        shift: tplShift 
-    }, prodRules),
-    [section, tplDefects, tplCategory, tplOutput, tplWorkHours, tplStopHours, tplShift, prodRules]
-  );
   
-  const tplKPI = scores.day_score;
-  const tplProdRate = scores.prodRate;
-  const tplQ = scores.q_score;
-  const tplP = scores.p_score;
-  const tplExactHours = Math.max(0, scores.workingReal - toNum(tplStopHours));
-
   function proceedToTemplate() {
     if (!prodRules.length) return alert("Không thể tải Rule tính điểm sản lượng. Vui lòng thử lại.");
     if (!checked.size) return alert("Chưa chọn nhân viên nào.");
@@ -206,9 +216,7 @@ export default function ApproverModeHybrid({ section }) {
   }
 
   // ---- B3: Build Review Rows từ Template + cho phép CHỈNH ----
-  const [reviewRows, setReviewRows] = useState([]);
-  const [selReview, setSelReview] = useState(() => new Set());
-
+  
   function buildReviewRows() {
     if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
     if (!tplCategory) return alert("Vui lòng chọn Loại năng suất.");
@@ -286,14 +294,6 @@ export default function ApproverModeHybrid({ section }) {
   }
 
   // Paging và Select (Giữ nguyên)
-  const pageSize = 50;
-  const [page, setPage] = useState(1);
-  useEffect(() => setPage(1), [reviewRows.length]);
-  const totalPages = Math.max(1, Math.ceil(reviewRows.length / pageSize));
-  const pageRows = useMemo(
-    () => reviewRows.slice((page - 1) * pageSize, page * pageSize),
-    [reviewRows, page]
-  );
   function toggleAllReviewOnPage() {
     // ... (Giữ nguyên)
   }
@@ -302,7 +302,6 @@ export default function ApproverModeHybrid({ section }) {
   }
 
   // Lưu batch
-  const [saving, setSaving] = useState(false);
   async function saveBatch() {
     const idxs = Array.from(selReview).sort((a, b) => a - b);
     if (!idxs.length) return alert("Chưa chọn dòng để lưu.");
@@ -353,7 +352,6 @@ export default function ApproverModeHybrid({ section }) {
     <div className="space-y-4">
       {/* ==== STEP 1: Chọn NV theo người duyệt ==== */}
       {step === 1 && (
-        // ... (JSX Step 1 giữ nguyên)
         <>
           <div className="flex items-end gap-2">
             <div>
@@ -432,7 +430,9 @@ export default function ApproverModeHybrid({ section }) {
             <div>
               <label>Tuân thủ</label>
               <select className="input text-center" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>
-                {COMPLIANCE_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+                {COMPLIANCE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
               </select>
             </div>
 
@@ -533,6 +533,8 @@ export default function ApproverModeHybrid({ section }) {
     </div>
   );
 }
+
+/* ... (Các component khác giữ nguyên) ... */
 
 
 
