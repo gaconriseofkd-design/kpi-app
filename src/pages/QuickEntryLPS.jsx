@@ -67,14 +67,15 @@ function deriveDayScoresHybrid({ section, defects, category, output, workHours, 
   const prodRate = exactHours > 0 ? Number(output || 0) / exactHours : 0;
   
   const p = scoreByProductivityHybrid(prodRate, category, prodRules);
-
   const total = p + q;
+
   return {
     p_score: p,
     q_score: q,
     day_score: Math.min(15, total),
     prodRate: prodRate,
     workingReal: workingReal,
+    rawTotal: total, // Thêm tổng thô cho tính toán overflow sau này
   };
 }
 
@@ -108,7 +109,7 @@ export default function ApproverModeHybrid({ section }) {
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
 
-  // Biến Template (Đã khai báo)
+  // Biến Template (Khai báo sớm nhất)
   const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [tplShift, setTplShift] = useState("Ca 1");
   const [tplWorkHours, setTplWorkHours] = useState(8);
@@ -128,7 +129,7 @@ export default function ApproverModeHybrid({ section }) {
   }, [section]);
   const [tplLine, setTplLine] = useState(currentMachines[0] || ""); 
 
-  // --- Khai báo Memoized Values (Sử dụng các biến đã khai báo) ---
+  // --- Khai báo Memoized Values ---
   const filteredWorkers = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return workers;
@@ -430,9 +431,7 @@ export default function ApproverModeHybrid({ section }) {
             <div>
               <label>Tuân thủ</label>
               <select className="input text-center" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>
-                {COMPLIANCE_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
+                {COMPLIANCE_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
               </select>
             </div>
 
@@ -446,7 +445,14 @@ export default function ApproverModeHybrid({ section }) {
             </div>
             <div>
               <label>%OE</label>
-              <input type="number" className="input" value={tplOE} onChange={(e) => setTplOE(e.target.value)} step="0.01" />
+              <input type="number" className="input" value={tplOutput} onChange={(e) => setTplOutput(e.target.value)} />
+            </div>
+            <div>
+              <label>Loại năng suất (Category)</label>
+              <select className="input" value={tplCategory} onChange={e => setTplCategory(e.target.value)}>
+                <option value="">-- Chọn loại --</option>
+                {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
             </div>
             <div>
               <label>Phế</label>
@@ -456,51 +462,13 @@ export default function ApproverModeHybrid({ section }) {
 
           <div className="rounded border p-3 bg-gray-50">
             <div className="flex gap-6 text-sm">
+              <div>Giờ thực tế (QĐ): <b>{scores.workingReal.toFixed(2)}</b></div>
+              <div>Giờ chính xác: <b>{tplExactHours.toFixed(2)}</b></div>
+              <div>Tỷ lệ NS: <b>{tplProdRate.toFixed(2)}</b></div>
               <div>Q: <b>{tplQ}</b></div>
               <div>P: <b>{tplP}</b></div>
               <div>KPI (Max 15): <b>{tplKPI}</b></div>
-              <div className="text-gray-500 ml-auto">Các giá trị này sẽ áp cho tất cả NV ở bước Review.</div>
             </div>
-          </div>
-
-          <div className="overflow-auto border rounded">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50 text-center">
-                <tr>
-                  <th>MSNV</th>
-                  <th>Họ tên</th>
-                  <th>Máy làm việc</th>
-                  <th>Giờ làm</th>
-                  <th>Giờ dừng</th>
-                  <th>%OE</th>
-                  <th>Phế</th>
-                  <th>Q</th>
-                  <th>P</th>
-                  <th>KPI</th>
-                  <th>Tuân thủ</th>
-                </tr>
-              </thead>
-              <tbody className="text-center">
-                {Array.from(checked)
-                  .map((id) => workers.find((w) => w.msnv === id))
-                  .filter(Boolean)
-                  .map((w) => (
-                    <tr key={w.msnv} className="border-t hover:bg-gray-50">
-                      <td>{w.msnv}</td>
-                      <td>{w.full_name}</td>
-                      <td>{tplLine}</td>
-                      <td>{tplWorkHours}</td>
-                      <td>{tplStopHours}</td>
-                      <td>{tplOE}</td>
-                      <td>{tplDefects}</td>
-                      <td>{tplQ}</td>
-                      <td>{tplP}</td>
-                      <td className="font-semibold">{tplKPI}</td>
-                      <td>{COMPLIANCE_OPTIONS.find(o => o.value === tplCompliance)?.label || tplCompliance}</td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
           </div>
 
           <div className="flex justify-between">
@@ -514,7 +482,7 @@ export default function ApproverModeHybrid({ section }) {
 
       {/* ==== STEP 3: Bảng Review có thể CHỈNH SỬA từng người (Giữ nguyên) ==== */}
       {step === 3 && (
-        <EditReviewLeanline
+        <EditReviewHybrid
           pageSize={pageSize}
           page={page}
           setPage={setPage}
@@ -525,14 +493,18 @@ export default function ApproverModeHybrid({ section }) {
           selReview={selReview}
           setSelReview={setSelReview}
           toggleAllReviewOnPage={toggleAllReviewOnPage}
+          toggleOneReview={toggleOneReview}
           updateRow={updateRow}
           saveBatch={saveBatch}
           saving={saving}
+          categoryOptions={categoryOptions}
         />
       )}
     </div>
   );
 }
+
+/* ... (Phần còn lại của QuickEntryLPS.jsx giữ nguyên) ... */
 
 /* ... (Các component khác giữ nguyên) ... */
 
