@@ -80,7 +80,6 @@ function scoreByProductivityLeanlineQuick(oe, allRules, section, line) {
   return 0;
 }
 
-
 // Map để xác định line cho Leanline (DC vs MOLDED)
 const LEANLINE_MACHINES = {
     "LEANLINE_MOLDED": ["M1", "M2", "M3", "M4", "M5"],
@@ -153,7 +152,7 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
 }
 
 /* ======================================================================
-   APPROVER MODE — LEANLINE (Sửa lỗi TDZ)
+   APPROVER MODE — LEANLINE (FIXED TDZ ISSUE)
    ====================================================================== */
 function ApproverModeLeanline({ section }) {
     
@@ -162,7 +161,7 @@ function ApproverModeLeanline({ section }) {
   const [prodRules, setProdRules] = useState([]); 
   const [approverId, setApproverId] = useState("");
   const [workers, setWorkers] = useState([]);
-  const [checked, setChecked] = useState(new Set());
+  const [checked, setChecked] = new Set(); // Reset checked set
   const [search, setSearch] = useState("");
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
@@ -194,15 +193,16 @@ function ApproverModeLeanline({ section }) {
     );
   }, [workers, search]);
   
-  // TÍNH TOÁN PREVIEW ĐIỂM (MOVED TO HELPER FUNCTION)
-  const calculatePreviewScores = (oe, defects, rules, sec, line) => {
+  // Hàm tính điểm (Helper nội bộ, không dùng useMemo để tránh TDZ)
+  const calculateScores = (oe, defects, rules, sec, line) => {
     const q = scoreByQuality(defects);
     const p = scoreByProductivityLeanlineQuick(oe, rules, sec, line);
     const total = q + p;
-    return { qScore: q, pScore: p, kpi: Math.min(15, total) };
+    return { qScore: q, pScore: p, kpi: Math.min(15, total), rawTotal: total };
   };
 
-  const previewScores = useMemo(() => calculatePreviewScores(tplOE, tplDefects, prodRules, section, tplLine), [tplOE, tplDefects, prodRules, section, tplLine]);
+  // Tính toán điểm Preview (Sử dụng hàm Helper)
+  const previewScores = useMemo(() => calculateScores(tplOE, tplDefects, prodRules, section, tplLine), [tplOE, tplDefects, prodRules, section, tplLine]);
   const tplQ = previewScores.qScore;
   const tplP = previewScores.pScore;
   const tplKPI = previewScores.kpi;
@@ -277,7 +277,7 @@ function ApproverModeLeanline({ section }) {
 
     const selectedWorkers = workers.filter((w) => checked.has(w.msnv));
     const rows = selectedWorkers.map((w) => {
-      const scores = calculatePreviewScores(tplOE, tplDefects, prodRules, section, tplLine);
+      const scores = calculateScores(tplOE, tplDefects, prodRules, section, tplLine);
 
       return {
       section,
@@ -314,7 +314,7 @@ function ApproverModeLeanline({ section }) {
           : { ...r0, [key]: toNum(val, 0) };
 
       // tính lại điểm theo Leanline
-      const scores = calculatePreviewScores(r.oe, r.defects, prodRules, section, r.line);
+      const scores = calculateScores(r.oe, r.defects, prodRules, section, r.line);
 
       arr[i] = { ...r, q_score: scores.qScore, p_score: scores.pScore, total_score: scores.kpi };
       return arr;
@@ -353,7 +353,8 @@ function ApproverModeLeanline({ section }) {
     const now = new Date().toISOString();
 
     const payload = list.map((r) => {
-      const overflow = Math.max(0, (r.q_score + r.p_score) - 15);
+      const rawScores = calculateScores(r.oe, r.defects, prodRules, section, r.line);
+      const overflow = Math.max(0, rawScores.rawTotal - 15);
       return {
         date: r.work_date,
         ca: r.shift,
@@ -589,7 +590,6 @@ function ApproverModeLeanline({ section }) {
   );
 }
 
-/* ... (Các component khác giữ nguyên) ... */
 
 /* ==== Bảng Review (LEANLINE) — CHO PHÉP CHỈNH (Đã cập nhật Line) ==== */
 function EditReviewLeanline({
