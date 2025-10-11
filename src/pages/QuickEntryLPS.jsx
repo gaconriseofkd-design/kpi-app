@@ -64,6 +64,7 @@ function deriveDayScoresHybrid({ section, defects, category, output, workHours, 
   const workingReal = calcWorkingReal(shift, workHours);
   const exactHours = Math.max(0, workingReal - Number(stopHours || 0));
   
+  // Tỷ lệ NS (Prod Rate) = Output / Giờ Chính xác
   const prodRate = exactHours > 0 ? Number(output || 0) / exactHours : 0;
   
   const p = scoreByProductivityHybrid(prodRate, category, prodRules);
@@ -115,7 +116,6 @@ export default function ApproverModeHybrid({ section }) {
   const [tplWorkHours, setTplWorkHours] = useState(8);
   const [tplStopHours, setTplStopHours] = useState(0);
   const [tplOutput, setTplOutput] = useState(100); 
-  const [tplCategory, setTplCategory] = useState(""); 
   const [tplDefects, setTplDefects] = useState(0);
   const [tplCompliance, setTplCompliance] = useState("NONE");
   
@@ -128,6 +128,10 @@ export default function ApproverModeHybrid({ section }) {
     return MACHINE_MAP[section] || [];
   }, [section]);
   const [tplLine, setTplLine] = useState(currentMachines[0] || ""); 
+  
+  // FIX: Logic tự động chọn Category
+  const defaultCategory = section === 'LAMINATION' ? 'Lượt dán/giờ' : '';
+  const [tplCategory, setTplCategory] = useState(defaultCategory); // SỬ DỤNG DEFAULT CATEGORY
 
   // --- Khai báo Memoized Values ---
   const filteredWorkers = useMemo(() => {
@@ -159,15 +163,23 @@ export default function ApproverModeHybrid({ section }) {
   const tplP = scores.p_score;
   const tplExactHours = Math.max(0, scores.workingReal - toNum(tplStopHours));
 
-  const totalPages = Math.max(1, Math.ceil(reviewRows.length / pageSize)); // FIX: CALCULATE TOTAL PAGES
+  const totalPages = Math.max(1, Math.ceil(reviewRows.length / pageSize));
 
   const pageRows = useMemo(
     () => reviewRows.slice((page - 1) * pageSize, page * pageSize),
     [reviewRows, page]
   );
 
+  // --- Effects ---
+  // Rerender category khi đổi section (chỉ cho Prefitting, Bào, Tách)
+  useEffect(() => {
+    if (section === 'LAMINATION') {
+        setTplCategory('Lượt dán/giờ');
+    } else {
+        setTplCategory('');
+    }
+  }, [section]);
 
-  // THÊM useEffect để Tải Rule điểm sản lượng cho Hybrid Sections (ĐÃ SỬA CHUẨN HÓA)
   useEffect(() => {
     let cancelled = false;
     const dbSection = section.toUpperCase(); // CHUẨN HÓA SANG IN HOA
@@ -451,12 +463,12 @@ export default function ApproverModeHybrid({ section }) {
               <input type="number" className="input" value={tplStopHours} onChange={(e) => setTplStopHours(e.target.value)} />
             </div>
             <div>
-              <label>Sản lượng (Output)</label>
+              <label>Sản lượng/ca (Lượt dán Output)</label>
               <input type="number" className="input" value={tplOutput} onChange={(e) => setTplOutput(e.target.value)} />
             </div>
             <div>
               <label>Loại năng suất (Category)</label>
-              <select className="input" value={tplCategory} onChange={e => setTplCategory(e.target.value)}>
+              <select className="input" value={tplCategory} onChange={e => setTplCategory(e.target.value)} disabled={section === 'LAMINATION'}> {/* DISABLE NẾU LAMINATION */}
                 <option value="">-- Chọn loại --</option>
                 {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
