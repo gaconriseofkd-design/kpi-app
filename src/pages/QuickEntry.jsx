@@ -350,7 +350,12 @@ function ApproverModeLeanline({ section }) {
     if (!idxs.length) return alert("Chưa chọn dòng để lưu.");
 
     setSaving(true);
-    const list = idxs.map((r) => {
+    const list = idxs.map((i) => reviewRows[i]);
+
+    const now = new Date().toISOString();
+
+    // FIX: Tái tạo PAYLOAD từ danh sách đã chọn (list)
+    const payload = list.map((r) => { 
       const overflow = Math.max(0, (r.q_score + r.p_score) - 15);
       return {
         date: r.work_date,
@@ -371,10 +376,11 @@ function ApproverModeLeanline({ section }) {
         compliance_code: r.compliance,
         section: r.section,
         status: "approved",
-        approved_at: new Date().toISOString(),
+        approved_at: now,
+        // Lưu ý: Các trường output/category/working_real/violations KHÔNG được thêm vào đây
+        // vì đây là bảng kpi_entries (Leanline)
       };
-    });
-
+    }); // <-- Payload đã được định nghĩa tại đây
 
     const { error } = await supabase
     .from("kpi_entries") // LUÔN LƯU VÀO kpi_entries CHO LEANLINE
