@@ -75,7 +75,7 @@ function deriveDayScoresHybrid({ section, defects, category, output, workHours, 
     day_score: Math.min(15, total),
     prodRate: prodRate,
     workingReal: workingReal,
-    rawTotal: total, // Thêm tổng thô cho tính toán overflow sau này
+    rawTotal: total, // Thêm tổng thô cho tính toán overflow
   };
 }
 
@@ -158,6 +158,13 @@ export default function ApproverModeHybrid({ section }) {
   const tplQ = scores.q_score;
   const tplP = scores.p_score;
   const tplExactHours = Math.max(0, scores.workingReal - toNum(tplStopHours));
+
+  const totalPages = Math.max(1, Math.ceil(reviewRows.length / pageSize)); // FIX: CALCULATE TOTAL PAGES
+
+  const pageRows = useMemo(
+    () => reviewRows.slice((page - 1) * pageSize, page * pageSize),
+    [reviewRows, page]
+  );
 
 
   // THÊM useEffect để Tải Rule điểm sản lượng cho Hybrid Sections (ĐÃ SỬA CHUẨN HÓA)
@@ -444,7 +451,7 @@ export default function ApproverModeHybrid({ section }) {
               <input type="number" className="input" value={tplStopHours} onChange={(e) => setTplStopHours(e.target.value)} />
             </div>
             <div>
-              <label>%OE</label>
+              <label>Sản lượng (Output)</label>
               <input type="number" className="input" value={tplOutput} onChange={(e) => setTplOutput(e.target.value)} />
             </div>
             <div>
@@ -493,7 +500,6 @@ export default function ApproverModeHybrid({ section }) {
           selReview={selReview}
           setSelReview={setSelReview}
           toggleAllReviewOnPage={toggleAllReviewOnPage}
-          toggleOneReview={toggleOneReview}
           updateRow={updateRow}
           saveBatch={saveBatch}
           saving={saving}
@@ -503,12 +509,6 @@ export default function ApproverModeHybrid({ section }) {
     </div>
   );
 }
-
-/* ... (Phần còn lại của QuickEntryLPS.jsx giữ nguyên) ... */
-
-/* ... (Các component khác giữ nguyên) ... */
-
-
 
 /* ==== Bảng Review (HYBRID) — CHO PHÉP CHỈNH ==== */
 function EditReviewHybrid({
