@@ -55,7 +55,7 @@ const getMoldedCategoryFromLine = (line) => {
     return ''; 
 };
 
-// FIX: Hàm tính điểm Sản lượng Leanline (Dùng Rule DB dựa trên Line)
+// Hàm tính điểm Sản lượng Leanline (Dùng Rule DB dựa trên Line)
 function scoreByProductivityLeanlineQuick(oe, allRules, section, line) {
   const val = Number(oe ?? 0);
   let rules = [];
@@ -153,7 +153,7 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
 }
 
 /* ======================================================================
-   APPROVER MODE — LEANLINE (Sắp xếp lại cho an toàn TDZ)
+   APPROVER MODE — LEANLINE (Sửa lỗi TDZ)
    ====================================================================== */
 function ApproverModeLeanline({ section }) {
     
@@ -167,23 +167,23 @@ function ApproverModeLeanline({ section }) {
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
   
-  // Biến Template (Phải khai báo State trước khi dùng trong useMemo)
+  // Biến Template (Khai báo sớm nhất)
   const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [tplShift, setTplShift] = useState("Ca 1");
   const [tplWorkHours, setTplWorkHours] = useState(8);
   const [tplStopHours, setTplStopHours] = useState(0);
-  const [tplOE, setTplOE] = useState(100); // FIX: TPLOE đã được khai báo
+  const [tplOE, setTplOE] = useState(100); 
   const [tplDefects, setTplDefects] = useState(0);
   const [tplCompliance, setTplCompliance] = useState("NONE");
+  
+  const currentMachines = useMemo(() => getLeanlineMachines(section), [section]);
+  const [tplLine, setTplLine] = useState(currentMachines[0] || "LEAN-D1"); 
 
   const [saving, setSaving] = useState(false);
   const pageSize = 50;
   const [page, setPage] = useState(1);
   
   // --- Khai báo Memoized Values ---
-  const currentMachines = useMemo(() => getLeanlineMachines(section), [section]);
-  const [tplLine, setTplLine] = useState(currentMachines[0] || "LEAN-D1"); // TPL LINE PHỤ THUỘC CURRENT MACHINES
-
   const filteredWorkers = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return workers;
@@ -193,10 +193,19 @@ function ApproverModeLeanline({ section }) {
         String(w.full_name || "").toLowerCase().includes(q)
     );
   }, [workers, search]);
+  
+  // TÍNH TOÁN PREVIEW ĐIỂM (MOVED TO HELPER FUNCTION)
+  const calculatePreviewScores = (oe, defects, rules, sec, line) => {
+    const q = scoreByQuality(defects);
+    const p = scoreByProductivityLeanlineQuick(oe, rules, sec, line);
+    const total = q + p;
+    return { qScore: q, pScore: p, kpi: Math.min(15, total) };
+  };
 
-  const tplQ = useMemo(() => scoreByQuality(tplDefects), [tplDefects]);
-  const tplP = useMemo(() => scoreByProductivityLeanlineQuick(tplOE, prodRules, section, tplLine), [tplOE, prodRules, section, tplLine]);
-  const tplKPI = useMemo(() => Math.min(15, tplQ + tplP), [tplQ, tplP]);
+  const previewScores = useMemo(() => calculatePreviewScores(tplOE, tplDefects, prodRules, section, tplLine), [tplOE, tplDefects, prodRules, section, tplLine]);
+  const tplQ = previewScores.qScore;
+  const tplP = previewScores.pScore;
+  const tplKPI = previewScores.kpi;
   
   const totalPages = Math.max(1, Math.ceil(reviewRows.length / pageSize));
   const pageRows = useMemo(
@@ -268,9 +277,7 @@ function ApproverModeLeanline({ section }) {
 
     const selectedWorkers = workers.filter((w) => checked.has(w.msnv));
     const rows = selectedWorkers.map((w) => {
-      const q = scoreByQuality(tplDefects);
-      const p = scoreByProductivityLeanlineQuick(tplOE, prodRules, section, tplLine);
-      const totalScore = q + p;
+      const scores = calculatePreviewScores(tplOE, tplDefects, prodRules, section, tplLine);
 
       return {
       section,
@@ -285,9 +292,9 @@ function ApproverModeLeanline({ section }) {
       downtime: toNum(tplStopHours),
       oe: toNum(tplOE),
       defects: toNum(tplDefects),
-      q_score: q,
-      p_score: p,
-      total_score: Math.min(15, totalScore),
+      q_score: scores.qScore,
+      p_score: scores.pScore,
+      total_score: scores.kpi,
       compliance: tplCompliance,
       status: "approved",
     }});
@@ -307,11 +314,9 @@ function ApproverModeLeanline({ section }) {
           : { ...r0, [key]: toNum(val, 0) };
 
       // tính lại điểm theo Leanline
-      const q = scoreByQuality(r.defects);
-      const p = scoreByProductivityLeanlineQuick(r.oe, prodRules, section, r.line);
-      const rawScore = q + p;
+      const scores = calculatePreviewScores(r.oe, r.defects, prodRules, section, r.line);
 
-      arr[i] = { ...r, q_score: q, p_score: p, total_score: Math.min(15, rawScore) };
+      arr[i] = { ...r, q_score: scores.qScore, p_score: scores.pScore, total_score: scores.kpi };
       return arr;
     });
   }
@@ -583,9 +588,6 @@ function ApproverModeLeanline({ section }) {
     </div>
   );
 }
-
-/* ... (Các component khác giữ nguyên) ... */
-
 
 /* ==== Bảng Review (LEANLINE) — CHO PHÉP CHỈNH (Đã cập nhật Line) ==== */
 function EditReviewLeanline({
