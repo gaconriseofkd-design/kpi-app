@@ -90,17 +90,12 @@ const LEANLINE_MACHINES = {
 const getLeanlineMachines = (section) => LEANLINE_MACHINES[section] || LEANLINE_MACHINES.DEFAULT;
 
 
-/* ===== Main (Đã lược bỏ SelfMode và Logic Login) ===== */
+/* ===== Main ===== */
 export default function QuickEntry() {
   const { section } = useKpiSection();
   const isMolding = section === "MOLDING";
   const isHybrid = isHybridSection(section);
   // const isLeanline = String(section || "").toUpperCase().startsWith("LEANLINE"); // Unused
-
-  // Chỉ cần mode Approver cho trang QuickEntry
-  // const [authed, setAuthed] = useState(() => sessionStorage.getItem("quick_authed") === "1"); // Đã chuyển logic login xuống dưới
-  // const [pwd, setPwd] = useState(""); // Đã chuyển logic login xuống dưới
-  const [mode, setMode] = useState("approver"); // Chỉ dùng Approver Mode
 
   // Bắt đầu với form login (vì logic ApproverModeMolding nằm bên ngoài)
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("quick_authed") === "1");
@@ -124,7 +119,6 @@ export default function QuickEntry() {
       <div className="flex items-center gap-3">
         <h2 className="text-xl font-semibold">Nhập KPI nhanh ({section})</h2>
         {/* Lược bỏ nút chuyển mode nếu không cần Self Mode */}
-        {/* Lược bỏ Mode State nếu chỉ có 1 mode */}
       </div>
 
       {isMolding ? (
@@ -159,14 +153,55 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
 }
 
 /* ======================================================================
-   APPROVER MODE — LEANLINE
+   APPROVER MODE — LEANLINE (Sắp xếp lại cho an toàn TDZ)
    ====================================================================== */
 function ApproverModeLeanline({ section }) {
+    
+  // --- Khai báo States/Constants ở đầu hàm ---
   const [step, setStep] = useState(1);
-
   const [prodRules, setProdRules] = useState([]); 
+  const [approverId, setApproverId] = useState("");
+  const [workers, setWorkers] = useState([]);
+  const [checked, setChecked] = useState(new Set());
+  const [search, setSearch] = useState("");
+  const [reviewRows, setReviewRows] = useState([]);
+  const [selReview, setSelReview] = useState(() => new Set());
+  const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [tplShift, setTplShift] = useState("Ca 1");
+  const [tplWorkHours, setTplWorkHours] = useState(8);
+  const [tplStopHours, setTplStopHours] = useState(0);
+  const [tplOE, setTplOE] = useState(100);
+  const [tplDefects, setTplDefects] = useState(0);
+  const [tplCompliance, setTplCompliance] = useState("NONE");
+  const [saving, setSaving] = useState(false);
+  const pageSize = 50;
+  const [page, setPage] = useState(1);
+  
+  // --- Khai báo Memoized Values ---
   const currentMachines = useMemo(() => getLeanlineMachines(section), [section]);
+  const [tplLine, setTplLine] = useState(currentMachines[0] || "LEAN-D1"); // TPL LINE PHỤ THUỘC CURRENT MACHINES
 
+  const filteredWorkers = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return workers;
+    return workers.filter(
+      (w) =>
+        String(w.msnv).toLowerCase().includes(q) ||
+        String(w.full_name || "").toLowerCase().includes(q)
+    );
+  }, [workers, search]);
+
+  const tplQ = useMemo(() => scoreByQuality(tplDefects), [tplDefects]);
+  const tplP = useMemo(() => scoreByProductivityLeanlineQuick(tplOE, prodRules, section, tplLine), [tplOE, prodRules, section, tplLine]);
+  const tplKPI = useMemo(() => Math.min(15, tplQ + tplP), [tplQ, tplP]);
+  
+  const totalPages = Math.max(1, Math.ceil(reviewRows.length / pageSize));
+  const pageRows = useMemo(
+    () => reviewRows.slice((page - 1) * pageSize, page * pageSize),
+    [reviewRows, page]
+  );
+  
+  // --- Effects ---
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -186,22 +221,9 @@ function ApproverModeLeanline({ section }) {
     };
   }, [section]);
   
-  // ---- B1: Chọn nhân viên theo Người duyệt ----
-  const [approverId, setApproverId] = useState("");
-  const [workers, setWorkers] = useState([]);
-  const [checked, setChecked] = useState(new Set());
-  const [search, setSearch] = useState("");
+  useEffect(() => setPage(1), [reviewRows.length]);
 
-  const filteredWorkers = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return workers;
-    return workers.filter(
-      (w) =>
-        String(w.msnv).toLowerCase().includes(q) ||
-        String(w.full_name || "").toLowerCase().includes(q)
-    );
-  }, [workers, search]);
-
+  // --- Functions ---
   async function loadWorkers() {
     const id = approverId.trim();
     if (!id) return alert("Nhập MSNV người duyệt trước.");
@@ -230,31 +252,12 @@ function ApproverModeLeanline({ section }) {
     );
   }
 
-  // ---- B2: Template KPI CHUNG ----
-  const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
-  const [tplShift, setTplShift] = useState("Ca 1");
-  const [tplLine, setTplLine] = useState(currentMachines[0] || "LEAN-D1"); 
-  const [tplWorkHours, setTplWorkHours] = useState(8);
-  const [tplStopHours, setTplStopHours] = useState(0);
-  const [tplOE, setTplOE] = useState(100);
-  const [tplDefects, setTplDefects] = useState(0);
-  const [tplCompliance, setTplCompliance] = useState("NONE");
-
-  // điểm preview cho template
-  const tplQ = useMemo(() => scoreByQuality(tplDefects), [tplDefects]);
-  const tplP = useMemo(() => scoreByProductivityLeanlineQuick(tplOE, prodRules, section, tplLine), [tplOE, prodRules, section, tplLine]);
-  const tplKPI = useMemo(() => Math.min(15, tplQ + tplP), [tplQ, tplP]);
-
   function proceedToTemplate() {
     const requiredRulesLoaded = section === "LEANLINE_MOLDED" || prodRules.length > 0;
     if (!requiredRulesLoaded) return alert("Không thể tải Rule tính điểm sản lượng. Vui lòng thử lại.");
     if (!checked.size) return alert("Chưa chọn nhân viên nào.");
     setStep(2);
   }
-
-  // ---- B3: Build Review Rows từ Template + cho phép CHỈNH ----
-  const [reviewRows, setReviewRows] = useState([]);
-  const [selReview, setSelReview] = useState(() => new Set());
 
   function buildReviewRows() {
     if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
@@ -291,7 +294,6 @@ function ApproverModeLeanline({ section }) {
     setStep(3);
   }
 
-  // chỉnh 1 dòng → tự tính lại điểm
   function updateRow(i, key, val) {
     setReviewRows((old) => {
       const arr = old.slice();
@@ -310,16 +312,6 @@ function ApproverModeLeanline({ section }) {
       return arr;
     });
   }
-
-  // paging review
-  const pageSize = 50;
-  const [page, setPage] = useState(1);
-  useEffect(() => setPage(1), [reviewRows.length]);
-  const totalPages = Math.max(1, Math.ceil(reviewRows.length / pageSize));
-  const pageRows = useMemo(
-    () => reviewRows.slice((page - 1) * pageSize, page * pageSize),
-    [reviewRows, page]
-  );
 
   function toggleAllReviewOnPage() {
     setSelReview((prev) => {
@@ -343,8 +335,6 @@ function ApproverModeLeanline({ section }) {
     });
   }
 
-  // Lưu các dòng đã chọn → kpi_entries
-  const [saving, setSaving] = useState(false);
   async function saveBatch() {
     const idxs = Array.from(selReview).sort((a, b) => a - b);
     if (!idxs.length) return alert("Chưa chọn dòng để lưu.");
@@ -354,8 +344,7 @@ function ApproverModeLeanline({ section }) {
 
     const now = new Date().toISOString();
 
-    // FIX: Tái tạo PAYLOAD từ danh sách đã chọn (list)
-    const payload = list.map((r) => { 
+    const payload = list.map((r) => {
       const overflow = Math.max(0, (r.q_score + r.p_score) - 15);
       return {
         date: r.work_date,
@@ -377,10 +366,8 @@ function ApproverModeLeanline({ section }) {
         section: r.section,
         status: "approved",
         approved_at: now,
-        // Lưu ý: Các trường output/category/working_real/violations KHÔNG được thêm vào đây
-        // vì đây là bảng kpi_entries (Leanline)
       };
-    }); // <-- Payload đã được định nghĩa tại đây
+    });
 
     const { error } = await supabase
     .from("kpi_entries") // LUÔN LƯU VÀO kpi_entries CHO LEANLINE
@@ -392,6 +379,7 @@ function ApproverModeLeanline({ section }) {
     alert(`Đã lưu ${payload.length} dòng (approved).`);
   }
 
+  // --- JSX Render ---
   return (
     <div className="space-y-4">
       {/* ==== STEP 1: Chọn NV theo người duyệt ==== */}
@@ -481,7 +469,7 @@ function ApproverModeLeanline({ section }) {
             <div>
               <label>Máy làm việc</label>
               <select className="input" value={tplLine} onChange={(e) => setTplLine(e.target.value)}>
-                {currentMachines.map(m => ( // DYNAMIC DROPDOWN
+                {currentMachines.map(m => ( 
                     <option key={m} value={m}>{m}</option>
                 ))}
               </select>
@@ -539,7 +527,7 @@ function ApproverModeLeanline({ section }) {
                   <th>Tuân thủ</th>
                 </tr>
               </thead>
-              <tbody className="text-center">
+              <tbody>
                 {Array.from(checked)
                   .map((id) => workers.find((w) => w.msnv === id))
                   .filter(Boolean)
@@ -593,6 +581,7 @@ function ApproverModeLeanline({ section }) {
     </div>
   );
 }
+
 
 /* ==== Bảng Review (LEANLINE) — CHO PHÉP CHỈNH (Đã cập nhật Line) ==== */
 function EditReviewLeanline({
