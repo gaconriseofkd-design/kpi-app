@@ -105,7 +105,7 @@ export default function ApproverModeHybrid({ section }) {
   const tableName = getTableName(section);
   const [search, setSearch] = useState("");
   const [workers, setWorkers] = useState([]);
-  const [checked, setChecked] = useState(new Set());
+  const [checked, setChecked] = useState(new Set()); // FIX: Phải khai báo là useState
   const [approverId, setApproverId] = useState("");
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());

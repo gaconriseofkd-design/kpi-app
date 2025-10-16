@@ -161,7 +161,7 @@ function ApproverModeLeanline({ section }) {
   const [prodRules, setProdRules] = useState([]); 
   const [approverId, setApproverId] = useState("");
   const [workers, setWorkers] = useState([]);
-  const [checked, setChecked] = new Set(); // Reset checked set
+  const [checked, setChecked] = useState(new Set()); // Reset checked set
   const [search, setSearch] = useState("");
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
