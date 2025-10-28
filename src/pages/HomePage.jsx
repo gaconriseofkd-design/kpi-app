@@ -1,3 +1,4 @@
+// src/pages/HomePage.jsx
 import { Link } from "react-router-dom";
 
 export default function HomePage() {
@@ -8,7 +9,11 @@ export default function HomePage() {
     { path: "/report", label: "Báo cáo KPI", desc: "Xem chi tiết KPI theo nhân viên" },
     { path: "/summary", label: "Tổng hợp KPI", desc: "Tổng hợp KPI theo ngày/tháng" },
     { path: "/admin", label: "Quản lý user", desc: "Quản lý danh sách nhân viên và phân quyền" },
-  ];
+    { path: "/rules", label: "Rules điểm Sản xuất (P)", desc: "Cấu hình điểm P-score (Admin)" },
+    
+    // THÊM DÒNG NÀY:
+    { path: "/view-rules-quality", label: "Xem Rule điểm Chất lượng (Q)", desc: "Tra cứu quy tắc tính điểm phế" },
+  ]; //
 
   return (
     <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -23,5 +28,5 @@ export default function HomePage() {
         </Link>
       ))}
     </div>
-  );
+  ); //
 }

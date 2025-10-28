@@ -1,20 +1,19 @@
 // src/App.jsx
-// src/App.jsx
 import { BrowserRouter, Routes, Route, Link, NavLink } from "react-router-dom";
 import { KpiSectionProvider, useKpiSection } from "./context/KpiSectionContext";
 import SectionGate from "./pages/SectionGate";
 
 
 import EntryPage from "./pages/EntryPage";
-import EntryPageMolding from "./pages/EntryPageMolding";   // <-- thêm dòng này
+import EntryPageMolding from "./pages/EntryPageMolding";
 import QuickEntry from "./pages/QuickEntry";
 import Pending from "./pages/Pending";
 import ApprovePage from "./pages/ApprovePage";
 import AdminPage from "./pages/AdminPage";
 import ReportPage from "./pages/ReportPage";
 import RulesPage from "./pages/RulesPage";
-import HelpPage from "./pages/HelpPage"; // <-- Import trang mới
-
+import HelpPage from "./pages/HelpPage";
+import ViewRulesQuality from "./pages/ViewRulesQuality"; // <-- 1. IMPORT TRANG MỚI
 
 function Shell() {
   const { section, clearSection, SECTIONS } = useKpiSection();
@@ -35,7 +34,7 @@ function Shell() {
           APP KPI
         </NavLink>
 
-        {[
+        {[ // <-- 2. THÊM LINK VÀO NAV BAR
           { to: "/entry", label: "Nhập KPI" },
           { to: "/quick", label: "Nhập KPI nhanh" },
           { to: "/pending", label: "Xét duyệt KPI" },
@@ -43,7 +42,8 @@ function Shell() {
           { to: "/report", label: "Báo cáo" },
           { to: "/admin", label: "Quản lý User" },
           { to: "/rules", label: "Rules điểm SX" },
-          { to: "/help", label: "Hướng dẫn" }, // <-- Thêm link Hướng dẫn
+          { to: "/view-rules-quality", label: "Xem Rule (Q)" }, // <-- Dòng mới
+          { to: "/help", label: "Hướng dẫn" },
         ].map((item) => (
           <NavLink
             key={item.to}
@@ -71,7 +71,7 @@ function Shell() {
       </nav>
 
 
-      <Routes>
+      <Routes> {/* <-- 3. THÊM ROUTE MỚI */}
         <Route path="/" element={<EntryComponent />} />
         <Route path="/entry" element={<EntryComponent />} />
         <Route path="/quick" element={<QuickEntry />} />
@@ -80,7 +80,8 @@ function Shell() {
         <Route path="/report" element={<ReportPage />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/rules" element={<RulesPage />} />
-        <Route path="/help" element={<HelpPage />} /> {/* <-- Thêm Route */}
+        <Route path="/help" element={<HelpPage />} />
+        <Route path="/view-rules-quality" element={<ViewRulesQuality />} /> {/* <-- Dòng mới */}
       </Routes>
     </>
   );
