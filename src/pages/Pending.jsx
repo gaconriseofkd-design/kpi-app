@@ -44,18 +44,15 @@ export default function Pending() {
   // Phân trang
   const [page, setPage] = useState(1);
   const pageSize = 100;
-  const [totalCount, setTotalCount] = useState(0); // <-- THAY ĐỔI 1: State đếm tổng số dòng
+  const [totalCount, setTotalCount] = useState(0); 
 
-  // THAY ĐỔI 2: Reset về trang 1 khi bộ lọc thay đổi
   useEffect(() => { 
     setPage(1); 
     setSelected(new Set()); 
   }, [approverId, dateFrom, dateTo, section]);
 
-  // THAY ĐỔI 3: Tính totalPages dựa trên totalCount
   const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
   
-  // THAY ĐỔI 4: pageRows bây giờ chính là 'rows' (vì 'rows' đã được phân trang từ server)
   const pageRows = useMemo(() => rows, [rows]);
 
   const allOnPageSelected = useMemo(() => {
@@ -63,22 +60,20 @@ export default function Pending() {
     return pageRows.every(r => selected.has(r.id));
   }, [pageRows, selected]);
 
-  // ----------------------------------------------------------------
-  // THAY ĐỔI 5: Tải dữ liệu khi CÓ THAY ĐỔI Ở BỘ LỌC hoặc CHUYỂN TRANG
+  // Tải dữ liệu khi CÓ THAY ĐỔI Ở BỘ LỌC hoặc CHUYỂN TRANG
   useEffect(() => {
-    if (!auth) return; // Chưa đăng nhập
+    if (!auth) return; 
     
     const approver = approverId.trim();
-    if (!approver) { // Không có MSNV duyệt -> Xóa dữ liệu
+    if (!approver) { 
        setRows([]);
        setTotalCount(0);
        return;
     }
     
-    load(); // Gọi hàm load
+    load(); 
     
-  }, [page, approverId, dateFrom, dateTo, section, auth]); // Phụ thuộc vào các state này
-  // ----------------------------------------------------------------
+  }, [page, approverId, dateFrom, dateTo, section, auth]); 
 
 
   // Đăng nhập mật khẩu
@@ -106,13 +101,17 @@ export default function Pending() {
     );
   }
 
-  // THAY ĐỔI 6: Hàm load() được sửa để dùng .range() (phân trang server)
+  // SỬA ĐỔI LỚN: Hàm load() thêm logic "chìa khóa vạn năng"
   async function load() {
     const approver = approverId.trim();
-    if (!approver) return; // Đã check ở useEffect, nhưng vẫn giữ an toàn
+    if (!approver) return;
 
     const table = getTableName(section);
     const approverCol = isMolding ? "approver_msnv" : "approver_id";
+
+    // --- LOGIC CHÌA KHÓA VẠN NĂNG ---
+    const isMasterKey = isMolding && approver === "03892";
+    // ---------------------------------
 
     // Tính toán phân trang
     const from = (page - 1) * pageSize;
@@ -120,10 +119,17 @@ export default function Pending() {
 
     let query = supabase
       .from(table)
-      .select("*", { count: "exact" }) // Yêu cầu đếm tổng số (count)
-      .eq("status", "pending")
-      .eq(approverCol, approver);
+      .select("*", { count: "exact" }) // Yêu cầu đếm tổng số
+      .eq("status", "pending");
 
+    // --- LOGIC CHÌA KHÓA VẠN NĂNG ---
+    // Chỉ lọc theo người duyệt NẾU KHÔNG PHẢI là master key
+    if (!isMasterKey) {
+      query = query.eq(approverCol, approver);
+    }
+    // ---------------------------------
+
+    // Luôn lọc theo ngày
     if (dateFrom) query = query.gte("date", dateFrom);
     if (dateTo) query = query.lte("date", dateTo);
 
@@ -131,17 +137,19 @@ export default function Pending() {
     const { data, error, count } = await query
       .order("date", { ascending: false })
       .order("created_at", { ascending: false })
-      .range(from, to); // CHỈ LẤY ĐÚNG PHẠM VI TRANG
+      .range(from, to); // LUÔN PHÂN TRANG
     setLoading(false);
 
-    if (error) return alert("Lỗi tải dữ liệu: " + error.message);
+    if (error) {
+      console.error("Lỗi Supabase:", error);
+      return alert("Lỗi tải dữ liệu: " + error.message);
+    }
     
     setRows(data || []);
-    setTotalCount(count || 0); // Cập nhật tổng số dòng từ server
-    // Không reset 'selected' ở đây, vì hàm này chạy mỗi khi chuyển trang
+    setTotalCount(count || 0); 
   }
 
-  // Chọn dòng
+  // (Các hàm toggleRow, toggleSelectAllOnPage, approve không đổi)
   function toggleRow(id) {
     setSelected(prev => {
       const next = new Set(prev);
@@ -149,8 +157,6 @@ export default function Pending() {
       return next;
     });
   }
-
-  // Chọn tất cả trang
   function toggleSelectAllOnPage() {
     setSelected(prev => {
       const next = new Set(prev);
@@ -159,84 +165,71 @@ export default function Pending() {
       return next;
     });
   }
-
-  // ✅ Duyệt hoặc Từ chối 1 dòng
   async function approve(row, type) {
     const note = type === "reject"
       ? prompt("Lý do từ chối:", "")
       : prompt("Ghi chú (tuỳ chọn):", "");
     const status = type === "reject" ? "rejected" : "approved";
-    
     const table = getTableName(section);
     const isBaseLeanline = table === "kpi_entries";
-    
     let updatePayload = {
       status,
       approver_note: note || null,
       approved_at: new Date().toISOString(),
     };
-    
     if (!isBaseLeanline) {
         const violations = row?.compliance_code === "NONE" ? 0 : 1;
         updatePayload.violations = violations;
     }
-
-
     const { error } = await supabase
       .from(table)
       .update(updatePayload)
       .eq("id", row.id);
-
     if (error) return alert("Lỗi khi duyệt: " + error.message);
-    await load(); // Tải lại trang hiện tại
+    await load(); 
   }
-
-  // ✅ Duyệt các dòng được chọn
   async function approveSelected() {
     const ids = Array.from(selected);
     if (!ids.length) return alert("Chưa chọn đơn nào.");
     const note = prompt("Ghi chú chung (tuỳ chọn):", "") || null;
-    
     const table = getTableName(section);
     const isBaseLeanline = table === "kpi_entries";
-
     const idZero = rows.filter(r => selected.has(r.id) && r.compliance_code === "NONE").map(r => r.id);
     const idOne  = rows.filter(r => selected.has(r.id) && r.compliance_code !== "NONE").map(r => r.id);
-
     setLoading(true);
-    
     const baseUpdatePayload = { status: "approved", approver_note: note, approved_at: new Date().toISOString() };
-
     if (idZero.length) {
       let payload0 = { ...baseUpdatePayload };
       if (!isBaseLeanline) payload0.violations = 0;
-      
       const { error } = await supabase.from(table).update(payload0).in("id", idZero);
       if (error) { setLoading(false); return alert("Lỗi khi duyệt nhóm 0: " + error.message); }
     }
-    
     if (idOne.length) {
       let payload1 = { ...baseUpdatePayload };
       if (!isBaseLeanline) payload1.violations = 1;
-      
       const { error } = await supabase.from(table).update(payload1).in("id", idOne);
       if (error) { setLoading(false); return alert("Lỗi khi duyệt nhóm 1: " + error.message); }
     }
-    
     setLoading(false);
-    await load(); // Tải lại trang hiện tại
+    await load();
   }
+  // -----------------------------------------------------------------
 
-  // THAY ĐỔI 7: Sửa hàm "Duyệt tất cả" để tôn trọng bộ lọc ngày
+
+  // SỬA ĐỔI: Hàm "Duyệt tất cả" cũng tôn trọng logic master key
   async function approveAllFiltered() {
     const approver = approverId.trim();
     if (!approver) return alert("Nhập MSNV người duyệt trước.");
-    if (!confirm("Duyệt TẤT CẢ đơn đang chờ của người duyệt này (theo bộ lọc ngày)?")) return;
+    if (!confirm(`Duyệt TẤT CẢ ${totalCount} đơn đang chờ theo bộ lọc hiện tại?`)) return;
 
     const note = prompt("Ghi chú chung (tuỳ chọn):", "") || null;
     const table = getTableName(section);
     const approverCol = isMolding ? "approver_msnv" : "approver_id";
     const isBaseLeanline = table === "kpi_entries";
+
+    // --- LOGIC CHÌA KHÓA VẠN NĂNG ---
+    const isMasterKey = isMolding && approver === "03892";
+    // ---------------------------------
 
     const now = new Date().toISOString();
     setLoading(true);
@@ -250,9 +243,11 @@ export default function Pending() {
       
       let query0 = supabase.from(table)
         .update(payload0)
-        .eq("status", "pending").eq(approverCol, approver).eq("compliance_code", "NONE");
+        .eq("status", "pending").eq("compliance_code", "NONE");
       
-      // Thêm bộ lọc ngày
+      if (!isMasterKey) { // Chỉ lọc approver nếu KHÔNG PHẢI master key
+        query0 = query0.eq(approverCol, approver);
+      }
       if (dateFrom) query0 = query0.gte("date", dateFrom);
       if (dateTo) query0 = query0.lte("date", dateTo);
 
@@ -267,9 +262,11 @@ export default function Pending() {
       
       let query1 = supabase.from(table)
         .update(payload1)
-        .eq("status", "pending").eq(approverCol, approver).neq("compliance_code", "NONE");
+        .eq("status", "pending").neq("compliance_code", "NONE");
 
-      // Thêm bộ lọc ngày
+      if (!isMasterKey) { // Chỉ lọc approver nếu KHÔNG PHẢI master key
+        query1 = query1.eq(approverCol, approver);
+      }
       if (dateFrom) query1 = query1.gte("date", dateFrom);
       if (dateTo) query1 = query1.lte("date", dateTo);
 
@@ -278,7 +275,7 @@ export default function Pending() {
     }
 
     setLoading(false);
-    await load(); // Tải lại trang hiện tại (sẽ trống vì đã duyệt hết)
+    await load(); // Tải lại (trang sẽ trống)
   }
 
   return (
@@ -297,7 +294,6 @@ export default function Pending() {
         <input type="date" className="input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
         <label>Đến:</label>
         <input type="date" className="input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-        {/* Nút tải dữ liệu không cần thiết vì nó tự động tải */}
         <span className="text-sm text-gray-500">{loading ? "Đang tải..." : ""}</span>
 
         <div className="ml-auto flex gap-2">
@@ -362,7 +358,7 @@ export default function Pending() {
                 <td>{fmt(r.updated_at || r.created_at)}</td>
               </tr>
             ))}
-            {!pageRows.length && !loading && ( // Chỉ hiển thị khi không tải và không có dòng
+            {!pageRows.length && !loading && (
               <tr><td colSpan={14} className="text-center p-4 text-gray-500">Không có dữ liệu</td></tr>
             )}
           </tbody>
