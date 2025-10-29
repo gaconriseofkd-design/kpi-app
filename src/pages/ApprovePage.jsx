@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useKpiSection } from "../context/KpiSectionContext";
+// Không import XLSX nữa
 
 export default function ApprovePage() {
   const { section } = useKpiSection();
@@ -23,9 +24,21 @@ export default function ApprovePage() {
     const id = msnv.trim();
     if (!id) return alert("Vui lòng nhập MSNV để tra cứu.");
 
-    const table = isMolding ? "kpi_entries_molding" : "kpi_entries";
-    let query = supabase.from(table).select("*").eq("worker_id", id);
+    // KIỂM TRA ĐẶC BIỆT: Nếu là Molding và MSNV 03892
+    const isAdminViewer = isMolding && id === "03892";
 
+    const table = isMolding ? "kpi_entries_molding" : "kpi_entries";
+    
+    // Bắt đầu query
+    let query = supabase.from(table).select("*");
+
+    // CHỈ LỌC THEO worker_id NẾU KHÔNG PHẢI LÀ ADMIN VIEWER
+    // Nếu là admin viewer (03892), bỏ qua bộ lọc worker_id này
+    if (!isAdminViewer) {
+      query = query.eq("worker_id", id);
+    }
+
+    // Luôn áp dụng bộ lọc ngày
     if (dateFrom) query = query.gte("date", dateFrom);
     if (dateTo) query = query.lte("date", dateTo);
 
@@ -36,6 +49,8 @@ export default function ApprovePage() {
     if (error) return alert(error.message);
     setRows(data || []);
   }
+
+  // Không cần hàm exportXLSX() nữa
 
   return (
     <div className="p-4">
@@ -53,6 +68,8 @@ export default function ApprovePage() {
         <label>Đến:</label>
         <input type="date" className="input" value={dateTo} onChange={e => setDateTo(e.target.value)} />
         <button className="btn" onClick={load}>{loading ? "Đang tải..." : "Tải dữ liệu"}</button>
+        
+        {/* Đã xoá nút Xuất Excel */}
       </div>
 
       <div className="mb-3">
