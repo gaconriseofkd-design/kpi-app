@@ -25,12 +25,15 @@ export default function Pending() {
   const isMolding = section === "MOLDING";
   const isHybrid = isHybridSection(section);
 
-  // 🔐 Password
+  // 🔐 Password chung
   const [auth, setAuth] = useState(false);
   const [pw, setPw] = useState("");
 
+  // 🔑 State mới: Mật khẩu cho "Chìa khóa vạn năng" (03892)
+  const [masterKeyAuthed, setMasterKeyAuthed] = useState(false);
+
   // Lọc dữ liệu
-  const [approverId, setApproverId] = useState(""); // MSNV người duyệt
+  const [approverId, setApproverId] = useState(""); 
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
@@ -60,7 +63,10 @@ export default function Pending() {
     return pageRows.every(r => selected.has(r.id));
   }, [pageRows, selected]);
 
-  // Tải dữ liệu khi CÓ THAY ĐỔI Ở BỘ LỌC hoặc CHUYỂN TRANG
+
+  // ----------------------------------------------------------------
+  // SỬA ĐỔI: Thêm logic kiểm tra mật khẩu "master key"
+  // ----------------------------------------------------------------
   useEffect(() => {
     if (!auth) return; 
     
@@ -70,13 +76,38 @@ export default function Pending() {
        setTotalCount(0);
        return;
     }
+
+    // --- LOGIC MẬT KHẨU MỚI ---
+    const isMasterKeyAttempt = isMolding && approver === "03892";
     
-    load(); 
+    if (isMasterKeyAttempt && !masterKeyAuthed) {
+      // Nếu là 03892 (Molding) và CHƯA XÁC THỰC
+      const pass = prompt("Yêu cầu mật khẩu Chìa khoá vạn năng:");
+      if (pass === "xuancute") {
+        setMasterKeyAuthed(true); // Xác thực thành công, state thay đổi -> useEffect này sẽ chạy lại
+      } else {
+        alert("Sai mật khẩu!");
+        setApproverId(""); // Xóa MSNV
+      }
+      return; // Dừng lại, chờ state mới
+    }
+    // --- KẾT THÚC LOGIC MẬT KHẨU MỚI ---
+
+    // Nếu không phải 03892, hoặc là 03892 đã xác thực -> Tải dữ liệu
+    load(isMasterKeyAttempt); 
     
-  }, [page, approverId, dateFrom, dateTo, section, auth]); 
+  }, [page, approverId, dateFrom, dateTo, section, auth, masterKeyAuthed, isMolding]); 
+
+  // SỬA ĐỔI: Thêm useEffect để reset masterKeyAuthed khi đổi MSNV
+  useEffect(() => {
+    if (approverId.trim() !== "03892") {
+      setMasterKeyAuthed(false);
+    }
+  }, [approverId]);
+  // ----------------------------------------------------------------
 
 
-  // Đăng nhập mật khẩu
+  // Đăng nhập mật khẩu chung
   if (!auth) {
     return (
       <div className="p-6">
@@ -101,17 +132,13 @@ export default function Pending() {
     );
   }
 
-  // SỬA ĐỔI LỚN: Hàm load() thêm logic "chìa khóa vạn năng"
-  async function load() {
+  // SỬA ĐỔI: Hàm load() nhận tham số isMasterKey
+  async function load(isMasterKey) {
     const approver = approverId.trim();
     if (!approver) return;
 
     const table = getTableName(section);
     const approverCol = isMolding ? "approver_msnv" : "approver_id";
-
-    // --- LOGIC CHÌA KHÓA VẠN NĂNG ---
-    const isMasterKey = isMolding && approver === "03892";
-    // ---------------------------------
 
     // Tính toán phân trang
     const from = (page - 1) * pageSize;
@@ -119,15 +146,14 @@ export default function Pending() {
 
     let query = supabase
       .from(table)
-      .select("*", { count: "exact" }) // Yêu cầu đếm tổng số
+      .select("*", { count: "exact" }) 
       .eq("status", "pending");
 
-    // --- LOGIC CHÌA KHÓA VẠN NĂNG ---
     // Chỉ lọc theo người duyệt NẾU KHÔNG PHẢI là master key
     if (!isMasterKey) {
       query = query.eq(approverCol, approver);
     }
-    // ---------------------------------
+    // (Nếu là master key, bỏ qua bộ lọc .eq(approverCol))
 
     // Luôn lọc theo ngày
     if (dateFrom) query = query.gte("date", dateFrom);
@@ -137,7 +163,7 @@ export default function Pending() {
     const { data, error, count } = await query
       .order("date", { ascending: false })
       .order("created_at", { ascending: false })
-      .range(from, to); // LUÔN PHÂN TRANG
+      .range(from, to); 
     setLoading(false);
 
     if (error) {
@@ -186,7 +212,10 @@ export default function Pending() {
       .update(updatePayload)
       .eq("id", row.id);
     if (error) return alert("Lỗi khi duyệt: " + error.message);
-    await load(); 
+    
+    // Tải lại, kiểm tra xem có phải master key không
+    const isMasterKey = isMolding && approverId.trim() === "03892" && masterKeyAuthed;
+    await load(isMasterKey); 
   }
   async function approveSelected() {
     const ids = Array.from(selected);
@@ -211,7 +240,10 @@ export default function Pending() {
       if (error) { setLoading(false); return alert("Lỗi khi duyệt nhóm 1: " + error.message); }
     }
     setLoading(false);
-    await load();
+    
+    // Tải lại, kiểm tra xem có phải master key không
+    const isMasterKey = isMolding && approverId.trim() === "03892" && masterKeyAuthed;
+    await load(isMasterKey);
   }
   // -----------------------------------------------------------------
 
@@ -227,8 +259,8 @@ export default function Pending() {
     const approverCol = isMolding ? "approver_msnv" : "approver_id";
     const isBaseLeanline = table === "kpi_entries";
 
-    // --- LOGIC CHÌA KHÓA VẠN NĂNG ---
-    const isMasterKey = isMolding && approver === "03892";
+    // --- LOGIC CHÌA KHÓA VẠN NĂNG (kiểm tra cả state đã xác thực) ---
+    const isMasterKey = isMolding && approver === "03892" && masterKeyAuthed;
     // ---------------------------------
 
     const now = new Date().toISOString();
@@ -275,7 +307,7 @@ export default function Pending() {
     }
 
     setLoading(false);
-    await load(); // Tải lại (trang sẽ trống)
+    await load(isMasterKey); // Tải lại (trang sẽ trống)
   }
 
   return (
@@ -295,6 +327,13 @@ export default function Pending() {
         <label>Đến:</label>
         <input type="date" className="input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
         <span className="text-sm text-gray-500">{loading ? "Đang tải..." : ""}</span>
+        
+        {/* Hiển thị trạng thái master key */}
+        {masterKeyAuthed && (
+            <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded">
+                🔑 Đã xác thực Master Key
+            </span>
+        )}
 
         <div className="ml-auto flex gap-2">
           <button onClick={approveSelected} className="btn btn-primary" disabled={!selected.size || loading}>
