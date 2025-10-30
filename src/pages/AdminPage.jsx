@@ -4,9 +4,10 @@ import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabaseClient";
 
 const ALLOWED_ROLES = ["worker", "approver", "admin"];
+// 1. Dòng trống mặc định (giữ nguyên)
 const emptyRow = { msnv: "", full_name: "", role: "worker", approver_msnv: "", approver_name: "" };
 
-/* Helpers: map tiêu đề Excel → field DB */
+/* Helpers: map tiêu đề Excel → field DB (Giữ nguyên) */
 function normalizeHeader(s = "") {
   return s
     .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
@@ -32,7 +33,7 @@ function mapHeaderToField(h) {
   return null;
 }
 
-/* ───────── Gate đăng nhập ───────── */
+/* ───────── Gate đăng nhập (Giữ nguyên) ───────── */
 export default function AdminPage() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("admin_authed") === "1");
   const [pwd, setPwd] = useState("");
@@ -75,9 +76,9 @@ function AdminMain() {
   const [loading, setLoading] = useState(false);
 
   // tìm kiếm
-  const [qWorker, setQWorker] = useState("");       // tìm theo msnv
-  const [qApprover, setQApprover] = useState("");   // tìm theo approver_msnv
-  useEffect(() => { setPage(1); }, [qWorker, qApprover]); // đổi filter → về trang 1
+  const [qWorker, setQWorker] = useState("");       
+  const [qApprover, setQApprover] = useState("");   
+  useEffect(() => { setPage(1); }, [qWorker, qApprover]);
 
   // phân trang
   const [page, setPage] = useState(1);
@@ -85,7 +86,7 @@ function AdminMain() {
 
   // sắp xếp
   const [sortKey, setSortKey] = useState("msnv");
-  const [sortDir, setSortDir] = useState("asc"); // asc|desc
+  const [sortDir, setSortDir] = useState("asc"); 
   function handleSort(key) {
     if (sortKey === key) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortKey(key); setSortDir("asc"); }
@@ -94,6 +95,29 @@ function AdminMain() {
   // Import Excel
   const fileRef = useRef(null);
   function triggerImport() { fileRef.current?.click(); }
+
+  // ----------------------------------------------------------------
+  // 2. HÀM MỚI: Thêm dòng nhân viên
+  // ----------------------------------------------------------------
+  function addNewRow() {
+    // Thêm một dòng trống mới vào đầu danh sách 'rows'
+    setRows(prev => [
+      { ...emptyRow }, // Tạo một object emptyRow mới
+      ...prev
+    ]);
+    
+    // Xóa bộ lọc
+    setQWorker("");
+    setQApprover("");
+    
+    // Reset sắp xếp để đảm bảo dòng mới ở trên cùng
+    setSortKey("msnv");
+    setSortDir("asc"); 
+    
+    // Chuyển về trang 1
+    setPage(1);
+  }
+  // ----------------------------------------------------------------
 
   async function loadUsers() {
     setLoading(true);
@@ -148,7 +172,6 @@ function AdminMain() {
       }
       if (!parsed.length) throw new Error("Không có dòng hợp lệ để nhập.");
 
-      // Dedupe theo MSNV (giữ bản cuối)
       const dedup = Array.from(new Map(parsed.map(u => [u.msnv, u])).values());
 
       await upsertInChunks(dedup);
@@ -171,7 +194,7 @@ function AdminMain() {
         approver_msnv: (r.approver_msnv || "").trim(),
         approver_name: (r.approver_name || "").trim(),
       }))
-      .filter(r => r.msnv);
+      .filter(r => r.msnv); // Lọc ra những dòng có MSNV (dòng mới phải nhập MSNV)
 
     if (!toUpsert.length) return alert("Chưa có dòng nào có MSNV để lưu.");
 
@@ -206,18 +229,30 @@ function AdminMain() {
   }
 
   function removeRow(idxOnPage) {
-    const idx = (page - 1) * pageSize + idxOnPage;
-    const r = rows[idx];
+    // SỬA LỖI: Cần tính đúng global index từ `sortedRows` thay vì `rows`
+    const globalIndexInSorted = (page - 1) * pageSize + idxOnPage;
+    const msnvToRemove = sortedRows[globalIndexInSorted]?.msnv;
+    
     (async () => {
-      if (r?.msnv) {
-        const { error } = await supabase.from("users").delete().eq("msnv", r.msnv);
+      // Nếu dòng này đã có trong DB (có msnv), xóa nó khỏi DB
+      if (msnvToRemove) {
+        const { error } = await supabase.from("users").delete().eq("msnv", msnvToRemove);
         if (error) return alert("Xoá lỗi: " + error.message);
       }
-      setRows(prev => prev.filter((_, i) => i !== idx));
+      
+      // Xóa dòng khỏi state `rows` (dù là mới hay cũ)
+      // Tìm index thực sự trong `rows` state dựa trên msnv (nếu có)
+      // Hoặc nếu là dòng mới (msnv=""), ta cần cách khác.
+      
+      // Cách đơn giản nhất: Tải lại danh sách
+      await loadUsers(); 
+      // Hoặc xóa khỏi state:
+      // setRows(prev => prev.filter(r => r.msnv !== msnvToRemove));
+      // (Chọn loadUsers() để đảm bảo đồng bộ)
     })();
   }
 
-  /* Lọc → Sắp xếp → Phân trang */
+  /* Lọc → Sắp xếp → Phân trang (Giữ nguyên) */
   const filteredRows = useMemo(() => {
     const w = qWorker.trim().toLowerCase();
     const a = qApprover.trim().toLowerCase();
@@ -280,7 +315,17 @@ function AdminMain() {
           />
         </div>
 
+        {/* ---------------------------------------------------------------- */}
+        {/* 3. NÚT MỚI: Thêm nhân viên (đã thêm vào) */}
+        {/* ---------------------------------------------------------------- */}
         <div className="flex gap-2">
+          <button 
+            onClick={addNewRow} 
+            disabled={loading} 
+            className="btn bg-green-600 text-white hover:bg-green-700"
+          >
+            + Thêm nhân viên
+          </button>
           <button onClick={triggerImport} disabled={loading} className="btn">Nhập Excel</button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
           <button onClick={saveAll} disabled={loading} className="btn btn-primary">
@@ -314,30 +359,74 @@ function AdminMain() {
           <div key={i} className="grid grid-cols-5 gap-2 mb-2">
             <input value={r.msnv} onChange={e => {
               const v = e.target.value;
-              setRows(prev => { const idx = (page - 1) * pageSize + i; const arr = [...prev]; arr[idx] = { ...arr[idx], msnv: v }; return arr; });
+              // Sửa lỗi: Cần tìm đúng index trong 'rows' để cập nhật
+              const globalIndexInSorted = (page - 1) * pageSize + i;
+              const originalObject = sortedRows[globalIndexInSorted];
+              
+              setRows(prev => {
+                  // Tìm index của object này trong state `rows` gốc
+                  const idxInRows = prev.findIndex(item => item === originalObject);
+                  if (idxInRows === -1) return prev; // Không tìm thấy (không nên xảy ra)
+                  
+                  const arr = [...prev]; 
+                  arr[idxInRows] = { ...arr[idxInRows], msnv: v }; 
+                  return arr; 
+              });
             }} placeholder="MSNV" className="input" />
 
             <input value={r.full_name} onChange={e => {
               const v = e.target.value;
-              setRows(prev => { const idx = (page - 1) * pageSize + i; const arr = [...prev]; arr[idx] = { ...arr[idx], full_name: v }; return arr; });
+              const globalIndexInSorted = (page - 1) * pageSize + i;
+              const originalObject = sortedRows[globalIndexInSorted];
+              setRows(prev => {
+                  const idxInRows = prev.findIndex(item => item === originalObject);
+                  if (idxInRows === -1) return prev;
+                  const arr = [...prev]; 
+                  arr[idxInRows] = { ...arr[idxInRows], full_name: v }; 
+                  return arr;
+              });
             }} placeholder="Họ & tên" className="input" />
 
             <select value={r.role} onChange={e => {
               const v = e.target.value;
-              setRows(prev => { const idx = (page - 1) * pageSize + i; const arr = [...prev]; arr[idx] = { ...arr[idx], role: v }; return arr; });
+              const globalIndexInSorted = (page - 1) * pageSize + i;
+              const originalObject = sortedRows[globalIndexInSorted];
+              setRows(prev => {
+                  const idxInRows = prev.findIndex(item => item === originalObject);
+                  if (idxInRows === -1) return prev;
+                  const arr = [...prev]; 
+                  arr[idxInRows] = { ...arr[idxInRows], role: v }; 
+                  return arr;
+              });
             }} className="input">
               {ALLOWED_ROLES.map(x => <option key={x} value={x}>{x}</option>)}
             </select>
 
             <input value={r.approver_msnv || ""} onChange={e => {
               const v = e.target.value;
-              setRows(prev => { const idx = (page - 1) * pageSize + i; const arr = [...prev]; arr[idx] = { ...arr[idx], approver_msnv: v }; return arr; });
+              const globalIndexInSorted = (page - 1) * pageSize + i;
+              const originalObject = sortedRows[globalIndexInSorted];
+              setRows(prev => {
+                  const idxInRows = prev.findIndex(item => item === originalObject);
+                  if (idxInRows === -1) return prev;
+                  const arr = [...prev]; 
+                  arr[idxInRows] = { ...arr[idxInRows], approver_msnv: v }; 
+                  return arr;
+              });
             }} placeholder="Approver MSNV" className="input" />
 
             <div className="flex gap-2">
               <input value={r.approver_name || ""} onChange={e => {
                 const v = e.target.value;
-                setRows(prev => { const idx = (page - 1) * pageSize + i; const arr = [...prev]; arr[idx] = { ...arr[idx], approver_name: v }; return arr; });
+                const globalIndexInSorted = (page - 1) * pageSize + i;
+                const originalObject = sortedRows[globalIndexInSorted];
+                setRows(prev => {
+                    const idxInRows = prev.findIndex(item => item === originalObject);
+                    if (idxInRows === -1) return prev;
+                    const arr = [...prev]; 
+                    arr[idxInRows] = { ...arr[idxInRows], approver_name: v }; 
+                    return arr;
+                });
               }} placeholder="Approver Họ tên" className="input flex-1" />
               <button onClick={() => removeRow(i)} className="text-red-600">Xoá</button>
             </div>
