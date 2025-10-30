@@ -281,6 +281,17 @@ function ReportContent() {
       }
     };
     
+    // Helper mới: Chuyển chuỗi "YYYY-MM-DD" thành đối tượng Date an toàn
+    // (Bằng cách new Date(year, monthIndex, day))
+    const parseDate = (iso) => {
+        if (!iso) return null;
+        const parts = iso.split('-');
+        if (parts.length === 3) {
+            // new Date(year, monthIndex (0-11), day)
+            return new Date(parts[0], parts[1] - 1, parts[2]);
+        }
+        return new Date(iso); // Fallback nếu định dạng khác
+    };
   
     let data;
     if (isMolding) {
@@ -297,7 +308,7 @@ function ReportContent() {
           "MSNV": r.worker_id || "",
           "HỌ VÀ TÊN": r.worker_name || "",
           "CA LÀM VIỆC": r.ca || "",
-          "NGÀY LÀM VIỆC": fmtDate(r.date),
+          "NGÀY LÀM VIỆC": parseDate(r.date), // <--- THAY ĐỔI
           "THỜI GIAN LÀM VIỆC": Number(r.working_input ?? 0),
           "Số đôi phế": Number(r.defects ?? 0),
           "Điểm chất lượng": q,
@@ -330,7 +341,7 @@ function ReportContent() {
           "MSNV": r.worker_id || "",
           "HỌ VÀ TÊN": r.worker_name || "",
           "CA LÀM VIỆC": r.ca || "",
-          "NGÀY LÀM VIỆC": fmtDate(r.date),
+          "NGÀY LÀM VIỆC": parseDate(r.date), // <--- THAY ĐỔI
           "THỜI GIAN LÀM VIỆC (Nhập)": Number(r.work_hours ?? 0),
           "THỜI GIAN THỰC TẾ (Quy đổi)": Number(r.working_real ?? 0),
           "THỜI GIAN CHÍNH XÁC": exactHours,
@@ -365,7 +376,7 @@ function ReportContent() {
           "MSNV": r.worker_id || "",
           "HỌ VÀ TÊN": r.worker_name || "",
           "CA LÀM VIỆC": r.ca || "",
-          "NGÀY LÀM VIỆC": fmtDate(r.date),
+          "NGÀY LÀM VIỆC": parseDate(r.date), // <--- THAY ĐỔI
           "THỜI GIAN LÀM VIỆC": Number(r.work_hours ?? 0),
           "Số đôi phế": Number(r.defects ?? 0),
           "Điểm chất lượng": q,
@@ -385,6 +396,24 @@ function ReportContent() {
     }
   
     const ws = XLSX.utils.json_to_sheet(data);
+
+    // --- THÊM ĐỊNH DẠNG NGÀY ---
+    // Cột "NGÀY LÀM VIỆC" là cột thứ 5 (index = 4) trong cả 3 logic trên
+    const dateColumnIndex = 4; // Cột E
+    
+    if (data.length > 0) {
+      // Lặp qua tất cả các hàng dữ liệu (bỏ qua header)
+      for (let i = 0; i < data.length; i++) {
+        // Tạo tham chiếu ô, ví dụ 'E2'
+        const cellRef = XLSX.utils.encode_cell({ c: dateColumnIndex, r: i + 1 }); // r: i+1 để bỏ qua header
+        if (ws[cellRef] && ws[cellRef].v) { // Kiểm tra cell tồn tại và có giá trị
+          ws[cellRef].t = 'd'; // Set kiểu là Date
+          ws[cellRef].z = 'mm/dd/yyyy'; // Áp dụng định dạng mong muốn
+        }
+      }
+    }
+    // --- KẾT THÚC THÊM ĐỊNH DẠNG ---
+
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, viSection(section));
     XLSX.writeFile(wb, `kpi_report_${section}_${dateFrom}_to_${dateTo}.xlsx`);
