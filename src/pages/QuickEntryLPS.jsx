@@ -104,8 +104,11 @@ export default function ApproverModeHybrid({ section }) {
   const [categoryOptions, setCategoryOptions] = useState([]);
   const tableName = getTableName(section);
   const [search, setSearch] = useState("");
-  const [workers, setWorkers] = useState([]);
-  const [checked, setChecked] = useState(new Set()); // FIX: Phải khai báo là useState
+  const [workers, setWorkers] = useState([]); // Danh sách NV gốc
+  
+  // --- THAY ĐỔI 1: Dùng mảng [Object] cho NV đã chọn ---
+  const [selectedWorkers, setSelectedWorkers] = useState([]);
+  
   const [approverId, setApproverId] = useState("");
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
@@ -134,15 +137,21 @@ export default function ApproverModeHybrid({ section }) {
   const [tplCategory, setTplCategory] = useState(defaultCategory); // SỬ DỤNG DEFAULT CATEGORY
 
   // --- Khai báo Memoized Values ---
+  
+  // --- THAY ĐỔI 2: Lấy ID của NV đã chọn để lọc ---
+  const selectedIds = useMemo(() => new Set(selectedWorkers.map(w => w.msnv)), [selectedWorkers]);
+
+  // --- THAY ĐỔI 3: filteredWorkers là danh sách TÌM KIẾM (chưa được chọn) ---
   const filteredWorkers = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return workers;
+    if (!q) return []; // Chỉ hiển thị khi người dùng gõ tìm kiếm
     return workers.filter(
       (w) =>
-        String(w.msnv).toLowerCase().includes(q) ||
-        String(w.full_name || "").toLowerCase().includes(q)
+        !selectedIds.has(w.msnv) && // Ẩn nếu đã có trong danh sách "Đã chọn"
+        (String(w.msnv).toLowerCase().includes(q) ||
+         String(w.full_name || "").toLowerCase().includes(q))
     );
-  }, [workers, search]);
+  }, [workers, search, selectedIds]); // Thêm selectedIds
 
   const scores = useMemo(
     () => deriveDayScoresHybrid({ 
@@ -216,22 +225,29 @@ export default function ApproverModeHybrid({ section }) {
       .eq("approver_msnv", id); 
     if (error) return alert("Lỗi tải nhân viên: " + error.message);
     setWorkers(data || []);
-    setChecked(new Set());
+    // --- THAY ĐỔI 4: Reset mảng NV đã chọn ---
+    setSelectedWorkers([]);
+    setSearch("");
   }
-  function toggleWorker(msnv) {
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(msnv)) next.delete(msnv);
-      else next.add(msnv);
-      return next;
+  
+  // --- THAY ĐỔI 5: Hàm Thêm/Xoá NV khỏi danh sách "Đã chọn" ---
+  function addWorker(worker) {
+    setSelectedWorkers(prev => {
+      if (prev.find(w => w.msnv === worker.msnv)) return prev; // Đã có
+      return [worker, ...prev]; // Thêm vào đầu danh sách
     });
   }
+  function removeWorker(msnv) {
+    setSelectedWorkers(prev => prev.filter(w => w.msnv !== msnv));
+  }
+  // (Xoá hàm toggleWorker)
 
   // ---- B2: Template KPI CHUNG ----
   
   function proceedToTemplate() {
     if (!prodRules.length) return alert("Không thể tải Rule tính điểm sản lượng. Vui lòng thử lại.");
-    if (!checked.size) return alert("Chưa chọn nhân viên nào.");
+    // --- THAY ĐỔI 6: Kiểm tra mảng selectedWorkers ---
+    if (!selectedWorkers.length) return alert("Chưa chọn nhân viên nào.");
     setStep(2);
   }
 
@@ -240,9 +256,10 @@ export default function ApproverModeHybrid({ section }) {
   function buildReviewRows() {
     if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
     if (!tplCategory) return alert("Vui lòng chọn Loại năng suất.");
-    if (!checked.size) return alert("Chưa chọn nhân viên.");
+    // --- THAY ĐỔI 7: Kiểm tra mảng selectedWorkers ---
+    if (!selectedWorkers.length) return alert("Chưa chọn nhân viên.");
 
-    const selectedWorkers = workers.filter((w) => checked.has(w.msnv));
+    // --- THAY ĐỔI 8: Dùng thẳng mảng selectedWorkers ---
     const rows = selectedWorkers.map((w) => {
       const s = deriveDayScoresHybrid({ 
           section, 
@@ -282,7 +299,8 @@ export default function ApproverModeHybrid({ section }) {
     setStep(3);
   }
 
-  // chỉnh 1 dòng → tự tính lại điểm
+  // (Các hàm updateRow, Paging, toggleAllReviewOnPage, toggleOneReview, saveBatch giữ nguyên)
+  // ... (Không lặp lại các hàm này vì chúng không đổi)
   function updateRow(i, key, val) {
     setReviewRows((old) => {
       const arr = old.slice();
@@ -312,16 +330,27 @@ export default function ApproverModeHybrid({ section }) {
       return arr;
     });
   }
-
-  // Paging và Select (Giữ nguyên)
   function toggleAllReviewOnPage() {
-    // ... (Giữ nguyên)
+    setSelReview((prev) => {
+      const next = new Set(prev);
+      const start = (page - 1) * pageSize;
+      const allOnPage = pageRows.every((_, idx) => next.has(start + idx));
+      if (allOnPage) {
+        pageRows.forEach((_, idx) => next.delete(start + idx));
+      } else {
+        pageRows.forEach((_, idx) => next.add(start + idx));
+      }
+      return next;
+    });
   }
   function toggleOneReview(globalIndex) {
-    // ... (Giữ nguyên)
+    setSelReview((prev) => {
+      const next = new Set(prev);
+      if (next.has(globalIndex)) next.delete(globalIndex);
+      else next.add(globalIndex);
+      return next;
+    });
   }
-
-  // Lưu batch
   async function saveBatch() {
     const idxs = Array.from(selReview).sort((a, b) => a - b);
     if (!idxs.length) return alert("Chưa chọn dòng để lưu.");
@@ -368,9 +397,11 @@ export default function ApproverModeHybrid({ section }) {
     alert(`Đã lưu ${payload.length} dòng (approved) vào bảng ${tableName}.`);
   }
 
+
   return (
     <div className="space-y-4">
-      {/* ==== STEP 1: Chọn NV theo người duyệt ==== */}
+      
+      {/* --- THAY ĐỔI 9: Cập nhật JSX cho Step 1 --- */}
       {step === 1 && (
         <>
           <div className="flex items-end gap-2">
@@ -383,46 +414,98 @@ export default function ApproverModeHybrid({ section }) {
                 placeholder="Ví dụ: 00001"
               />
             </div>
-            <div>
-              <label>Tìm nhân viên (MSNV/Họ tên)</label>
-              <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} />
-            </div>
             <button className="btn" onClick={loadWorkers}>Tải danh sách NV</button>
-            <button className="btn btn-primary" onClick={proceedToTemplate} disabled={!checked.size || prodRules.length === 0}>
-              Tiếp tục ›
+            <button 
+              className="btn btn-primary ml-auto" 
+              onClick={proceedToTemplate} 
+              disabled={!selectedWorkers.length || prodRules.length === 0}
+            >
+              Tiếp tục ({selectedWorkers.length}) ›
             </button>
           </div>
 
-          <div className="overflow-auto border rounded">
-             {/* Bảng danh sách NV */}
-            <table className="min-w-full text-sm">
-                <thead className="bg-gray-50">
-                <tr className="text-center">
-                    <th className="p-2"><input type="checkbox" /></th>
-                    <th className="p-2">MSNV</th>
-                    <th className="p-2">Họ & tên</th>
-                    <th className="p-2">Người duyệt phụ trách</th>
-                </tr>
-                </thead>
-                <tbody>
-                {filteredWorkers.map((w) => (
-                    <tr key={w.msnv} className="border-t hover:bg-gray-50">
-                        <td className="p-2 text-center"><input type="checkbox" checked={checked.has(w.msnv)} onChange={() => toggleWorker(w.msnv)} /></td>
-                        <td className="p-2 text-center">{w.msnv}</td>
-                        <td className="p-2 text-center">{w.full_name}</td>
-                        <td className="p-2 text-center">{w.approver_name} ({w.approver_msnv})</td>
+          {/* VÙNG CHIA ĐÔI MỚI */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ minHeight: '400px' }}>
+            
+            {/* CỘT BÊN TRÁI: DANH SÁCH ĐÃ CHỌN */}
+            <div className="border rounded p-3 bg-white space-y-2 flex flex-col">
+              <h3 className="font-semibold text-lg">Đã chọn ({selectedWorkers.length})</h3>
+              <div className="overflow-auto flex-1">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="p-2 text-left">MSNV</th>
+                      <th className="p-2 text-left">Họ & tên</th>
+                      <th className="p-2 text-center">Xoá</th>
                     </tr>
-                ))}
-                {!filteredWorkers.length && (
-                    <tr><td colSpan={4} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>
-                )}
-                </tbody>
-            </table>
+                  </thead>
+                  <tbody>
+                    {selectedWorkers.map((w) => (
+                      <tr key={w.msnv} className="border-t">
+                        <td className="p-2">{w.msnv}</td>
+                        <td className="p-2">{w.full_name}</td>
+                        <td className="p-2 text-center">
+                          <button className="btn bg-red-100 text-red-700 hover:bg-red-200" style={{padding: '4px 8px'}} onClick={() => removeWorker(w.msnv)}>Xoá</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {!selectedWorkers.length && (
+                      <tr><td colSpan={3} className="p-4 text-center text-gray-500">Chưa chọn nhân viên nào.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* CỘT BÊN PHẢI: TÌM KIẾM & KẾT QUẢ */}
+            <div className="border rounded p-3 bg-white space-y-2 flex flex-col">
+              <h3 className="font-semibold text-lg">Tìm kiếm & Thêm</h3>
+              <input 
+                className="input" 
+                value={search} 
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Gõ MSNV hoặc Tên để tìm..."
+                disabled={!workers.length} 
+              />
+              <div className="overflow-auto flex-1">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="p-2 text-left">MSNV</th>
+                      <th className="p-2 text-left">Họ & tên</th>
+                      <th className="p-2 text-center">Thêm</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredWorkers.map((w) => (
+                      <tr key={w.msnv} className="border-t hover:bg-gray-50">
+                        <td className="p-2">{w.msnv}</td>
+                        <td className="p-2">{w.full_name}</td>
+                        <td className="p-2 text-center">
+                          <button className="btn" style={{padding: '4px 8px'}} onClick={() => addWorker(w)}>+</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {search && !filteredWorkers.length && (
+                      <tr><td colSpan={3} className="p-4 text-center text-gray-500">Không tìm thấy.</td></tr>
+                    )}
+                    {!search && workers.length > 0 && (
+                      <tr><td colSpan={3} className="p-4 text-center text-gray-500">Gõ vào ô tìm kiếm để lọc nhân viên.</td></tr>
+                    )}
+                    {!workers.length && (
+                       <tr><td colSpan={3} className="p-4 text-center text-gray-500">Vui lòng "Tải danh sách NV" trước.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
           </div>
         </>
       )}
 
-      {/* ==== STEP 2: Template CHUNG + Preview ==== */}
+
+      {/* ==== STEP 2: Template CHUNG + Preview (Giữ nguyên) ==== */}
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -533,6 +616,8 @@ function EditReviewHybrid({
     MACHINE_MAP.BÀO, 
     MACHINE_MAP.TÁCH
   ); 
+
+  // (Nội dung hàm này giữ nguyên)
 
   return (
     <div className="space-y-3">

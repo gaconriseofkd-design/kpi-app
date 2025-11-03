@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useKpiSection } from "../context/KpiSectionContext";
-import { scoreByQuality, scoreByProductivity } from "../lib/scoring"; 
+import { scoreByQuality } from "../lib/scoring"; // Sửa: import scoreByQuality
 import ApproverModeHybrid from "./QuickEntryLPS"; 
 
 /* ===== Danh sách Tuân thủ dùng chung ===== */
@@ -152,7 +152,7 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
 }
 
 /* ======================================================================
-   APPROVER MODE — LEANLINE (FIXED TDZ ISSUE)
+   APPROVER MODE — LEANLINE (CẬP NHẬT GIAO DIỆN CHỌN NV)
    ====================================================================== */
 function ApproverModeLeanline({ section }) {
     
@@ -160,9 +160,12 @@ function ApproverModeLeanline({ section }) {
   const [step, setStep] = useState(1);
   const [prodRules, setProdRules] = useState([]); 
   const [approverId, setApproverId] = useState("");
-  const [workers, setWorkers] = useState([]);
-  const [checked, setChecked] = useState(new Set()); // Reset checked set
+  const [workers, setWorkers] = useState([]); // Danh sách NV gốc
+  
+  // --- THAY ĐỔI 1: Dùng mảng [Object] cho NV đã chọn, thay vì Set(msnv) ---
+  const [selectedWorkers, setSelectedWorkers] = useState([]); 
   const [search, setSearch] = useState("");
+  
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
   
@@ -183,15 +186,21 @@ function ApproverModeLeanline({ section }) {
   const [page, setPage] = useState(1);
   
   // --- Khai báo Memoized Values ---
+  
+  // --- THAY ĐỔI 2: Lấy ID của NV đã chọn để lọc ---
+  const selectedIds = useMemo(() => new Set(selectedWorkers.map(w => w.msnv)), [selectedWorkers]);
+
+  // --- THAY ĐỔI 3: filteredWorkers là danh sách TÌM KIẾM (chưa được chọn) ---
   const filteredWorkers = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return workers;
+    if (!q) return []; // Chỉ hiển thị khi người dùng gõ tìm kiếm
     return workers.filter(
       (w) =>
-        String(w.msnv).toLowerCase().includes(q) ||
-        String(w.full_name || "").toLowerCase().includes(q)
+        !selectedIds.has(w.msnv) && // Ẩn nếu đã có trong danh sách "Đã chọn"
+        (String(w.msnv).toLowerCase().includes(q) ||
+         String(w.full_name || "").toLowerCase().includes(q))
     );
-  }, [workers, search]);
+  }, [workers, search, selectedIds]); // Thêm selectedIds
   
   // Hàm tính điểm (Helper nội bộ, không dùng useMemo để tránh TDZ)
   const calculateScores = (oe, defects, rules, sec, line) => {
@@ -245,37 +254,37 @@ function ApproverModeLeanline({ section }) {
       .eq("approver_msnv", id);
     if (error) return alert("Lỗi tải nhân viên: " + error.message);
     setWorkers(data || []);
-    setChecked(new Set());
+    // --- THAY ĐỔI 4: Reset mảng NV đã chọn ---
+    setSelectedWorkers([]);
+    setSearch("");
   }
 
-  function toggleWorker(msnv) {
-    setChecked((prev) => {
-      const next = new Set(prev);
-      if (next.has(msnv)) next.delete(msnv);
-      else next.add(msnv);
-      return next;
+  // --- THAY ĐỔI 5: Hàm Thêm/Xoá NV khỏi danh sách "Đã chọn" ---
+  function addWorker(worker) {
+    setSelectedWorkers(prev => {
+      if (prev.find(w => w.msnv === worker.msnv)) return prev; // Đã có
+      return [worker, ...prev]; // Thêm vào đầu danh sách
     });
   }
-  function toggleAllWorkers() {
-    setChecked((prev) =>
-      prev.size === filteredWorkers.length
-        ? new Set()
-        : new Set(filteredWorkers.map((w) => w.msnv))
-    );
+  function removeWorker(msnv) {
+    setSelectedWorkers(prev => prev.filter(w => w.msnv !== msnv));
   }
-
+  // (Xoá hàm toggleWorker và toggleAllWorkers)
+  
   function proceedToTemplate() {
     const requiredRulesLoaded = section === "LEANLINE_MOLDED" || prodRules.length > 0;
     if (!requiredRulesLoaded) return alert("Không thể tải Rule tính điểm sản lượng. Vui lòng thử lại.");
-    if (!checked.size) return alert("Chưa chọn nhân viên nào.");
+    // --- THAY ĐỔI 6: Kiểm tra mảng selectedWorkers ---
+    if (!selectedWorkers.length) return alert("Chưa chọn nhân viên nào.");
     setStep(2);
   }
 
   function buildReviewRows() {
     if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
-    if (!checked.size) return alert("Chưa chọn nhân viên.");
+    // --- THAY ĐỔI 7: Kiểm tra mảng selectedWorkers ---
+    if (!selectedWorkers.length) return alert("Chưa chọn nhân viên.");
 
-    const selectedWorkers = workers.filter((w) => checked.has(w.msnv));
+    // --- THAY ĐỔI 8: Dùng thẳng mảng selectedWorkers ---
     const rows = selectedWorkers.map((w) => {
       const scores = calculateScores(tplOE, tplDefects, prodRules, section, tplLine);
 
@@ -304,6 +313,7 @@ function ApproverModeLeanline({ section }) {
     setStep(3);
   }
 
+  // (Các hàm updateRow, toggleAllReviewOnPage, toggleOneReview, saveBatch giữ nguyên)
   function updateRow(i, key, val) {
     setReviewRows((old) => {
       const arr = old.slice();
@@ -320,7 +330,6 @@ function ApproverModeLeanline({ section }) {
       return arr;
     });
   }
-
   function toggleAllReviewOnPage() {
     setSelReview((prev) => {
       const next = new Set(prev);
@@ -342,16 +351,12 @@ function ApproverModeLeanline({ section }) {
       return next;
     });
   }
-
   async function saveBatch() {
     const idxs = Array.from(selReview).sort((a, b) => a - b);
     if (!idxs.length) return alert("Chưa chọn dòng để lưu.");
-
     setSaving(true);
     const list = idxs.map((i) => reviewRows[i]);
-
     const now = new Date().toISOString();
-
     const payload = list.map((r) => {
       const rawScores = calculateScores(r.oe, r.defects, prodRules, section, r.line);
       const overflow = Math.max(0, rawScores.rawTotal - 15);
@@ -377,21 +382,20 @@ function ApproverModeLeanline({ section }) {
         approved_at: now,
       };
     });
-
     const { error } = await supabase
     .from("kpi_entries") // LUÔN LƯU VÀO kpi_entries CHO LEANLINE
     .upsert(payload, { onConflict: "worker_id,date,section" });
-
-
     setSaving(false);
-    if (error) return alert("Lưu lỗi: " + error.message);
+    if (error) return alert("Lưu lỗi: "D + error.message);
     alert(`Đã lưu ${payload.length} dòng (approved).`);
   }
+
 
   // --- JSX Render ---
   return (
     <div className="space-y-4">
-      {/* ==== STEP 1: Chọn NV theo người duyệt ==== */}
+      
+      {/* --- THAY ĐỔI 9: Cập nhật JSX cho Step 1 --- */}
       {step === 1 && (
         <>
           <div className="flex items-end gap-2">
@@ -404,61 +408,97 @@ function ApproverModeLeanline({ section }) {
                 placeholder="Ví dụ: 00001"
               />
             </div>
-            <div>
-              <label>Tìm nhân viên (MSNV/Họ tên)</label>
-              <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} />
-            </div>
             <button className="btn" onClick={loadWorkers}>Tải danh sách NV</button>
-            <button className="btn btn-primary" onClick={proceedToTemplate} disabled={!checked.size || (section !== "LEANLINE_MOLDED" && prodRules.length === 0)}>
-              Tiếp tục ›
+            <button 
+              className="btn btn-primary ml-auto" 
+              onClick={proceedToTemplate} 
+              disabled={!selectedWorkers.length || (section !== "LEANLINE_MOLDED" && prodRules.length === 0)}
+            >
+              Tiếp tục ({selectedWorkers.length}) ›
             </button>
           </div>
 
-          <div className="overflow-auto border rounded">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-50">
-                <tr className="text-center">
-                  <th className="p-2">
-                    <input
-                      type="checkbox"
-                      onChange={toggleAllWorkers}
-                      checked={checked.size === filteredWorkers.length && filteredWorkers.length > 0}
-                    />
-                  </th>
-                  <th className="p-2">MSNV</th>
-                  <th className="p-2">Họ & tên</th>
-                  <th className="p-2">Người duyệt phụ trách</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredWorkers.map((w) => (
-                  <tr key={w.msnv} className="border-t hover:bg-gray-50">
-                    <td className="p-2 text-center">
-                      <input
-                        type="checkbox"
-                        checked={checked.has(w.msnv)}
-                        onChange={() => toggleWorker(w.msnv)}
-                      />
-                    </td>
-                    <td className="p-2 text-center">{w.msnv}</td>
-                    <td className="p-2 text-center">{w.full_name}</td>
-                    <td className="p-2 text-center">{w.approver_name} ({w.approver_msnv})</td>
-                  </tr>
-                ))}
-                {!filteredWorkers.length && (
-                  <tr>
-                    <td colSpan={4} className="p-4 text-center text-gray-500">
-                      Không có dữ liệu
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          {/* VÙNG CHIA ĐÔI MỚI */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ minHeight: '400px' }}>
+            
+            {/* CỘT BÊN TRÁI: DANH SÁCH ĐÃ CHỌN */}
+            <div className="border rounded p-3 bg-white space-y-2 flex flex-col">
+              <h3 className="font-semibold text-lg">Đã chọn ({selectedWorkers.length})</h3>
+              <div className="overflow-auto flex-1">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="p-2 text-left">MSNV</th>
+                      <th className="p-2 text-left">Họ & tên</th>
+                      <th className="p-2 text-center">Xoá</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedWorkers.map((w) => (
+                      <tr key={w.msnv} className="border-t">
+                        <td className="p-2">{w.msnv}</td>
+                        <td className="p-2">{w.full_name}</td>
+                        <td className="p-2 text-center">
+                          <button className="btn bg-red-100 text-red-700 hover:bg-red-200" style={{padding: '4px 8px'}} onClick={() => removeWorker(w.msnv)}>Xoá</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {!selectedWorkers.length && (
+                      <tr><td colSpan={3} className="p-4 text-center text-gray-500">Chưa chọn nhân viên nào.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* CỘT BÊN PHẢI: TÌM KIẾM & KẾT QUẢ */}
+            <div className="border rounded p-3 bg-white space-y-2 flex flex-col">
+              <h3 className="font-semibold text-lg">Tìm kiếm & Thêm</h3>
+              <input 
+                className="input" 
+                value={search} 
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Gõ MSNV hoặc Tên để tìm..."
+                disabled={!workers.length} 
+              />
+              <div className="overflow-auto flex-1">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="p-2 text-left">MSNV</th>
+                      <th className="p-2 text-left">Họ & tên</th>
+                      <th className="p-2 text-center">Thêm</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredWorkers.map((w) => (
+                      <tr key={w.msnv} className="border-t hover:bg-gray-50">
+                        <td className="p-2">{w.msnv}</td>
+                        <td className="p-2">{w.full_name}</td>
+                        <td className="p-2 text-center">
+                          <button className="btn" style={{padding: '4px 8px'}} onClick={() => addWorker(w)}>+</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {search && !filteredWorkers.length && (
+                      <tr><td colSpan={3} className="p-4 text-center text-gray-500">Không tìm thấy.</td></tr>
+                    )}
+                    {!search && workers.length > 0 && (
+                      <tr><td colSpan={3} className="p-4 text-center text-gray-500">Gõ vào ô tìm kiếm để lọc nhân viên.</td></tr>
+                    )}
+                    {!workers.length && (
+                       <tr><td colSpan={3} className="p-4 text-center text-gray-500">Vui lòng "Tải danh sách NV" trước.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
           </div>
         </>
       )}
 
-      {/* ==== STEP 2: Template CHUNG + Preview ==== */}
+      {/* ==== STEP 2: Template CHUNG + Preview (Giữ nguyên) ==== */}
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -537,10 +577,8 @@ function ApproverModeLeanline({ section }) {
                 </tr>
               </thead>
               <tbody className="text-center">
-                {Array.from(checked)
-                  .map((id) => workers.find((w) => w.msnv === id))
-                  .filter(Boolean)
-                  .map((w) => (
+                {/* THAY ĐỔI: Lặp qua selectedWorkers thay vì checked */}
+                {selectedWorkers.map((w) => (
                     <tr key={w.msnv} className="border-t hover:bg-gray-50">
                       <td>{w.msnv}</td>
                       <td>{w.full_name}</td>
@@ -611,6 +649,8 @@ function EditReviewLeanline({
   const { section } = useKpiSection();
   const currentMachines = useMemo(() => getLeanlineMachines(section), [section]);
   const globalIndex = (idx) => (page - 1) * pageSize + idx;
+  
+  // (Nội dung hàm này giữ nguyên)
 
   return (
     <div className="space-y-3">
@@ -765,26 +805,33 @@ function EditReviewLeanline({
 }
 
 /* ======================================================================
-   APPROVER MODE — MOLDING (Giữ nguyên)
+   APPROVER MODE — MOLDING (CẬP NHẬT GIAO DIỆN CHỌN NV)
    ====================================================================== */
 function ApproverModeMolding({ section }) {
   const [step, setStep] = useState(1);
   const [approverId, setApproverId] = useState("");
-  const [workers, setWorkers] = useState([]);
-  const [checked, setChecked] = useState(new Set());
+  const [workers, setWorkers] = useState([]); // Danh sách NV gốc
+  
+  // --- THAY ĐỔI 1: Dùng mảng [Object] cho NV đã chọn ---
+  const [selectedWorkers, setSelectedWorkers] = useState([]);
   const [search, setSearch] = useState("");
-  const [rows, setRows] = useState([]);
+  
+  const [rows, setRows] = useState([]); // (Giữ nguyên, dùng cho Step 2)
 
-  // Lọc nhân viên
+  // --- THAY ĐỔI 2: Lấy ID của NV đã chọn để lọc ---
+  const selectedIds = useMemo(() => new Set(selectedWorkers.map(w => w.msnv)), [selectedWorkers]);
+
+  // --- THAY ĐỔI 3: filteredWorkers là danh sách TÌM KIẾM (chưa được chọn) ---
   const filteredWorkers = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return workers;
+    if (!q) return []; // Chỉ hiển thị khi người dùng gõ tìm kiếm
     return workers.filter(
       (w) =>
-        String(w.msnv).toLowerCase().includes(q) ||
-        String(w.full_name || "").toLowerCase().includes(q)
+        !selectedIds.has(w.msnv) && // Ẩn nếu đã có trong danh sách "Đã chọn"
+        (String(w.msnv).toLowerCase().includes(q) ||
+         String(w.full_name || "").toLowerCase().includes(q))
     );
-  }, [workers, search]);
+  }, [workers, search, selectedIds]);
 
   // --- Tải danh sách nhân viên theo người duyệt ---
   async function loadWorkers() {
@@ -796,31 +843,30 @@ function ApproverModeMolding({ section }) {
       .eq("approver_msnv", id);
     if (error) return alert("Lỗi tải nhân viên: " + error.message);
     setWorkers(data || []);
-    setChecked(new Set());
+    // --- THAY ĐỔI 4: Reset mảng NV đã chọn ---
+    setSelectedWorkers([]);
+    setSearch("");
   }
 
-  // --- Chọn nhân viên ---
-  function toggleWorker(msnv) {
-    setChecked(prev => {
-      const next = new Set(prev);
-      if (next.has(msnv)) next.delete(msnv);
-      else next.add(msnv);
-      return next;
+  // --- THAY ĐỔI 5: Hàm Thêm/Xoá NV khỏi danh sách "Đã chọn" ---
+  function addWorker(worker) {
+    setSelectedWorkers(prev => {
+      if (prev.find(w => w.msnv === worker.msnv)) return prev; // Đã có
+      return [worker, ...prev]; // Thêm vào đầu danh sách
     });
   }
-
-  function toggleAllWorkers() {
-    setChecked(prev =>
-      prev.size === filteredWorkers.length
-        ? new Set()
-        : new Set(filteredWorkers.map(w => w.msnv))
-    );
+  function removeWorker(msnv) {
+    setSelectedWorkers(prev => prev.filter(w => w.msnv !== msnv));
   }
-
+  // (Xoá hàm toggleWorker và toggleAllWorkers)
+  
   // --- Sang bước nhập KPI ---
   function proceedToTemplate() {
-    if (!checked.size) return alert("Chưa chọn nhân viên nào.");
-    const selected = workers.filter(w => checked.has(w.msnv));
+    // --- THAY ĐỔI 6: Kiểm tra mảng selectedWorkers ---
+    if (!selectedWorkers.length) return alert("Chưa chọn nhân viên nào.");
+    
+    // (Logic cũ giữ nguyên, nhưng dùng selectedWorkers)
+    const selected = selectedWorkers; // Dùng mảng mới
     const initRows = selected.map(w => ({
       msnv: w.msnv,
       hoten: w.full_name,
@@ -834,18 +880,18 @@ function ApproverModeMolding({ section }) {
       kpi_score: 8.5,
       compliance: "NONE",
     }));
-    setRows(initRows);
+    setRows(initRows); // (rows này vẫn dùng cho Step 2 của Molding)
     setStep(2);
   }
 
-  /* Template inputs */
+  /* Template inputs (Giữ nguyên) */
   const [date, setDate] = useState("");
   const [shift, setShift] = useState("");
   const [oe, setOe] = useState(100);
   const [defects, setDefects] = useState(0);
   const [compliance, setCompliance] = useState("NONE");
 
-  // Molding template
+  // Molding template (Giữ nguyên)
   const [workingInput, setWorkingInput] = useState(8);
   const [moldHours, setMoldHours] = useState(0);
   const [output, setOutput] = useState(0);
@@ -864,7 +910,7 @@ function ApproverModeMolding({ section }) {
       });
   }, []);
 
-  /* Review rows */
+  /* Review rows (Giữ nguyên) */
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
 
@@ -872,7 +918,9 @@ function ApproverModeMolding({ section }) {
     if (!date || !shift) return alert("Nhập Ngày & Ca.");
     if (!category) return alert("Chọn Loại hàng.");
 
-    const selectedWorkers = workers.filter((w) => checked.has(w.msnv));
+    // --- THAY ĐỔI 7: Dùng mảng selectedWorkers ---
+    if (!selectedWorkers.length) return alert("Lỗi: Không tìm thấy nhân viên đã chọn.");
+    
     const rows = [];
 
     let rulesByCat = {};
@@ -891,6 +939,7 @@ function ApproverModeMolding({ section }) {
       });
     });
 
+    // --- THAY ĐỔI 8: Dùng mảng selectedWorkers ---
     selectedWorkers.forEach((w) => {
       const working_real = calcWorkingReal(shift, workingInput);
       let downtime = (working_real * 24 - toNum(moldHours)) / 24;
@@ -939,7 +988,7 @@ function ApproverModeMolding({ section }) {
     setStep(3);
   }
 
-  /* paging review */
+  /* paging review (Giữ nguyên) */
   const pageSize = 50;
   const [page, setPage] = useState(1);
   useEffect(() => setPage(1), [reviewRows.length]);
@@ -969,7 +1018,7 @@ function ApproverModeMolding({ section }) {
     });
   }
 
-  /* Save batch (duyệt luôn) */
+  /* Save batch (duyệt luôn) (Giữ nguyên) */
   const [saving, setSaving] = useState(false);
   async function saveBatch() {
     const idxs = Array.from(selReview).sort((a, b) => a - b);
@@ -977,9 +1026,7 @@ function ApproverModeMolding({ section }) {
 
     setSaving(true);
     const list = idxs.map((i) => reviewRows[i]);
-
     const now = new Date().toISOString();
-
     const payload = list.map((r) => {
       const overflow = Math.max(0, (r.q_score + r.p_score) - 15);
       return {
@@ -1005,7 +1052,7 @@ function ApproverModeMolding({ section }) {
         compliance_code: r.compliance_code,
         status: "approved",
         approved_at: now,
-        // KHÔNG BAO GỒM violations (1/0)
+        // Cột violations sẽ được trigger tự động trong DB hoặc ở Pending
       };
     });
     const { error } = await supabase
@@ -1019,74 +1066,120 @@ function ApproverModeMolding({ section }) {
   /* UI */
   return (
     <div className="space-y-4">
-      <div className="flex items-end gap-2">
-        <div>
-          <label>MSNV người duyệt</label>
-          <input
-            className="input"
-            value={approverId}
-            onChange={(e) => setApproverId(e.target.value)}
-            placeholder="Ví dụ: 00001"
-          />
-        </div>
-        <div>
-          <label>Tìm nhân viên (MSNV/Họ tên)</label>
-          <input className="input" value={search} onChange={(e) => setSearch(e.target.value)} />
-        </div>
-        <button className="btn" onClick={loadWorkers}>Tải danh sách NV</button>
-        <button className="btn btn-primary" onClick={proceedToTemplate} disabled={!checked.size}>
-          Tiếp tục ›
-        </button>
-      </div>
-
+      
+      {/* --- THAY ĐỔI 9: Cập nhật JSX cho Step 1 --- */}
       {step === 1 && (
-        <div className="overflow-auto border rounded">
-          <table className="min-w-full text-sm">
-            <thead className="bg-gray-50">
-              <tr className="text-center">
-                <th className="p-2">
-                  <input
-                    type="checkbox"
-                    onChange={toggleAllWorkers}
-                    checked={checked.size === filteredWorkers.length && filteredWorkers.length > 0}
-                  />
-                </th>
-                <th className="p-2">MSNV</th>
-                <th className="p-2">Họ & tên</th>
-                <th className="p-2">Người duyệt phụ trách</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredWorkers.map((w) => (
-                <tr key={w.msnv} className="border-t hover:bg-gray-50">
-                  <td className="p-2 text-center">
-                    <input
-                      type="checkbox"
-                      checked={checked.has(w.msnv)}
-                      onChange={() => toggleWorker(w.msnv)}
-                    />
-                  </td>
-                  <td className="p-2 text-center">{w.msnv}</td>
-                  <td className="p-2 text-center">{w.full_name}</td>
-                  <td className="p-2 text-center">
-                    {w.approver_name} ({w.approver_msnv})
-                  </td>
-                </tr>
-              ))}
-              {!filteredWorkers.length && (
-                <tr>
-                  <td colSpan={4} className="p-4 text-center text-gray-500">
-                    Không có dữ liệu
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="flex items-end gap-2">
+            <div>
+              <label>MSNV người duyệt</label>
+              <input
+                className="input"
+                value={approverId}
+                onChange={(e) => setApproverId(e.target.value)}
+                placeholder="Ví dụ: 00001"
+              />
+            </div>
+            <button className="btn" onClick={loadWorkers}>Tải danh sách NV</button>
+            <button 
+              className="btn btn-primary ml-auto" 
+              onClick={proceedToTemplate} 
+              disabled={!selectedWorkers.length}
+            >
+              Tiếp tục ({selectedWorkers.length}) ›
+            </button>
+          </div>
+
+          {/* VÙNG CHIA ĐÔI MỚI */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ minHeight: '400px' }}>
+            
+            {/* CỘT BÊN TRÁI: DANH SÁCH ĐÃ CHỌN */}
+            <div className="border rounded p-3 bg-white space-y-2 flex flex-col">
+              <h3 className="font-semibold text-lg">Đã chọn ({selectedWorkers.length})</h3>
+              <div className="overflow-auto flex-1">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="p-2 text-left">MSNV</th>
+                      <th className="p-2 text-left">Họ & tên</th>
+                      <th className="p-2 text-center">Xoá</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedWorkers.map((w) => (
+                      <tr key={w.msnv} className="border-t">
+                        <td className="p-2">{w.msnv}</td>
+                        <td className="p-2">{w.full_name}</td>
+                        <td className="p-2 text-center">
+                          <button className="btn bg-red-100 text-red-700 hover:bg-red-200" style={{padding: '4px 8px'}} onClick={() => removeWorker(w.msnv)}>Xoá</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {!selectedWorkers.length && (
+                      <tr><td colSpan={3} className="p-4 text-center text-gray-500">Chưa chọn nhân viên nào.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* CỘT BÊN PHẢI: TÌM KIẾM & KẾT QUẢ */}
+            <div className="border rounded p-3 bg-white space-y-2 flex flex-col">
+              <h3 className="font-semibold text-lg">Tìm kiếm & Thêm</h3>
+              <input 
+                className="input" 
+                value={search} 
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Gõ MSNV hoặc Tên để tìm..."
+                disabled={!workers.length} 
+              />
+              <div className="overflow-auto flex-1">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="p-2 text-left">MSNV</th>
+                      <th className="p-2 text-left">Họ & tên</th>
+                      <th className="p-2 text-center">Thêm</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredWorkers.map((w) => (
+                      <tr key={w.msnv} className="border-t hover:bg-gray-50">
+                        <td className="p-2">{w.msnv}</td>
+                        <td className="p-2">{w.full_name}</td>
+                        <td className="p-2 text-center">
+                          <button className="btn" style={{padding: '4px 8px'}} onClick={() => addWorker(w)}>+</button>
+                        </td>
+                      </tr>
+                    ))}
+                    {search && !filteredWorkers.length && (
+                      <tr><td colSpan={3} className="p-4 text-center text-gray-500">Không tìm thấy.</td></tr>
+                    )}
+                    {!search && workers.length > 0 && (
+                      <tr><td colSpan={3} className="p-4 text-center text-gray-500">Gõ vào ô tìm kiếm để lọc nhân viên.</td></tr>
+                    )}
+                    {!workers.length && (
+                       <tr><td colSpan={3} className="p-4 text-center text-gray-500">Vui lòng "Tải danh sách NV" trước.</td></tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+          </div>
+        </>
       )}
 
+
+      {/* (Step 2 và 3 của Molding giữ nguyên) */}
       {step === 2 && (
         <div className="space-y-4">
+           <div className="flex justify-between">
+            <button className="btn" onClick={() => setStep(1)}>‹ Quay lại</button>
+            <button className="btn btn-primary" onClick={buildReviewRows}>
+              Tạo danh sách Review ›
+            </button>
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div>
               <label>Ngày</label>
@@ -1119,13 +1212,25 @@ function ApproverModeMolding({ section }) {
                 ))}
               </select>
             </div>
+            
+            {/* Thêm các input cho Molding */}
+            <div>
+              <label>Giờ làm việc (nhập)</label>
+              <input type="number" className="input" value={workingInput} onChange={e => setWorkingInput(e.target.value)} />
+            </div>
+            <div>
+              <label>Số giờ khuôn chạy</label>
+              <input type="number" className="input" value={moldHours} onChange={e => setMoldHours(e.target.value)} />
+            </div>
+            <div>
+              <label>Sản lượng / ca</label>
+              <input type="number" className="input" value={output} onChange={e => setOutput(e.target.value)} />
+            </div>
+             <div>
+              <label>Số đôi phế</label>
+              <input type="number" className="input" value={defects} onChange={e => setDefects(e.target.value)} />
+            </div>
           </div>
-
-          {/* (Giữ phần nhập dạng bảng cũ cho Molding) */}
-
-          <button className="btn btn-primary" onClick={buildReviewRows}>
-            Tạo danh sách Review ›
-          </button>
         </div>
       )}
 
