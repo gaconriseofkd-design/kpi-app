@@ -81,11 +81,15 @@ function calculateScoresMolding(entry, allRules) {
     const qScore = scoreByQuality(defects); 
     let pScore = 0;
     
-    const catRules = (allRules || []).filter(r => r.category === category);
+    // SỬA LỖI: Rules phải được sort trước khi loop
+    const catRules = (allRules || [])
+      .filter(r => r.category === category)
+      .sort((a, b) => Number(b.threshold) - Number(a.threshold)); // <-- Thêm sort
+      
     for (const r of catRules) {
         if (prod >= r.threshold) {
             pScore = r.score;
-            break;
+            break; // <-- Dừng lại khi tìm thấy ngưỡng đầu tiên
         }
     }
     const total = pScore + qScore;
@@ -170,6 +174,10 @@ function ApproverModeLeanline({ section }) {
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [selectedWorkers, setSelectedWorkers] = useState([]);
+  
+  // ----- THAY ĐỔI 1: Thêm state cho checkbox -----
+  const [searchAllSections, setSearchAllSections] = useState(false);
+  
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
   const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -217,19 +225,39 @@ function ApproverModeLeanline({ section }) {
   }, [section]);
   useEffect(() => setPage(1), [reviewRows.length]);
 
+  // ----- THAY ĐỔI 2: Cập nhật hàm searchByApprover -----
   async function searchByApprover() {
-    const id = approverIdInput.trim();
-    if (!id) return alert("Nhập MSNV người duyệt.");
+    const q = approverIdInput.trim();
+    if (!q) return alert("Nhập Tên hoặc MSNV người duyệt.");
+    
     setLoadingSearch(true);
-    const { data, error } = await supabase
-      .from("users")
-      .select("msnv, full_name, approver_msnv, approver_name")
-      .eq("approver_msnv", id);
+    let query;
+
+    if (isNaN(Number(q))) {
+      // Tìm theo Tên người duyệt
+      query = supabase.from("users")
+        .select("msnv, full_name, approver_msnv, approver_name")
+        .ilike("approver_name", `%${q}%`);
+    } else {
+      // Tìm theo MSNV người duyệt
+      query = supabase.from("users")
+        .select("msnv, full_name, approver_msnv, approver_name")
+        .eq("approver_msnv", q);
+    }
+    
+    // Lọc theo section nếu không check "All sections"
+    if (!searchAllSections) {
+      query = query.eq("section", section); 
+    }
+
+    const { data, error } = await query.limit(100); // Thêm limit
     setLoadingSearch(false);
     if (error) return alert("Lỗi tải nhân viên: " + error.message);
     setSearchResults(data || []); 
     setSearchInput("");
   }
+  
+  // ----- THAY ĐỔI 3: Cập nhật hàm searchGlobal -----
   async function searchGlobal() {
     const q = searchInput.trim();
     if (!q) return alert("Nhập Tên hoặc MSNV nhân viên.");
@@ -240,12 +268,19 @@ function ApproverModeLeanline({ section }) {
     } else {
       query = supabase.from("users").select("msnv, full_name, approver_msnv, approver_name").eq("msnv", q);
     }
+    
+    // Lọc theo section nếu không check "All sections"
+    if (!searchAllSections) {
+      query = query.eq("section", section);
+    }
+
     const { data, error } = await query.limit(50);
     setLoadingSearch(false);
     if (error) return alert("Lỗi tìm nhân viên: " + error.message);
     setSearchResults(data || []);
     setApproverIdInput("");
   }
+  
   function addWorker(worker) {
     setSelectedWorkers(prev => {
       if (prev.find(w => w.msnv === worker.msnv)) return prev; 
@@ -380,14 +415,31 @@ function ApproverModeLeanline({ section }) {
               </div>
             </div>
             <div className="border rounded p-3 bg-white space-y-3 flex flex-col">
+              
+              {/* ----- THAY ĐỔI 4: Cập nhật JSX cho Cách 1 ----- */}
               <div className="flex items-end gap-2">
-                <div className="flex-1"><label className="text-sm font-medium">Cách 1: Tìm theo Người duyệt</label><input className="input w-full" value={approverIdInput} onChange={(e) => setApproverIdInput(e.target.value)} placeholder="Nhập MSNV người duyệt..." /></div>
-                <button className="btn" onClick={searchByApprover} disabled={loadingSearch}>{loadingSearch ? "..." : "Tải"}</button>
+                <div className="flex-1">
+                  <label className="text-sm font-medium">Cách 1: Tìm theo Người duyệt</label>
+                  <input className="input w-full" value={approverIdInput} onChange={(e) => setApproverIdInput(e.target.value)} placeholder="Nhập Tên hoặc MSNV người duyệt..." />
+                </div>
+                <div className="flex flex-col justify-end">
+                  <label className="text-sm flex items-center gap-1 mb-2">
+                    <input type="checkbox" checked={searchAllSections} onChange={(e) => setSearchAllSections(e.target.checked)} />
+                    All sections
+                  </label>
+                  <button className="btn" onClick={searchByApprover} disabled={loadingSearch}>{loadingSearch ? "..." : "Tải"}</button>
+                </div>
               </div>
+
+              {/* ----- THAY ĐỔI 5: Cập nhật JSX cho Cách 2 (label) ----- */}
               <div className="flex items-end gap-2">
-                <div className="flex-1"><label className="text-sm font-medium">Cách 2: Tìm theo Tên/MSNV</label><input className="input w-full" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Nhập Tên hoặc MSNV nhân viên..." /></div>
+                <div className="flex-1">
+                  <label className="text-sm font-medium">Cách 2: Tìm theo Tên/MSNV (NV)</label>
+                  <input className="input w-full" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Nhập Tên hoặc MSNV nhân viên..." />
+                </div>
                  <button className="btn" onClick={searchGlobal} disabled={loadingSearch}>{loadingSearch ? "..." : "Tìm"}</button>
               </div>
+              
               <div className="overflow-auto flex-1 border-t pt-2">
                 <h4 className="font-semibold mb-1">Kết quả tìm kiếm ({searchResults.length})</h4>
                 <table className="min-w-full text-sm">
@@ -415,6 +467,7 @@ function ApproverModeLeanline({ section }) {
         </>
       )}
 
+      {/* ... (Phần còn lại của Step 2 và 3 giữ nguyên) ... */}
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -532,6 +585,10 @@ function ApproverModeMolding({ section }) {
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [selectedWorkers, setSelectedWorkers] = useState([]);
+  
+  // ----- THAY ĐỔI 1 (Molding): Thêm state cho checkbox -----
+  const [searchAllSections, setSearchAllSections] = useState(false);
+  
   const selectedIds = useMemo(() => new Set(selectedWorkers.map(w => w.msnv)), [selectedWorkers]);
   const [prodRules, setProdRules] = useState([]);
   const [categoryOptions, setCategoryOptions] = useState([]);
@@ -579,18 +636,39 @@ function ApproverModeMolding({ section }) {
     [reviewRows, page]
   );
 
+  // ----- THAY ĐỔI 2 (Molding): Cập nhật hàm searchByApprover -----
   async function searchByApprover() {
-    const id = approverIdInput.trim();
-    if (!id) return alert("Nhập MSNV người duyệt.");
+    const q = approverIdInput.trim();
+    if (!q) return alert("Nhập Tên hoặc MSNV người duyệt.");
+    
     setLoadingSearch(true);
-    const { data, error } = await supabase.from("users")
-      .select("msnv, full_name, approver_msnv, approver_name")
-      .eq("approver_msnv", id);
+    let query;
+
+    if (isNaN(Number(q))) {
+      // Tìm theo Tên người duyệt
+      query = supabase.from("users")
+        .select("msnv, full_name, approver_msnv, approver_name")
+        .ilike("approver_name", `%${q}%`);
+    } else {
+      // Tìm theo MSNV người duyệt
+      query = supabase.from("users")
+        .select("msnv, full_name, approver_msnv, approver_name")
+        .eq("approver_msnv", q);
+    }
+    
+    // Lọc theo section nếu không check "All sections"
+    if (!searchAllSections) {
+      query = query.eq("section", section); // section ở đây sẽ là "MOLDING"
+    }
+
+    const { data, error } = await query.limit(100); // Thêm limit
     setLoadingSearch(false);
     if (error) return alert("Lỗi tải nhân viên: " + error.message);
     setSearchResults(data || []);
     setSearchInput(""); 
   }
+
+  // ----- THAY ĐỔI 3 (Molding): Cập nhật hàm searchGlobal -----
   async function searchGlobal() {
     const q = searchInput.trim();
     if (!q) return alert("Nhập Tên hoặc MSNV nhân viên.");
@@ -601,12 +679,19 @@ function ApproverModeMolding({ section }) {
     } else {
       query = supabase.from("users").select("msnv, full_name, approver_msnv, approver_name").eq("msnv", q);
     }
+    
+    // Lọc theo section nếu không check "All sections"
+    if (!searchAllSections) {
+      query = query.eq("section", section);
+    }
+    
     const { data, error } = await query.limit(50);
     setLoadingSearch(false);
     if (error) return alert("Lỗi tìm nhân viên: " + error.message);
     setSearchResults(data || []);
     setApproverIdInput("");
   }
+  
   function addWorker(worker) {
     setSelectedWorkers(prev => {
       if (prev.find(w => w.msnv === worker.msnv)) return prev;
@@ -689,6 +774,8 @@ function ApproverModeMolding({ section }) {
         downtime: r.downtime, mold_hours: r.mold_hours, output: r.output, defects: Number(r.defects || 0),
         q_score: scores.q_score, p_score: scores.p_score, day_score: scores.day_score, overflow,
         compliance_code: r.compliance_code, status: "approved", approved_at: now,
+        // SỬA LỖI: Cột violations không có trong bảng kpi_entries_molding
+        // violations: r.compliance_code === "NONE" ? 0 : 1, 
       };
     });
     const { error } = await supabase
@@ -742,14 +829,31 @@ function ApproverModeMolding({ section }) {
               </div>
             </div>
             <div className="border rounded p-3 bg-white space-y-3 flex flex-col">
+              
+              {/* ----- THAY ĐỔI 4 (Molding): Cập nhật JSX cho Cách 1 ----- */}
               <div className="flex items-end gap-2">
-                <div className="flex-1"><label className="text-sm font-medium">Cách 1: Tìm theo Người duyệt</label><input className="input w-full" value={approverIdInput} onChange={(e) => setApproverIdInput(e.target.value)} placeholder="Nhập MSNV người duyệt..." /></div>
-                <button className="btn" onClick={searchByApprover} disabled={loadingSearch}>{loadingSearch ? "..." : "Tải"}</button>
+                <div className="flex-1">
+                  <label className="text-sm font-medium">Cách 1: Tìm theo Người duyệt</label>
+                  <input className="input w-full" value={approverIdInput} onChange={(e) => setApproverIdInput(e.target.value)} placeholder="Nhập Tên hoặc MSNV người duyệt..." />
+                </div>
+                <div className="flex flex-col justify-end">
+                  <label className="text-sm flex items-center gap-1 mb-2">
+                    <input type="checkbox" checked={searchAllSections} onChange={(e) => setSearchAllSections(e.target.checked)} />
+                    All sections
+                  </label>
+                  <button className="btn" onClick={searchByApprover} disabled={loadingSearch}>{loadingSearch ? "..." : "Tải"}</button>
+                </div>
               </div>
+
+              {/* ----- THAY ĐỔI 5 (Molding): Cập nhật JSX cho Cách 2 (label) ----- */}
               <div className="flex items-end gap-2">
-                <div className="flex-1"><label className="text-sm font-medium">Cách 2: Tìm theo Tên/MSNV</label><input className="input w-full" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Nhập Tên hoặc MSNV nhân viên..." /></div>
+                <div className="flex-1">
+                  <label className="text-sm font-medium">Cách 2: Tìm theo Tên/MSNV (NV)</label>
+                  <input className="input w-full" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Nhập Tên hoặc MSNV nhân viên..." />
+                </div>
                  <button className="btn" onClick={searchGlobal} disabled={loadingSearch}>{loadingSearch ? "..." : "Tìm"}</button>
               </div>
+
               <div className="overflow-auto flex-1 border-t pt-2">
                 <h4 className="font-semibold mb-1">Kết quả tìm kiếm ({searchResults.length})</h4>
                 <table className="min-w-full text-sm">
@@ -777,6 +881,7 @@ function ApproverModeMolding({ section }) {
         </>
       )}
 
+      {/* ... (Phần còn lại của Step 2 và 3 giữ nguyên) ... */}
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -973,7 +1078,7 @@ function SelfModeMolding({ section }) {
   }
   
   function recompute(row) {
-    const scores = calculateScoresMolding(row, rulesByCat);
+    const scores = calculateScoresMolding(row, rulesByCat[row.category] || []); // <-- Sửa lỗi: truyền đúng rules
     return { 
         ...row, 
         q_score: scores.q_score,
@@ -998,7 +1103,7 @@ function SelfModeMolding({ section }) {
     if (!rows.length) return alert("Không có dữ liệu để lưu.");
     const now = new Date().toISOString();
     const payload = rows.map((r) => {
-      const finalScores = calculateScoresMolding(r, rulesByCat);
+      const finalScores = calculateScoresMolding(r, rulesByCat[r.category] || []); // <-- Sửa lỗi: truyền đúng rules
       const overflow = Math.max(0, finalScores.rawTotal - 15);
       return {
         section: r.section, date: r.date, ca: r.ca, worker_id: r.worker_id, worker_name: r.worker_name,
