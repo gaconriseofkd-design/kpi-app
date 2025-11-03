@@ -442,7 +442,7 @@ function EditReviewHybrid({
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <button className="btn btn-primary" onClick={saveBatch} disabled={saving || !selReview.size}>
-          {saving ? "Đang lưu..." : `Lưu đã chọn (${selReview.size})`}
+          {saving ? "Đang lưu!..." : `Lưu đã chọn (${selReview.size})`}
         </button>
         <button className="btn" onClick={resetToStep1} disabled={saving}>
           ‹ Quay lại (Nhập mới)
