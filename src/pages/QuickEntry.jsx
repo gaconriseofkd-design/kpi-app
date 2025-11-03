@@ -1132,7 +1132,7 @@ function SelfModeMolding({ section }) {
               </tbody>
             </table>
           </div>
-          <div className="flex justify-end gap-2"><button className="btn btn-primary" onClick={saveAll} disabled={saving}>{saving ? "Đang lưu..." : "Lưu tất cả"}</button></div>
+          <div className="flex justify-end gap-2"><button className="btn btn-primary" onClick={saveAll} disabled={saving}>{saving ? "Đang lưu!..." : "Lưu tất cả"}</button></div>
         </>
       )}
     </div>
