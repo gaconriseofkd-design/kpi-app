@@ -68,24 +68,18 @@ const toNum = (v, d = 0) => {
 /* ================= (Hết Helpers) ================= */
 
 
-/* ================= Approver Mode HYBRID (CẬP NHẬT LOGIC TÌM KIẾM) ================= */
+/* ================= Approver Mode HYBRID ================= */
 
 export default function ApproverModeHybrid({ section }) {
   const [step, setStep] = useState(1);
   const [prodRules, setProdRules] = useState([]); 
   const [categoryOptions, setCategoryOptions] = useState([]);
   const tableName = getTableName(section);
-  
-  // --- THAY ĐỔI 1: State cho 2 cách tìm kiếm ---
-  const [approverIdInput, setApproverIdInput] = useState(""); // Cách A
-  const [searchInput, setSearchInput] = useState("");       // Cách B
+  const [approverIdInput, setApproverIdInput] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [loadingSearch, setLoadingSearch] = useState(false);
-  
-  // --- THAY ĐỔI 2: State cho Kết quả & Đã chọn ---
-  const [searchResults, setSearchResults] = useState([]); // Vùng bên phải (Kết quả)
-  const [selectedWorkers, setSelectedWorkers] = useState([]); // Vùng bên trái (Đã chọn)
-
-  // (Các state khác giữ nguyên)
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedWorkers, setSelectedWorkers] = useState([]);
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
   const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -103,10 +97,8 @@ export default function ApproverModeHybrid({ section }) {
   const defaultCategory = section === 'LAMINATION' ? 'Lượt dán/giờ' : '';
   const [tplCategory, setTplCategory] = useState(defaultCategory);
 
-  // --- THAY ĐỔI 3: Memo để biết ai đã được chọn ---
   const selectedIds = useMemo(() => new Set(selectedWorkers.map(w => w.msnv)), [selectedWorkers]);
 
-  // (Các hàm tính điểm, helper... giữ nguyên)
   const scores = useMemo(
     () => deriveDayScoresHybrid({ 
         section, defects: tplDefects, category: tplCategory, output: tplOutput, 
@@ -125,7 +117,6 @@ export default function ApproverModeHybrid({ section }) {
     [reviewRows, page]
   );
   
-  // (Effects giữ nguyên)
   useEffect(() => {
     if (section === 'LAMINATION') setTplCategory('Lượt dán/giờ');
     else setTplCategory('');
@@ -146,10 +137,6 @@ export default function ApproverModeHybrid({ section }) {
     return () => { cancelled = true; };
   }, [section]);
   
-
-  // --- THAY ĐỔI 4: Hai hàm tìm kiếm riêng biệt ---
-  
-  // CÁCH A: TÌM THEO NGƯỜI DUYỆT
   async function searchByApprover() {
     const id = approverIdInput.trim();
     if (!id) return alert("Nhập MSNV người duyệt.");
@@ -162,8 +149,6 @@ export default function ApproverModeHybrid({ section }) {
     setSearchResults(data || []);
     setSearchInput(""); 
   }
-
-  // CÁCH B: TÌM THEO TÊN/MSNV (GLOBAL)
   async function searchGlobal() {
     const q = searchInput.trim();
     if (!q) return alert("Nhập Tên hoặc MSNV nhân viên.");
@@ -180,8 +165,6 @@ export default function ApproverModeHybrid({ section }) {
     setSearchResults(data || []);
     setApproverIdInput("");
   }
-  
-  // --- THAY ĐỔI 5: Hàm Thêm/Xoá NV khỏi danh sách "Đã chọn" ---
   function addWorker(worker) {
     setSelectedWorkers(prev => {
       if (prev.find(w => w.msnv === worker.msnv)) return prev;
@@ -192,19 +175,16 @@ export default function ApproverModeHybrid({ section }) {
     setSelectedWorkers(prev => prev.filter(w => w.msnv !== msnv));
   }
 
-  // ---- B2: Template KPI CHUNG ----
   function proceedToTemplate() {
     if (!prodRules.length) return alert("Không thể tải Rule tính điểm sản lượng. Vui lòng thử lại.");
     if (!selectedWorkers.length) return alert("Chưa chọn nhân viên nào.");
     setStep(2);
   }
 
-  // ---- B3: Build Review Rows ----
   function buildReviewRows() {
     if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
     if (!tplCategory) return alert("Vui lòng chọn Loại năng suất.");
     if (!selectedWorkers.length) return alert("Chưa chọn nhân viên.");
-
     const rows = selectedWorkers.map((w) => {
       const s = deriveDayScoresHybrid({ 
           section, defects: tplDefects, category: tplCategory, output: tplOutput, 
@@ -212,7 +192,7 @@ export default function ApproverModeHybrid({ section }) {
       }, prodRules);
       return {
         section, work_date: tplDate, shift: tplShift, msnv: w.msnv, hoten: w.full_name,
-        approver_id: w.approver_msnv || approverIdInput, // Lấy người duyệt của NV đó
+        approver_id: w.approver_msnv || approverIdInput,
         approver_name: w.approver_name,
         line: tplLine, work_hours: toNum(tplWorkHours), stop_hours: toNum(tplStopHours),
         output: toNum(tplOutput), category: tplCategory, defects: toNum(tplDefects),
@@ -225,7 +205,6 @@ export default function ApproverModeHybrid({ section }) {
     setStep(3);
   }
 
-  // (Các hàm updateRow, Paging, toggleAll, toggleOne, saveBatch giữ nguyên)
   function updateRow(i, key, val) {
     setReviewRows((old) => {
       const arr = old.slice(); const r0 = arr[i] || {};
@@ -283,12 +262,21 @@ export default function ApproverModeHybrid({ section }) {
     if (error) return alert("Lưu lỗi: " + error.message);
     alert(`Đã lưu ${payload.length} dòng (approved) vào bảng ${tableName}.`);
   }
+
+  // --- THÊM HÀM MỚI ---
+  function resetToStep1() {
+    setStep(1);
+    setSelectedWorkers([]);
+    setSearchResults([]);
+    setReviewRows([]);
+    setSelReview(new Set());
+    setSearchInput("");
+    setApproverIdInput("");
+  }
   
 
   return (
     <div className="space-y-4">
-      
-      {/* --- THAY ĐỔI 6: Cập nhật JSX cho Step 1 --- */}
       {step === 1 && (
         <>
           <div className="flex justify-end">
@@ -300,10 +288,7 @@ export default function ApproverModeHybrid({ section }) {
               Tiếp tục ({selectedWorkers.length}) ›
             </button>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ minHeight: '400px' }}>
-            
-            {/* CỘT BÊN TRÁI: DANH SÁCH ĐÃ CHỌN */}
             <div className="border rounded p-3 bg-white space-y-2 flex flex-col">
               <h3 className="font-semibold text-lg">Đã chọn ({selectedWorkers.length})</h3>
               <div className="overflow-auto flex-1">
@@ -321,20 +306,15 @@ export default function ApproverModeHybrid({ section }) {
                 </table>
               </div>
             </div>
-
-            {/* CỘT BÊN PHẢI: TÌM KIẾM & KẾT QUẢ */}
             <div className="border rounded p-3 bg-white space-y-3 flex flex-col">
-              {/* CÁCH A */}
               <div className="flex items-end gap-2">
                 <div className="flex-1"><label className="text-sm font-medium">Cách 1: Tìm theo Người duyệt</label><input className="input w-full" value={approverIdInput} onChange={(e) => setApproverIdInput(e.target.value)} placeholder="Nhập MSNV người duyệt..." /></div>
                 <button className="btn" onClick={searchByApprover} disabled={loadingSearch}>{loadingSearch ? "..." : "Tải"}</button>
               </div>
-              {/* CÁCH B */}
               <div className="flex items-end gap-2">
                 <div className="flex-1"><label className="text-sm font-medium">Cách 2: Tìm theo Tên/MSNV</label><input className="input w-full" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Nhập Tên hoặc MSNV nhân viên..." /></div>
                  <button className="btn" onClick={searchGlobal} disabled={loadingSearch}>{loadingSearch ? "..." : "Tìm"}</button>
               </div>
-              {/* KẾT QUẢ TÌM KIẾM */}
               <div className="overflow-auto flex-1 border-t pt-2">
                 <h4 className="font-semibold mb-1">Kết quả tìm kiếm ({searchResults.length})</h4>
                 <table className="min-w-full text-sm">
@@ -362,7 +342,6 @@ export default function ApproverModeHybrid({ section }) {
         </>
       )}
 
-      {/* ==== STEP 2: Template CHUNG + Preview (Giữ nguyên) ==== */}
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -390,22 +369,24 @@ export default function ApproverModeHybrid({ section }) {
         </div>
       )}
 
-      {/* ==== STEP 3: Bảng Review (Giữ nguyên) ==== */}
+      {/* ==== STEP 3: TRUYỀN HÀM MỚI XUỐNG ĐÂY ==== */}
       {step === 3 && (
         <EditReviewHybrid
           pageSize={pageSize} page={page} setPage={setPage} totalPages={totalPages} pageRows={pageRows}
           selReview={selReview} toggleAllReviewOnPage={toggleAllReviewOnPage} updateRow={updateRow}
           saveBatch={saveBatch} saving={saving} categoryOptions={categoryOptions}
+          resetToStep1={resetToStep1} // <-- THÊM PROP
         />
       )}
     </div>
   );
 }
 
-/* ==== Bảng Review (HYBRID) (Giữ nguyên) ==== */
+/* ==== Bảng Review (HYBRID) (CẬP NHẬT) ==== */
 function EditReviewHybrid({
     pageSize, page, setPage, totalPages, pageRows, selReview,
-    toggleAllReviewOnPage, toggleOneReview, updateRow, saveBatch, saving, categoryOptions
+    toggleAllReviewOnPage, toggleOneReview, updateRow, saveBatch, saving, categoryOptions,
+    resetToStep1 // <-- NHẬN PROP MỚI
   }) {
   const globalIndex = (idx) => (page - 1) * pageSize + idx;
   const allMachines = MACHINE_MAP.LAMINATION.concat( MACHINE_MAP.PREFITTING, MACHINE_MAP.BÀO, MACHINE_MAP.TÁCH ); 
@@ -415,6 +396,13 @@ function EditReviewHybrid({
         <button className="btn btn-primary" onClick={saveBatch} disabled={saving || !selReview.size}>
           {saving ? "Đang lưu..." : `Lưu đã chọn (${selReview.size})`}
         </button>
+
+        {/* --- THÊM NÚT MỚI --- */}
+        <button className="btn" onClick={resetToStep1} disabled={saving}>
+          ‹ Quay lại (Nhập mới)
+        </button>
+        {/* --- HẾT NÚT MỚI --- */}
+
         <div className="ml-auto flex items-center gap-3">
             <button className="btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>‹ Trước</button>
             <span>Trang {page}/{totalPages}</span>
@@ -448,7 +436,9 @@ function EditReviewHybrid({
                   <td className="p-2"><input type="number" className="input text-center" value={r.output} onChange={(e) => updateRow(gi, "output", e.target.value)} /></td>
                   <td className="p-2"><input type="number" className="input text-center" value={r.defects} onChange={(e) => updateRow(gi, "defects", e.target.value)} /></td>
                   <td className="p-2">{r.q_score}</td><td className="p-2">{r.p_score}</td><td className="p-2 font-semibold">{r.total_score}</td>
-                  <td className="p-2"><select className="input text-center" value={r.compliance} onChange={(e) => updateRow(gi, "compliance", e.target.value)}>{COMPLIANCE_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></td>
+                  <td className="p-2"><select className="input text-center" value={r.compliance} onChange={(e) => updateRow(gi, "compliance", e.target.value)}>{COMPLIANCE_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+                    </select>
+                  </td>
                 </tr>
               );
             })}

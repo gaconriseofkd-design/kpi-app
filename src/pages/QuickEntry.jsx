@@ -61,28 +61,16 @@ const LEANLINE_MACHINES = {
     "DEFAULT": ["LEAN-D1", "LEAN-D2", "LEAN-D3", "LEAN-D4", "LEAN-H1", "LEAN-H2"],
 }
 const getLeanlineMachines = (section) => LEANLINE_MACHINES[section] || LEANLINE_MACHINES.DEFAULT;
-
-
-// --- THÊM MỚI: Helper tính điểm cho Molding (tách ra từ code cũ) ---
-/**
- * @param {object} entry - { shift, working_input, mold_hours, output, defects, category }
- * @param {Array} allRules - Rules for MOLDING
- */
 function calculateScoresMolding(entry, allRules) {
     const { shift, working_input, mold_hours, output, defects, category } = entry;
-    
     const working_real = calcWorkingReal(shift, working_input);
-    
     let downtime = (working_real * 24 - toNum(mold_hours)) / 24;
     if (downtime > 1) downtime = 1;
     if (downtime < 0) downtime = 0;
-    
     const working_exact = Number((working_real - downtime).toFixed(2));
     const prod = working_exact > 0 ? toNum(output) / working_exact : 0; // Tỷ lệ NS
-
     const qScore = scoreByQuality(defects); 
     let pScore = 0;
-    
     const catRules = (allRules || []).filter(r => r.category === category);
     for (const r of catRules) {
         if (prod >= r.threshold) {
@@ -91,17 +79,10 @@ function calculateScoresMolding(entry, allRules) {
         }
     }
     const total = pScore + qScore;
-    
     return {
-        q_score: qScore,
-        p_score: pScore,
-        day_score: Math.min(15, total),
-        rawTotal: total,
-        // Dữ liệu trung gian
-        working_real: Number(working_real.toFixed(2)),
-        downtime: Number(downtime.toFixed(2)),
-        working_exact,
-        prodRate: prod
+        q_score: qScore, p_score: pScore, day_score: Math.min(15, total), rawTotal: total,
+        working_real: Number(working_real.toFixed(2)), downtime: Number(downtime.toFixed(2)),
+        working_exact, prodRate: prod
     };
 }
 /* ===== (Hết Helpers) ===== */
@@ -161,7 +142,7 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
 
 
 /* ======================================================================
-   APPROVER MODE — LEANLINE (Giữ nguyên logic từ lần trước)
+   APPROVER MODE — LEANLINE
    ====================================================================== */
 function ApproverModeLeanline({ section }) {
     
@@ -188,7 +169,12 @@ function ApproverModeLeanline({ section }) {
   const [page, setPage] = useState(1);
   const selectedIds = useMemo(() => new Set(selectedWorkers.map(w => w.msnv)), [selectedWorkers]);
 
-  // (Các hàm tính điểm, helper... giữ nguyên)
+  const calculateScores = (oe, defects, rules, sec, line) => {
+    const q = scoreByQuality(defects);
+    const p = scoreByProductivityLeanlineQuick(oe, rules, sec, line);
+    const total = q + p;
+    return { qScore: q, pScore: p, kpi: Math.min(15, total), rawTotal: total };
+  };
   const previewScores = useMemo(() => calculateScores(tplOE, tplDefects, prodRules, section, tplLine), [tplOE, tplDefects, prodRules, section, tplLine]);
   const tplQ = previewScores.qScore;
   const tplP = previewScores.pScore;
@@ -214,7 +200,6 @@ function ApproverModeLeanline({ section }) {
   }, [section]);
   useEffect(() => setPage(1), [reviewRows.length]);
 
-  // CÁCH A: TÌM THEO NGƯỜI DUYỆT
   async function searchByApprover() {
     const id = approverIdInput.trim();
     if (!id) return alert("Nhập MSNV người duyệt.");
@@ -228,7 +213,6 @@ function ApproverModeLeanline({ section }) {
     setSearchResults(data || []); 
     setSearchInput("");
   }
-  // CÁCH B: TÌM THEO TÊN/MSNV (GLOBAL)
   async function searchGlobal() {
     const q = searchInput.trim();
     if (!q) return alert("Nhập Tên hoặc MSNV nhân viên.");
@@ -245,7 +229,6 @@ function ApproverModeLeanline({ section }) {
     setSearchResults(data || []);
     setApproverIdInput("");
   }
-  // Hàm Thêm/Xoá NV
   function addWorker(worker) {
     setSelectedWorkers(prev => {
       if (prev.find(w => w.msnv === worker.msnv)) return prev; 
@@ -266,34 +249,20 @@ function ApproverModeLeanline({ section }) {
   function buildReviewRows() {
     if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
     if (!selectedWorkers.length) return alert("Chưa chọn nhân viên.");
-
     const rows = selectedWorkers.map((w) => {
       const scores = calculateScores(tplOE, tplDefects, prodRules, section, tplLine);
       return {
-      section,
-      work_date: tplDate,
-      shift: tplShift,
-      msnv: w.msnv,
-      hoten: w.full_name,
-      approver_id: w.approver_msnv || approverIdInput, 
-      approver_name: w.approver_name,
-      line: tplLine,
-      work_hours: toNum(tplWorkHours),
-      downtime: toNum(tplStopHours),
-      oe: toNum(tplOE),
-      defects: toNum(tplDefects),
-      q_score: scores.qScore,
-      p_score: scores.pScore,
-      total_score: scores.kpi,
-      compliance: tplCompliance,
-      status: "approved",
+      section, work_date: tplDate, shift: tplShift, msnv: w.msnv, hoten: w.full_name,
+      approver_id: w.approver_msnv || approverIdInput, approver_name: w.approver_name,
+      line: tplLine, work_hours: toNum(tplWorkHours), downtime: toNum(tplStopHours),
+      oe: toNum(tplOE), defects: toNum(tplDefects), q_score: scores.qScore,
+      p_score: scores.pScore, total_score: scores.kpi, compliance: tplCompliance, status: "approved",
     }});
     setReviewRows(rows);
     setSelReview(new Set(rows.map((_, i) => i)));
     setStep(3);
   }
 
-  // (Các hàm updateRow, toggleAllReviewOnPage, toggleOneReview, saveBatch giữ nguyên)
   function updateRow(i, key, val) {
     setReviewRows((old) => {
       const arr = old.slice();
@@ -312,11 +281,8 @@ function ApproverModeLeanline({ section }) {
       const next = new Set(prev);
       const start = (page - 1) * pageSize;
       const allOnPage = pageRows.every((_, idx) => next.has(start + idx));
-      if (allOnPage) {
-        pageRows.forEach((_, idx) => next.delete(start + idx));
-      } else {
-        pageRows.forEach((_, idx) => next.add(start + idx));
-      }
+      if (allOnPage) { pageRows.forEach((_, idx) => next.delete(start + idx)); } 
+      else { pageRows.forEach((_, idx) => next.add(start + idx)); }
       return next;
     });
   }
@@ -352,10 +318,22 @@ function ApproverModeLeanline({ section }) {
     setSaving(false);
     if (error) return alert("Lưu lỗi: " + error.message);
     alert(`Đã lưu ${payload.length} dòng (approved).`);
+    // KHÔNG reset về step 1 tự động
+  }
+
+  // --- THÊM HÀM MỚI ---
+  function resetToStep1() {
+    setStep(1);
+    setSelectedWorkers([]);
+    setSearchResults([]);
+    setReviewRows([]);
+    setSelReview(new Set());
+    setSearchInput("");
+    setApproverIdInput("");
   }
 
 
-  // --- JSX Render (Giữ nguyên) ---
+  // --- JSX Render ---
   return (
     <div className="space-y-4">
       {step === 1 && (
@@ -423,7 +401,6 @@ function ApproverModeLeanline({ section }) {
         </>
       )}
 
-      {/* ==== STEP 2: Template CHUNG + Preview (Giữ nguyên) ==== */}
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -456,12 +433,13 @@ function ApproverModeLeanline({ section }) {
         </div>
       )}
 
-      {/* ==== STEP 3: Bảng Review (Giữ nguyên) ==== */}
+      {/* ==== STEP 3: TRUYỀN HÀM MỚI XUỐNG ĐÂY ==== */}
       {step === 3 && (
         <EditReviewLeanline
           pageSize={pageSize} page={page} setPage={setPage} totalPages={totalPages} pageRows={pageRows}
           reviewRows={reviewRows} setReviewRows={setReviewRows} selReview={selReview} setSelReview={setSelReview}
           toggleAllReviewOnPage={toggleAllReviewOnPage} updateRow={updateRow} saveBatch={saveBatch} saving={saving}
+          resetToStep1={resetToStep1} // <-- THÊM PROP
         />
       )}
     </div>
@@ -469,10 +447,11 @@ function ApproverModeLeanline({ section }) {
 }
 
 
-/* ==== Bảng Review (LEANLINE) (Giữ nguyên) ==== */
+/* ==== Bảng Review (LEANLINE) (CẬP NHẬT) ==== */
 function EditReviewLeanline({
   pageSize, page, setPage, totalPages, pageRows, reviewRows, setReviewRows, selReview, setSelReview,
   toggleAllReviewOnPage, toggleOneReview, updateRow, saveBatch, saving,
+  resetToStep1 // <-- NHẬN PROP MỚI
 }) {
   const { section } = useKpiSection();
   const currentMachines = useMemo(() => getLeanlineMachines(section), [section]);
@@ -483,6 +462,13 @@ function EditReviewLeanline({
         <button className="btn btn-primary" onClick={saveBatch} disabled={saving || !selReview.size}>
           {saving ? "Đang lưu..." : `Lưu đã chọn (${selReview.size})`}
         </button>
+        
+        {/* --- THÊM NÚT MỚI --- */}
+        <button className="btn" onClick={resetToStep1} disabled={saving}>
+          ‹ Quay lại (Nhập mới)
+        </button>
+        {/* --- HẾT NÚT MỚI --- */}
+        
         <div className="ml-auto flex items-center gap-3">
           <button className="btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>‹ Trước</button>
           <span>Trang {page}/{totalPages}</span>
@@ -528,23 +514,18 @@ function EditReviewLeanline({
 
 
 /* ======================================================================
-   APPROVER MODE — MOLDING (NÂNG CẤP LÊN GIỐNG LEANLINE)
+   APPROVER MODE — MOLDING
    ====================================================================== */
 function ApproverModeMolding({ section }) {
   const [step, setStep] = useState(1);
-
-  // --- Step 1: Tìm kiếm (Logic mới) ---
   const [approverIdInput, setApproverIdInput] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [selectedWorkers, setSelectedWorkers] = useState([]);
   const selectedIds = useMemo(() => new Set(selectedWorkers.map(w => w.msnv)), [selectedWorkers]);
-
-  // --- Step 2: Template ---
   const [prodRules, setProdRules] = useState([]);
   const [categoryOptions, setCategoryOptions] = useState([]);
-  
   const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [tplShift, setTplShift] = useState("Ca 1");
   const [tplWorkingInput, setTplWorkingInput] = useState(8);
@@ -553,50 +534,35 @@ function ApproverModeMolding({ section }) {
   const [tplCategory, setTplCategory] = useState("");
   const [tplDefects, setTplDefects] = useState(0);
   const [tplCompliance, setTplCompliance] = useState("NONE");
-  
-  // --- Step 3: Review ---
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
   const [saving, setSaving] = useState(false);
   const pageSize = 50;
   const [page, setPage] = useState(1);
 
-  // --- Load Rules & Categories cho Molding ---
   useEffect(() => {
-    supabase
-      .from("kpi_rule_productivity")
-      .select("category, threshold, score")
-      .eq("section", "MOLDING")
-      .eq("active", true)
-      .order("category", { ascending: true })
-      .order("threshold", { ascending: false })
+    supabase.from("kpi_rule_productivity").select("category, threshold, score")
+      .eq("section", "MOLDING").eq("active", true)
+      .order("category", { ascending: true }).order("threshold", { ascending: false })
       .then(({ data, error }) => {
         if (error) return console.error(error);
-        const rules = data || [];
-        setProdRules(rules);
+        const rules = data || []; setProdRules(rules);
         const list = [...new Set(rules.map((r) => r.category).filter(Boolean))];
         setCategoryOptions(list);
         if (list.length > 0) setTplCategory(list[0]);
       });
   }, []);
   
-  // --- Tính điểm Preview (Step 2) ---
   const previewScores = useMemo(() => {
     return calculateScoresMolding({
-        shift: tplShift,
-        working_input: tplWorkingInput,
-        mold_hours: tplMoldHours,
-        output: tplOutput,
-        defects: tplDefects,
-        category: tplCategory
+        shift: tplShift, working_input: tplWorkingInput, mold_hours: tplMoldHours,
+        output: tplOutput, defects: tplDefects, category: tplCategory
     }, prodRules);
   }, [tplShift, tplWorkingInput, tplMoldHours, tplOutput, tplDefects, tplCategory, prodRules]);
-
   const tplQ = previewScores.q_score;
   const tplP = previewScores.p_score;
   const tplKPI = previewScores.day_score;
 
-  /* Paging (Step 3) */
   useEffect(() => setPage(1), [reviewRows.length]);
   const totalPages = Math.max(1, Math.ceil(reviewRows.length / pageSize));
   const pageRows = useMemo(
@@ -604,8 +570,6 @@ function ApproverModeMolding({ section }) {
     [reviewRows, page]
   );
 
-
-  // --- Step 1: Functions (Tìm kiếm) ---
   async function searchByApprover() {
     const id = approverIdInput.trim();
     if (!id) return alert("Nhập MSNV người duyệt.");
@@ -649,71 +613,36 @@ function ApproverModeMolding({ section }) {
     setStep(2);
   }
 
-  // --- Step 2: Function (Build Review) ---
   function buildReviewRows() {
     if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
     if (!tplCategory) return alert("Chọn Loại hàng.");
-
     const rows = selectedWorkers.map((w) => {
-      const scores = previewScores; // Dùng điểm đã tính ở preview
-      
+      const scores = previewScores;
       return {
-        section,
-        work_date: tplDate,
-        shift: tplShift,
-        msnv: w.msnv,
-        hoten: w.full_name,
-        approver_msnv: w.approver_msnv || approverIdInput,
-        approver_name: w.approver_name,
-        
-        // Dữ liệu Molding từ Template
-        category: tplCategory,
-        working_input: toNum(tplWorkingInput),
-        mold_hours: toNum(tplMoldHours),
-        output: toNum(tplOutput),
-        defects: toNum(tplDefects),
-        compliance_code: tplCompliance,
-
-        // Điểm đã tính
-        q_score: scores.q_score,
-        p_score: scores.p_score,
-        day_score: scores.day_score,
-        
-        // Dữ liệu trung gian
-        working_real: scores.working_real,
-        downtime: scores.downtime,
-        working_exact: scores.working_exact,
-        
-        status: "approved",
+        section, work_date: tplDate, shift: tplShift, msnv: w.msnv, hoten: w.full_name,
+        approver_msnv: w.approver_msnv || approverIdInput, approver_name: w.approver_name,
+        category: tplCategory, working_input: toNum(tplWorkingInput),
+        mold_hours: toNum(tplMoldHours), output: toNum(tplOutput), defects: toNum(tplDefects),
+        compliance_code: tplCompliance, q_score: scores.q_score, p_score: scores.p_score,
+        day_score: scores.day_score, working_real: scores.working_real,
+        downtime: scores.downtime, working_exact: scores.working_exact, status: "approved",
       };
     });
-
     setReviewRows(rows);
     setSelReview(new Set(rows.map((_, i) => i)));
     setStep(3);
   }
 
-  // --- Step 3: Functions (Update/Save) ---
   function updateRow(i, key, val) {
     setReviewRows((old) => {
       const arr = old.slice();
       const r0 = arr[i] || {};
-      
       const r = ["compliance_code", "category", "shift", "work_date"].includes(key)
-          ? { ...r0, [key]: val }
-          : { ...r0, [key]: toNum(val, 0) };
-
-      // Tính lại điểm khi 1 dòng thay đổi
+          ? { ...r0, [key]: val } : { ...r0, [key]: toNum(val, 0) };
       const scores = calculateScoresMolding(r, prodRules);
-
       arr[i] = { 
-          ...r, 
-          q_score: scores.q_score, 
-          p_score: scores.p_score, 
-          day_score: scores.day_score,
-          working_real: scores.working_real,
-          downtime: scores.downtime,
-          working_exact: scores.working_exact,
+          ...r, q_score: scores.q_score, p_score: scores.p_score, day_score: scores.day_score,
+          working_real: scores.working_real, downtime: scores.downtime, working_exact: scores.working_exact,
       };
       return arr;
     });
@@ -738,39 +667,19 @@ function ApproverModeMolding({ section }) {
   async function saveBatch() {
     const idxs = Array.from(selReview).sort((a, b) => a - b);
     if (!idxs.length) return alert("Chưa chọn dòng để lưu.");
-
     setSaving(true);
     const list = idxs.map((i) => reviewRows[i]);
     const now = new Date().toISOString();
-
     const payload = list.map((r) => {
-      // Tính lại điểm lần cuối để lấy overflow
       const scores = calculateScoresMolding(r, prodRules);
       const overflow = Math.max(0, scores.rawTotal - 15);
-      
       return {
-        section: r.section,
-        date: r.work_date,
-        ca: r.shift,
-        worker_id: r.msnv,
-        worker_name: r.hoten,
-        approver_msnv: r.approver_msnv,
-        approver_name: r.approver_name,
-        category: r.category,
-        working_input: r.working_input,
-        working_real: r.working_real,
-        working_exact: r.working_exact,
-        downtime: r.downtime,
-        mold_hours: r.mold_hours,
-        output: r.output,
-        defects: Number(r.defects || 0),
-        q_score: scores.q_score,
-        p_score: scores.p_score,
-        day_score: scores.day_score,
-        overflow,
-        compliance_code: r.compliance_code,
-        status: "approved",
-        approved_at: now,
+        section: r.section, date: r.work_date, ca: r.shift, worker_id: r.msnv, worker_name: r.hoten,
+        approver_msnv: r.approver_msnv, approver_name: r.approver_name, category: r.category,
+        working_input: r.working_input, working_real: r.working_real, working_exact: r.working_exact,
+        downtime: r.downtime, mold_hours: r.mold_hours, output: r.output, defects: Number(r.defects || 0),
+        q_score: scores.q_score, p_score: scores.p_score, day_score: scores.day_score, overflow,
+        compliance_code: r.compliance_code, status: "approved", approved_at: now,
       };
     });
     const { error } = await supabase
@@ -781,11 +690,20 @@ function ApproverModeMolding({ section }) {
     alert(`Đã lưu ${payload.length} dòng (approved).`);
   }
 
+  // --- THÊM HÀM MỚI ---
+  function resetToStep1() {
+    setStep(1);
+    setSelectedWorkers([]);
+    setSearchResults([]);
+    setReviewRows([]);
+    setSelReview(new Set());
+    setSearchInput("");
+    setApproverIdInput("");
+  }
+
   /* UI */
   return (
     <div className="space-y-4">
-      
-      {/* --- Step 1: Tìm kiếm (Giống Leanline) --- */}
       {step === 1 && (
         <>
           <div className="flex justify-end">
@@ -851,10 +769,8 @@ function ApproverModeMolding({ section }) {
         </>
       )}
 
-      {/* --- Step 2: Template (NÂNG CẤP) --- */}
       {step === 2 && (
         <div className="space-y-4">
-          {/* Inputs */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div><label>Ngày</label><input type="date" className="input" value={tplDate} onChange={(e) => setTplDate(e.target.value)} /></div>
             <div><label>Ca</label><select className="input" value={tplShift} onChange={(e) => setTplShift(e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></div>
@@ -865,26 +781,19 @@ function ApproverModeMolding({ section }) {
             <div><label>Sản lượng / ca</label><input type="number" className="input" value={tplOutput} onChange={e => setTplOutput(e.target.value)} /></div>
             <div><label>Số đôi phế</label><input type="number" className="input" value={tplDefects} onChange={e => setTplDefects(e.target.value)} /></div>
           </div>
-
-          {/* Preview Scores */}
           <div className="rounded border p-3 bg-gray-50">
             <div className="flex gap-6 text-sm flex-wrap">
               <div>Giờ T Tế: <b>{previewScores.working_real}</b></div>
               <div>Giờ C Xác: <b>{previewScores.working_exact}</b></div>
               <div>Tỷ lệ NS: <b>{previewScores.prodRate.toFixed(2)}</b></div>
-              <div>Q: <b>{tplQ}</b></div>
-              <div>P: <b>{tplP}</b></div>
+              <div>Q: <b>{tplQ}</b></div><div>P: <b>{tplP}</b></div>
               <div>KPI (Max 15): <b>{tplKPI}</b></div>
             </div>
           </div>
-
-          {/* Preview Table */}
           <div className="overflow-auto border rounded">
             <table className="min-w-full text-sm">
               <thead className="bg-gray-50 text-center">
-                <tr>
-                  <th>MSNV</th><th>Họ tên</th><th>Loại hàng</th><th>Giờ nhập</th><th>Giờ khuôn</th><th>Sản lượng</th><th>Phế</th><th>Q</th><th>P</th><th>KPI</th><th>Tuân thủ</th>
-                </tr>
+                <tr><th>MSNV</th><th>Họ tên</th><th>Loại hàng</th><th>Giờ nhập</th><th>Giờ khuôn</th><th>Sản lượng</th><th>Phế</th><th>Q</th><th>P</th><th>KPI</th><th>Tuân thủ</th></tr>
               </thead>
               <tbody className="text-center">
                 {selectedWorkers.map((w) => (
@@ -898,7 +807,6 @@ function ApproverModeMolding({ section }) {
               </tbody>
             </table>
           </div>
-
           <div className="flex justify-between">
             <button className="btn" onClick={() => { setStep(1); setSearchResults([]); }}>‹ Quay lại</button>
             <button className="btn btn-primary" onClick={buildReviewRows}>Tạo danh sách Review ›</button>
@@ -906,15 +814,15 @@ function ApproverModeMolding({ section }) {
         </div>
       )}
 
-      {/* --- Step 3: Editable Review (NÂNG CẤP) --- */}
+      {/* --- Step 3: TRUYỀN HÀM MỚI XUỐNG ĐÂY --- */}
       {step === 3 && (
         <EditReviewMolding
           pageSize={pageSize} page={page} setPage={setPage} totalPages={totalPages} pageRows={pageRows}
-          selReview={selReview} toggleAllReviewOnPage={toggleAllReviewOnPage} toggleOneReview={toggleOneReview}
+          selReview={selReview} toggleAllReviewOnPage={toggleAllReviewOnPage}
           saveBatch={saveBatch} saving={saving}
-          // Props mới
           updateRow={updateRow}
           categoryOptions={categoryOptions}
+          resetToStep1={resetToStep1} // <-- THÊM PROP
         />
       )}
     </div>
@@ -922,11 +830,12 @@ function ApproverModeMolding({ section }) {
 }
 
 
-/* --- THÊM MỚI: Bảng Review (MOLDING) (Bản sao của EditReviewLeanline) --- */
+/* --- Bảng Review (MOLDING) (CẬP NHẬT) --- */
 function EditReviewMolding({
   pageSize, page, setPage, totalPages, pageRows, selReview,
   toggleAllReviewOnPage, toggleOneReview, updateRow, saveBatch, saving,
-  categoryOptions 
+  categoryOptions, 
+  resetToStep1 // <-- NHẬN PROP MỚI
 }) {
   const globalIndex = (idx) => (page - 1) * pageSize + idx;
 
@@ -936,6 +845,13 @@ function EditReviewMolding({
         <button className="btn btn-primary" onClick={saveBatch} disabled={saving || !selReview.size}>
           {saving ? "Đang lưu..." : `Lưu đã chọn (${selReview.size})`}
         </button>
+        
+        {/* --- THÊM NÚT MỚI --- */}
+        <button className="btn" onClick={resetToStep1} disabled={saving}>
+          ‹ Quay lại (Nhập mới)
+        </button>
+        {/* --- HẾT NÚT MỚI --- */}
+
         <div className="ml-auto flex items-center gap-3">
           <button className="btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>‹ Trước</button>
           <span>Trang {page}/{totalPages}</span>
@@ -1056,7 +972,15 @@ function SelfModeMolding({ section }) {
   // Sử dụng helper tính điểm mới
   function recompute(row) {
     const scores = calculateScoresMolding(row, rulesByCat);
-    return { ...row, ...scores, day_score: scores.kpi };
+    return { 
+        ...row, 
+        q_score: scores.q_score,
+        p_score: scores.p_score,
+        day_score: scores.day_score,
+        working_real: scores.working_real,
+        downtime: scores.downtime,
+        working_exact: scores.working_exact,
+    };
   }
 
   function update(i, key, val) {
@@ -1132,7 +1056,7 @@ function SelfModeMolding({ section }) {
               </tbody>
             </table>
           </div>
-          <div className="flex justify-end gap-2"><button className="btn btn-primary" onClick={saveAll} disabled={saving}>{saving ? "Đang lưu!..." : "Lưu tất cả"}</button></div>
+          <div className="flex justify-end gap-2"><button className="btn btn-primary" onClick={saveAll} disabled={saving}>{saving ? "Đang lưu..." : "Lưu tất cả"}</button></div>
         </>
       )}
     </div>
