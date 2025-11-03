@@ -61,6 +61,49 @@ const LEANLINE_MACHINES = {
     "DEFAULT": ["LEAN-D1", "LEAN-D2", "LEAN-D3", "LEAN-D4", "LEAN-H1", "LEAN-H2"],
 }
 const getLeanlineMachines = (section) => LEANLINE_MACHINES[section] || LEANLINE_MACHINES.DEFAULT;
+
+
+// --- THÊM MỚI: Helper tính điểm cho Molding (tách ra từ code cũ) ---
+/**
+ * @param {object} entry - { shift, working_input, mold_hours, output, defects, category }
+ * @param {Array} allRules - Rules for MOLDING
+ */
+function calculateScoresMolding(entry, allRules) {
+    const { shift, working_input, mold_hours, output, defects, category } = entry;
+    
+    const working_real = calcWorkingReal(shift, working_input);
+    
+    let downtime = (working_real * 24 - toNum(mold_hours)) / 24;
+    if (downtime > 1) downtime = 1;
+    if (downtime < 0) downtime = 0;
+    
+    const working_exact = Number((working_real - downtime).toFixed(2));
+    const prod = working_exact > 0 ? toNum(output) / working_exact : 0; // Tỷ lệ NS
+
+    const qScore = scoreByQuality(defects); 
+    let pScore = 0;
+    
+    const catRules = (allRules || []).filter(r => r.category === category);
+    for (const r of catRules) {
+        if (prod >= r.threshold) {
+            pScore = r.score;
+            break;
+        }
+    }
+    const total = pScore + qScore;
+    
+    return {
+        q_score: qScore,
+        p_score: pScore,
+        day_score: Math.min(15, total),
+        rawTotal: total,
+        // Dữ liệu trung gian
+        working_real: Number(working_real.toFixed(2)),
+        downtime: Number(downtime.toFixed(2)),
+        working_exact,
+        prodRate: prod
+    };
+}
 /* ===== (Hết Helpers) ===== */
 
 
@@ -118,23 +161,17 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
 
 
 /* ======================================================================
-   APPROVER MODE — LEANLINE (CẬP NHẬT LOGIC TÌM KIẾM)
+   APPROVER MODE — LEANLINE (Giữ nguyên logic từ lần trước)
    ====================================================================== */
 function ApproverModeLeanline({ section }) {
     
   const [step, setStep] = useState(1);
   const [prodRules, setProdRules] = useState([]); 
-  
-  // --- THAY ĐỔI 1: State cho 2 cách tìm kiếm ---
-  const [approverIdInput, setApproverIdInput] = useState(""); // Cách A
-  const [searchInput, setSearchInput] = useState("");       // Cách B
+  const [approverIdInput, setApproverIdInput] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [loadingSearch, setLoadingSearch] = useState(false);
-  
-  // --- THAY ĐỔI 2: State cho Kết quả & Đã chọn ---
-  const [searchResults, setSearchResults] = useState([]); // Vùng bên phải (Kết quả)
-  const [selectedWorkers, setSelectedWorkers] = useState([]); // Vùng bên trái (Đã chọn)
-
-  // (Các state khác giữ nguyên)
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedWorkers, setSelectedWorkers] = useState([]);
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
   const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -149,17 +186,9 @@ function ApproverModeLeanline({ section }) {
   const [saving, setSaving] = useState(false);
   const pageSize = 50;
   const [page, setPage] = useState(1);
-  
-  // --- THAY ĐỔI 3: Memo để biết ai đã được chọn ---
   const selectedIds = useMemo(() => new Set(selectedWorkers.map(w => w.msnv)), [selectedWorkers]);
 
   // (Các hàm tính điểm, helper... giữ nguyên)
-  const calculateScores = (oe, defects, rules, sec, line) => {
-    const q = scoreByQuality(defects);
-    const p = scoreByProductivityLeanlineQuick(oe, rules, sec, line);
-    const total = q + p;
-    return { qScore: q, pScore: p, kpi: Math.min(15, total), rawTotal: total };
-  };
   const previewScores = useMemo(() => calculateScores(tplOE, tplDefects, prodRules, section, tplLine), [tplOE, tplDefects, prodRules, section, tplLine]);
   const tplQ = previewScores.qScore;
   const tplP = previewScores.pScore;
@@ -174,9 +203,7 @@ function ApproverModeLeanline({ section }) {
     (async () => {
       const { data, error } = await supabase
         .from("kpi_rule_productivity")
-        .select("*")
-        .eq("active", true)
-        .eq("section", section)
+        .select("*").eq("active", true).eq("section", section)
         .order("threshold", { ascending: false });
       if (!cancelled) {
         if (error) console.error("Load rules error:", error);
@@ -187,55 +214,38 @@ function ApproverModeLeanline({ section }) {
   }, [section]);
   useEffect(() => setPage(1), [reviewRows.length]);
 
-  
-  // --- THAY ĐỔI 4: Hai hàm tìm kiếm riêng biệt ---
-
   // CÁCH A: TÌM THEO NGƯỜI DUYỆT
   async function searchByApprover() {
     const id = approverIdInput.trim();
     if (!id) return alert("Nhập MSNV người duyệt.");
     setLoadingSearch(true);
-    
-    // Luôn query cột approver_msnv trong bảng users
     const { data, error } = await supabase
       .from("users")
       .select("msnv, full_name, approver_msnv, approver_name")
       .eq("approver_msnv", id);
-      
     setLoadingSearch(false);
     if (error) return alert("Lỗi tải nhân viên: " + error.message);
-    setSearchResults(data || []); // Cập nhật vùng kết quả
-    setSearchInput(""); // Xóa ô tìm kiếm còn lại
+    setSearchResults(data || []); 
+    setSearchInput("");
   }
-
   // CÁCH B: TÌM THEO TÊN/MSNV (GLOBAL)
   async function searchGlobal() {
     const q = searchInput.trim();
     if (!q) return alert("Nhập Tên hoặc MSNV nhân viên.");
     setLoadingSearch(true);
-
     let query;
     if (isNaN(Number(q))) {
-      // Nếu là chữ -> tìm theo tên
-      query = supabase.from("users")
-        .select("msnv, full_name, approver_msnv, approver_name")
-        .ilike("full_name", `%${q}%`);
+      query = supabase.from("users").select("msnv, full_name, approver_msnv, approver_name").ilike("full_name", `%${q}%`);
     } else {
-      // Nếu là số -> tìm theo MSNV
-      query = supabase.from("users")
-        .select("msnv, full_name, approver_msnv, approver_name")
-        .eq("msnv", q);
+      query = supabase.from("users").select("msnv, full_name, approver_msnv, approver_name").eq("msnv", q);
     }
-    
-    const { data, error } = await query.limit(50); // Giới hạn 50 kết quả
-      
+    const { data, error } = await query.limit(50);
     setLoadingSearch(false);
     if (error) return alert("Lỗi tìm nhân viên: " + error.message);
-    setSearchResults(data || []); // Cập nhật vùng kết quả
-    setApproverIdInput(""); // Xóa ô tìm kiếm còn lại
+    setSearchResults(data || []);
+    setApproverIdInput("");
   }
-  
-  // --- THAY ĐỔI 5: Hàm Thêm/Xoá NV khỏi danh sách "Đã chọn" ---
+  // Hàm Thêm/Xoá NV
   function addWorker(worker) {
     setSelectedWorkers(prev => {
       if (prev.find(w => w.msnv === worker.msnv)) return prev; 
@@ -265,7 +275,6 @@ function ApproverModeLeanline({ section }) {
       shift: tplShift,
       msnv: w.msnv,
       hoten: w.full_name,
-      // Dùng approver_id của nhân viên đó, hoặc fallback về người tìm (nếu tìm theo cách A)
       approver_id: w.approver_msnv || approverIdInput, 
       approver_name: w.approver_name,
       line: tplLine,
@@ -279,7 +288,6 @@ function ApproverModeLeanline({ section }) {
       compliance: tplCompliance,
       status: "approved",
     }});
-
     setReviewRows(rows);
     setSelReview(new Set(rows.map((_, i) => i)));
     setStep(3);
@@ -330,25 +338,12 @@ function ApproverModeLeanline({ section }) {
       const rawScores = calculateScores(r.oe, r.defects, prodRules, section, r.line);
       const overflow = Math.max(0, rawScores.rawTotal - 15);
       return {
-        date: r.work_date,
-        ca: r.shift,
-        worker_id: r.msnv,
-        worker_name: r.hoten,
-        approver_id: r.approver_id,
-        approver_name: r.approver_name,
-        line: r.line,
-        work_hours: Number(r.work_hours || 0),
-        stop_hours: Number(r.downtime || 0),
-        oe: Number(r.oe || 0),
-        defects: Number(r.defects || 0),
-        p_score: r.p_score,
-        q_score: r.q_score,
-        day_score: r.total_score,
-        overflow,
-        compliance_code: r.compliance,
-        section: r.section,
-        status: "approved",
-        approved_at: now,
+        date: r.work_date, ca: r.shift, worker_id: r.msnv, worker_name: r.hoten,
+        approver_id: r.approver_id, approver_name: r.approver_name, line: r.line,
+        work_hours: Number(r.work_hours || 0), stop_hours: Number(r.downtime || 0),
+        oe: Number(r.oe || 0), defects: Number(r.defects || 0),
+        p_score: r.p_score, q_score: r.q_score, day_score: r.total_score, overflow,
+        compliance_code: r.compliance, section: r.section, status: "approved", approved_at: now,
       };
     });
     const { error } = await supabase
@@ -360,11 +355,9 @@ function ApproverModeLeanline({ section }) {
   }
 
 
-  // --- JSX Render ---
+  // --- JSX Render (Giữ nguyên) ---
   return (
     <div className="space-y-4">
-      
-      {/* --- THAY ĐỔI 6: Cập nhật JSX cho Step 1 --- */}
       {step === 1 && (
         <>
           <div className="flex justify-end">
@@ -376,114 +369,56 @@ function ApproverModeLeanline({ section }) {
               Tiếp tục ({selectedWorkers.length}) ›
             </button>
           </div>
-
-          {/* VÙNG CHIA ĐÔI MỚI */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ minHeight: '400px' }}>
-            
-            {/* CỘT BÊN TRÁI: DANH SÁCH ĐÃ CHỌN */}
             <div className="border rounded p-3 bg-white space-y-2 flex flex-col">
               <h3 className="font-semibold text-lg">Đã chọn ({selectedWorkers.length})</h3>
               <div className="overflow-auto flex-1">
                 <table className="min-w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="p-2 text-left">MSNV</th>
-                      <th className="p-2 text-left">Họ & tên</th>
-                      <th className="p-2 text-center">Xoá</th>
-                    </tr>
-                  </thead>
+                  <thead className="bg-gray-50"><tr><th className="p-2 text-left">MSNV</th><th className="p-2 text-left">Họ & tên</th><th className="p-2 text-center">Xoá</th></tr></thead>
                   <tbody>
                     {selectedWorkers.map((w) => (
                       <tr key={w.msnv} className="border-t">
-                        <td className="p-2">{w.msnv}</td>
-                        <td className="p-2">{w.full_name}</td>
-                        <td className="p-2 text-center">
-                          <button className="btn bg-red-100 text-red-700 hover:bg-red-200" style={{padding: '4px 8px'}} onClick={() => removeWorker(w.msnv)}>Xoá</button>
-                        </td>
+                        <td className="p-2">{w.msnv}</td><td className="p-2">{w.full_name}</td>
+                        <td className="p-2 text-center"><button className="btn bg-red-100 text-red-700 hover:bg-red-200" style={{padding: '4px 8px'}} onClick={() => removeWorker(w.msnv)}>Xoá</button></td>
                       </tr>
                     ))}
-                    {!selectedWorkers.length && (
-                      <tr><td colSpan={3} className="p-4 text-center text-gray-500">Chưa chọn nhân viên nào.</td></tr>
-                    )}
+                    {!selectedWorkers.length && (<tr><td colSpan={3} className="p-4 text-center text-gray-500">Chưa chọn nhân viên nào.</td></tr>)}
                   </tbody>
                 </table>
               </div>
             </div>
-
-            {/* CỘT BÊN PHẢI: TÌM KIẾM & KẾT QUẢ */}
             <div className="border rounded p-3 bg-white space-y-3 flex flex-col">
-              
-              {/* CÁCH A */}
               <div className="flex items-end gap-2">
-                <div className="flex-1">
-                  <label className="text-sm font-medium">Cách 1: Tìm theo Người duyệt</label>
-                  <input
-                    className="input w-full"
-                    value={approverIdInput}
-                    onChange={(e) => setApproverIdInput(e.target.value)}
-                    placeholder="Nhập MSNV người duyệt..."
-                  />
-                </div>
-                <button className="btn" onClick={searchByApprover} disabled={loadingSearch}>
-                  {loadingSearch ? "..." : "Tải"}
-                </button>
+                <div className="flex-1"><label className="text-sm font-medium">Cách 1: Tìm theo Người duyệt</label><input className="input w-full" value={approverIdInput} onChange={(e) => setApproverIdInput(e.target.value)} placeholder="Nhập MSNV người duyệt..." /></div>
+                <button className="btn" onClick={searchByApprover} disabled={loadingSearch}>{loadingSearch ? "..." : "Tải"}</button>
               </div>
-
-              {/* CÁCH B */}
               <div className="flex items-end gap-2">
-                <div className="flex-1">
-                  <label className="text-sm font-medium">Cách 2: Tìm theo Tên/MSNV</label>
-                  <input 
-                    className="input w-full" 
-                    value={searchInput} 
-                    onChange={(e) => setSearchInput(e.target.value)}
-                    placeholder="Nhập Tên hoặc MSNV nhân viên..."
-                  />
-                </div>
-                 <button className="btn" onClick={searchGlobal} disabled={loadingSearch}>
-                   {loadingSearch ? "..." : "Tìm"}
-                </button>
+                <div className="flex-1"><label className="text-sm font-medium">Cách 2: Tìm theo Tên/MSNV</label><input className="input w-full" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Nhập Tên hoặc MSNV nhân viên..." /></div>
+                 <button className="btn" onClick={searchGlobal} disabled={loadingSearch}>{loadingSearch ? "..." : "Tìm"}</button>
               </div>
-
-              {/* KẾT QUẢ TÌM KIẾM */}
               <div className="overflow-auto flex-1 border-t pt-2">
                 <h4 className="font-semibold mb-1">Kết quả tìm kiếm ({searchResults.length})</h4>
                 <table className="min-w-full text-sm">
-                  <thead className="bg-gray-50">
-                    <tr>
-                      <th className="p-2 text-left">MSNV</th>
-                      <th className="p-2 text-left">Họ & tên</th>
-                      <th className="p-2 text-center">Thêm</th>
-                    </tr>
-                  </thead>
+                  <thead className="bg-gray-50"><tr><th className="p-2 text-left">MSNV</th><th className="p-2 text-left">Họ & tên</th><th className="p-2 text-center">Thêm</th></tr></thead>
                   <tbody>
                     {searchResults.map((w) => {
                       const isSelected = selectedIds.has(w.msnv);
                       return (
                         <tr key={w.msnv} className={cx("border-t", isSelected ? "bg-gray-100 opacity-50" : "hover:bg-gray-50")}>
-                          <td className="p-2">{w.msnv}</td>
-                          <td className="p-2">{w.full_name}</td>
+                          <td className="p-2">{w.msnv}</td><td className="p-2">{w.full_name}</td>
                           <td className="p-2 text-center">
-                            <button 
-                              className="btn" 
-                              style={{padding: '4px 8px'}} 
-                              onClick={() => addWorker(w)}
-                              disabled={isSelected} // Vô hiệu hóa nếu đã chọn
-                            >
+                            <button className="btn" style={{padding: '4px 8px'}} onClick={() => addWorker(w)} disabled={isSelected}>
                               {isSelected ? "Đã chọn" : "+"}
                             </button>
                           </td>
                         </tr>
                       );
                     })}
-                    {!searchResults.length && (
-                      <tr><td colSpan={3} className="p-4 text-center text-gray-500">Không có kết quả.</td></tr>
-                    )}
+                    {!searchResults.length && (<tr><td colSpan={3} className="p-4 text-center text-gray-500">Không có kết quả.</td></tr>)}
                   </tbody>
                 </table>
               </div>
             </div>
-
           </div>
         </>
       )}
@@ -593,35 +528,89 @@ function EditReviewLeanline({
 
 
 /* ======================================================================
-   APPROVER MODE — MOLDING (CẬP NHẬT LOGIC TÌM KIẾM)
+   APPROVER MODE — MOLDING (NÂNG CẤP LÊN GIỐNG LEANLINE)
    ====================================================================== */
 function ApproverModeMolding({ section }) {
   const [step, setStep] = useState(1);
 
-  // --- THAY ĐỔI 1: State cho 2 cách tìm kiếm ---
-  const [approverIdInput, setApproverIdInput] = useState(""); // Cách A
-  const [searchInput, setSearchInput] = useState("");       // Cách B
+  // --- Step 1: Tìm kiếm (Logic mới) ---
+  const [approverIdInput, setApproverIdInput] = useState("");
+  const [searchInput, setSearchInput] = useState("");
   const [loadingSearch, setLoadingSearch] = useState(false);
-  
-  // --- THAY ĐỔI 2: State cho Kết quả & Đã chọn ---
-  const [searchResults, setSearchResults] = useState([]); // Vùng bên phải (Kết quả)
-  const [selectedWorkers, setSelectedWorkers] = useState([]); // Vùng bên trái (Đã chọn)
-  
-  const [rows, setRows] = useState([]); // (Giữ nguyên, dùng cho Step 2)
-
-  // --- THAY ĐỔI 3: Memo để biết ai đã được chọn ---
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedWorkers, setSelectedWorkers] = useState([]);
   const selectedIds = useMemo(() => new Set(selectedWorkers.map(w => w.msnv)), [selectedWorkers]);
 
+  // --- Step 2: Template ---
+  const [prodRules, setProdRules] = useState([]);
+  const [categoryOptions, setCategoryOptions] = useState([]);
+  
+  const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [tplShift, setTplShift] = useState("Ca 1");
+  const [tplWorkingInput, setTplWorkingInput] = useState(8);
+  const [tplMoldHours, setTplMoldHours] = useState(0);
+  const [tplOutput, setTplOutput] = useState(0);
+  const [tplCategory, setTplCategory] = useState("");
+  const [tplDefects, setTplDefects] = useState(0);
+  const [tplCompliance, setTplCompliance] = useState("NONE");
+  
+  // --- Step 3: Review ---
+  const [reviewRows, setReviewRows] = useState([]);
+  const [selReview, setSelReview] = useState(() => new Set());
+  const [saving, setSaving] = useState(false);
+  const pageSize = 50;
+  const [page, setPage] = useState(1);
 
-  // --- THAY ĐỔI 4: Hai hàm tìm kiếm riêng biệt ---
+  // --- Load Rules & Categories cho Molding ---
+  useEffect(() => {
+    supabase
+      .from("kpi_rule_productivity")
+      .select("category, threshold, score")
+      .eq("section", "MOLDING")
+      .eq("active", true)
+      .order("category", { ascending: true })
+      .order("threshold", { ascending: false })
+      .then(({ data, error }) => {
+        if (error) return console.error(error);
+        const rules = data || [];
+        setProdRules(rules);
+        const list = [...new Set(rules.map((r) => r.category).filter(Boolean))];
+        setCategoryOptions(list);
+        if (list.length > 0) setTplCategory(list[0]);
+      });
+  }, []);
+  
+  // --- Tính điểm Preview (Step 2) ---
+  const previewScores = useMemo(() => {
+    return calculateScoresMolding({
+        shift: tplShift,
+        working_input: tplWorkingInput,
+        mold_hours: tplMoldHours,
+        output: tplOutput,
+        defects: tplDefects,
+        category: tplCategory
+    }, prodRules);
+  }, [tplShift, tplWorkingInput, tplMoldHours, tplOutput, tplDefects, tplCategory, prodRules]);
 
-  // CÁCH A: TÌM THEO NGƯỜI DUYỆT
+  const tplQ = previewScores.q_score;
+  const tplP = previewScores.p_score;
+  const tplKPI = previewScores.day_score;
+
+  /* Paging (Step 3) */
+  useEffect(() => setPage(1), [reviewRows.length]);
+  const totalPages = Math.max(1, Math.ceil(reviewRows.length / pageSize));
+  const pageRows = useMemo(
+    () => reviewRows.slice((page - 1) * pageSize, page * pageSize),
+    [reviewRows, page]
+  );
+
+
+  // --- Step 1: Functions (Tìm kiếm) ---
   async function searchByApprover() {
     const id = approverIdInput.trim();
     if (!id) return alert("Nhập MSNV người duyệt.");
     setLoadingSearch(true);
-    const { data, error } = await supabase
-      .from("users")
+    const { data, error } = await supabase.from("users")
       .select("msnv, full_name, approver_msnv, approver_name")
       .eq("approver_msnv", id);
     setLoadingSearch(false);
@@ -629,8 +618,6 @@ function ApproverModeMolding({ section }) {
     setSearchResults(data || []);
     setSearchInput(""); 
   }
-
-  // CÁCH B: TÌM THEO TÊN/MSNV (GLOBAL)
   async function searchGlobal() {
     const q = searchInput.trim();
     if (!q) return alert("Nhập Tên hoặc MSNV nhân viên.");
@@ -641,14 +628,12 @@ function ApproverModeMolding({ section }) {
     } else {
       query = supabase.from("users").select("msnv, full_name, approver_msnv, approver_name").eq("msnv", q);
     }
-    const { data, error } = await query.limit(50); 
+    const { data, error } = await query.limit(50);
     setLoadingSearch(false);
     if (error) return alert("Lỗi tìm nhân viên: " + error.message);
     setSearchResults(data || []);
     setApproverIdInput("");
   }
-  
-  // --- THAY ĐỔI 5: Hàm Thêm/Xoá NV khỏi danh sách "Đã chọn" ---
   function addWorker(worker) {
     setSelectedWorkers(prev => {
       if (prev.find(w => w.msnv === worker.msnv)) return prev;
@@ -658,93 +643,81 @@ function ApproverModeMolding({ section }) {
   function removeWorker(msnv) {
     setSelectedWorkers(prev => prev.filter(w => w.msnv !== msnv));
   }
-  
-  // --- Sang bước nhập KPI ---
   function proceedToTemplate() {
     if (!selectedWorkers.length) return alert("Chưa chọn nhân viên nào.");
-    const selected = selectedWorkers; 
-    const initRows = selected.map(w => ({
-      msnv: w.msnv, hoten: w.full_name, line: "", work_hours: 8, downtime: 0,
-      oe: 100, defects: 0, q_score: 10, p_score: 7, kpi_score: 8.5, compliance: "NONE",
-    }));
-    setRows(initRows); 
+    if (!prodRules.length) return alert("Chưa tải được Rule điểm, vui lòng thử lại.");
     setStep(2);
   }
 
-  /* Template inputs (Giữ nguyên) */
-  const [date, setDate] = useState("");
-  const [shift, setShift] = useState("");
-  const [defects, setDefects] = useState(0);
-  const [compliance, setCompliance] = useState("NONE");
-  const [workingInput, setWorkingInput] = useState(8);
-  const [moldHours, setMoldHours] = useState(0);
-  const [output, setOutput] = useState(0);
-  const [category, setCategory] = useState("");
-  const [categoryOptions, setCategoryOptions] = useState([]);
-  useEffect(() => {
-    supabase.from("kpi_rule_productivity").select("category").eq("section", "MOLDING").eq("active", true)
-      .then(({ data, error }) => {
-        if (error) return console.error(error);
-        const list = [...new Set((data || []).map((r) => r.category).filter(Boolean))];
-        setCategoryOptions(list);
-      });
-  }, []);
+  // --- Step 2: Function (Build Review) ---
+  function buildReviewRows() {
+    if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
+    if (!tplCategory) return alert("Chọn Loại hàng.");
 
-  /* Review rows (Giữ nguyên) */
-  const [reviewRows, setReviewRows] = useState([]);
-  const [selReview, setSelReview] = useState(() => new Set());
-
-  async function buildReviewRows() {
-    if (!date || !shift) return alert("Nhập Ngày & Ca.");
-    if (!category) return alert("Chọn Loại hàng.");
-    if (!selectedWorkers.length) return alert("Lỗi: Không tìm thấy nhân viên đã chọn.");
-    
-    const rows = [];
-    let rulesByCat = {};
-    const { data: ruleRows } = await supabase.from("kpi_rule_productivity")
-      .select("category, threshold, score").eq("section", "MOLDING").eq("active", true)
-      .order("category", { ascending: true }).order("threshold", { ascending: false });
-    (ruleRows || []).forEach((r) => {
-      if (!rulesByCat[r.category]) rulesByCat[r.category] = [];
-      rulesByCat[r.category].push({ threshold: Number(r.threshold), score: Number(r.score) });
-    });
-
-    selectedWorkers.forEach((w) => {
-      const working_real = calcWorkingReal(shift, workingInput);
-      let downtime = (working_real * 24 - toNum(moldHours)) / 24;
-      if (downtime > 1) downtime = 1; if (downtime < 0) downtime = 0;
-      const working_exact = Number((working_real - downtime).toFixed(2));
-      const prod = working_exact > 0 ? toNum(output) / working_exact : 0;
-      const qScore = scoreByQuality(defects); 
-      let pScore = 0;
-      const catRules = rulesByCat[category] || [];
-      for (const r of catRules) { if (prod >= r.threshold) { pScore = r.score; break; } }
-      const dayScore = Math.min(15, pScore + qScore);
-
-      rows.push({
-        section, date, ca: shift, worker_id: w.msnv, worker_name: w.full_name,
-        approver_msnv: w.approver_msnv, // Lấy người duyệt của NV đó
+    const rows = selectedWorkers.map((w) => {
+      const scores = previewScores; // Dùng điểm đã tính ở preview
+      
+      return {
+        section,
+        work_date: tplDate,
+        shift: tplShift,
+        msnv: w.msnv,
+        hoten: w.full_name,
+        approver_msnv: w.approver_msnv || approverIdInput,
         approver_name: w.approver_name,
-        category, working_input: toNum(workingInput), working_real: Number(working_real.toFixed(2)),
-        downtime: Number(downtime.toFixed(2)), working_exact, mold_hours: toNum(moldHours),
-        output: toNum(output), defects: toNum(defects), q_score: qScore, p_score: pScore,
-        day_score: dayScore, compliance_code: compliance, status: "approved",
-      });
+        
+        // Dữ liệu Molding từ Template
+        category: tplCategory,
+        working_input: toNum(tplWorkingInput),
+        mold_hours: toNum(tplMoldHours),
+        output: toNum(tplOutput),
+        defects: toNum(tplDefects),
+        compliance_code: tplCompliance,
+
+        // Điểm đã tính
+        q_score: scores.q_score,
+        p_score: scores.p_score,
+        day_score: scores.day_score,
+        
+        // Dữ liệu trung gian
+        working_real: scores.working_real,
+        downtime: scores.downtime,
+        working_exact: scores.working_exact,
+        
+        status: "approved",
+      };
     });
+
     setReviewRows(rows);
     setSelReview(new Set(rows.map((_, i) => i)));
     setStep(3);
   }
 
-  /* paging review (Giữ nguyên) */
-  const pageSize = 50;
-  const [page, setPage] = useState(1);
-  useEffect(() => setPage(1), [reviewRows.length]);
-  const totalPages = Math.max(1, Math.ceil(reviewRows.length / pageSize));
-  const pageRows = useMemo(
-    () => reviewRows.slice((page - 1) * pageSize, page * pageSize),
-    [reviewRows, page]
-  );
+  // --- Step 3: Functions (Update/Save) ---
+  function updateRow(i, key, val) {
+    setReviewRows((old) => {
+      const arr = old.slice();
+      const r0 = arr[i] || {};
+      
+      const r = ["compliance_code", "category", "shift", "work_date"].includes(key)
+          ? { ...r0, [key]: val }
+          : { ...r0, [key]: toNum(val, 0) };
+
+      // Tính lại điểm khi 1 dòng thay đổi
+      const scores = calculateScoresMolding(r, prodRules);
+
+      arr[i] = { 
+          ...r, 
+          q_score: scores.q_score, 
+          p_score: scores.p_score, 
+          day_score: scores.day_score,
+          working_real: scores.working_real,
+          downtime: scores.downtime,
+          working_exact: scores.working_exact,
+      };
+      return arr;
+    });
+  }
   function toggleAllReviewOnPage() {
     setSelReview((prev) => {
       const next = new Set(prev);
@@ -762,24 +735,42 @@ function ApproverModeMolding({ section }) {
       return next;
     });
   }
-
-  /* Save batch (Giữ nguyên) */
-  const [saving, setSaving] = useState(false);
   async function saveBatch() {
     const idxs = Array.from(selReview).sort((a, b) => a - b);
     if (!idxs.length) return alert("Chưa chọn dòng để lưu.");
+
     setSaving(true);
     const list = idxs.map((i) => reviewRows[i]);
     const now = new Date().toISOString();
+
     const payload = list.map((r) => {
-      const overflow = Math.max(0, (r.q_score + r.p_score) - 15);
+      // Tính lại điểm lần cuối để lấy overflow
+      const scores = calculateScoresMolding(r, prodRules);
+      const overflow = Math.max(0, scores.rawTotal - 15);
+      
       return {
-        section: r.section, date: r.date, ca: r.ca, worker_id: r.worker_id, worker_name: r.worker_name,
-        approver_msnv: r.approver_msnv, approver_name: r.approver_name, category: r.category,
-        working_input: r.working_input, working_real: r.working_real, working_exact: r.working_exact,
-        downtime: r.downtime, mold_hours: r.mold_hours, output: r.output, defects: Number(r.defects || 0),
-        q_score: r.q_score, p_score: r.p_score, day_score: r.day_score, overflow,
-        compliance_code: r.compliance_code, status: "approved", approved_at: now,
+        section: r.section,
+        date: r.work_date,
+        ca: r.shift,
+        worker_id: r.msnv,
+        worker_name: r.hoten,
+        approver_msnv: r.approver_msnv,
+        approver_name: r.approver_name,
+        category: r.category,
+        working_input: r.working_input,
+        working_real: r.working_real,
+        working_exact: r.working_exact,
+        downtime: r.downtime,
+        mold_hours: r.mold_hours,
+        output: r.output,
+        defects: Number(r.defects || 0),
+        q_score: scores.q_score,
+        p_score: scores.p_score,
+        day_score: scores.day_score,
+        overflow,
+        compliance_code: r.compliance_code,
+        status: "approved",
+        approved_at: now,
       };
     });
     const { error } = await supabase
@@ -794,7 +785,7 @@ function ApproverModeMolding({ section }) {
   return (
     <div className="space-y-4">
       
-      {/* --- THAY ĐỔI 6: Cập nhật JSX cho Step 1 --- */}
+      {/* --- Step 1: Tìm kiếm (Giống Leanline) --- */}
       {step === 1 && (
         <>
           <div className="flex justify-end">
@@ -806,10 +797,7 @@ function ApproverModeMolding({ section }) {
               Tiếp tục ({selectedWorkers.length}) ›
             </button>
           </div>
-
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ minHeight: '400px' }}>
-            
-            {/* CỘT BÊN TRÁI: DANH SÁCH ĐÃ CHỌN */}
             <div className="border rounded p-3 bg-white space-y-2 flex flex-col">
               <h3 className="font-semibold text-lg">Đã chọn ({selectedWorkers.length})</h3>
               <div className="overflow-auto flex-1">
@@ -827,20 +815,15 @@ function ApproverModeMolding({ section }) {
                 </table>
               </div>
             </div>
-
-            {/* CỘT BÊN PHẢI: TÌM KIẾM & KẾT QUẢ */}
             <div className="border rounded p-3 bg-white space-y-3 flex flex-col">
-              {/* CÁCH A */}
               <div className="flex items-end gap-2">
                 <div className="flex-1"><label className="text-sm font-medium">Cách 1: Tìm theo Người duyệt</label><input className="input w-full" value={approverIdInput} onChange={(e) => setApproverIdInput(e.target.value)} placeholder="Nhập MSNV người duyệt..." /></div>
                 <button className="btn" onClick={searchByApprover} disabled={loadingSearch}>{loadingSearch ? "..." : "Tải"}</button>
               </div>
-              {/* CÁCH B */}
               <div className="flex items-end gap-2">
                 <div className="flex-1"><label className="text-sm font-medium">Cách 2: Tìm theo Tên/MSNV</label><input className="input w-full" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Nhập Tên hoặc MSNV nhân viên..." /></div>
                  <button className="btn" onClick={searchGlobal} disabled={loadingSearch}>{loadingSearch ? "..." : "Tìm"}</button>
               </div>
-              {/* KẾT QUẢ TÌM KIẾM */}
               <div className="overflow-auto flex-1 border-t pt-2">
                 <h4 className="font-semibold mb-1">Kết quả tìm kiếm ({searchResults.length})</h4>
                 <table className="min-w-full text-sm">
@@ -868,41 +851,85 @@ function ApproverModeMolding({ section }) {
         </>
       )}
 
-
-      {/* (Step 2 và 3 của Molding giữ nguyên) */}
+      {/* --- Step 2: Template (NÂNG CẤP) --- */}
       {step === 2 && (
         <div className="space-y-4">
-           <div className="flex justify-between">
+          {/* Inputs */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div><label>Ngày</label><input type="date" className="input" value={tplDate} onChange={(e) => setTplDate(e.target.value)} /></div>
+            <div><label>Ca</label><select className="input" value={tplShift} onChange={(e) => setTplShift(e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></div>
+            <div><label>Loại hàng</label><select className="input" value={tplCategory} onChange={e => setTplCategory(e.target.value)}><option value="">-- Chọn loại --</option>{categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
+            <div><label>Tuân thủ</label><select className="input text-center" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>{COMPLIANCE_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>
+            <div><label>Giờ làm việc (nhập)</label><input type="number" className="input" value={tplWorkingInput} onChange={e => setTplWorkingInput(e.target.value)} /></div>
+            <div><label>Số giờ khuôn chạy</label><input type="number" className="input" value={tplMoldHours} onChange={e => setTplMoldHours(e.target.value)} /></div>
+            <div><label>Sản lượng / ca</label><input type="number" className="input" value={tplOutput} onChange={e => setTplOutput(e.target.value)} /></div>
+            <div><label>Số đôi phế</label><input type="number" className="input" value={tplDefects} onChange={e => setTplDefects(e.target.value)} /></div>
+          </div>
+
+          {/* Preview Scores */}
+          <div className="rounded border p-3 bg-gray-50">
+            <div className="flex gap-6 text-sm flex-wrap">
+              <div>Giờ T Tế: <b>{previewScores.working_real}</b></div>
+              <div>Giờ C Xác: <b>{previewScores.working_exact}</b></div>
+              <div>Tỷ lệ NS: <b>{previewScores.prodRate.toFixed(2)}</b></div>
+              <div>Q: <b>{tplQ}</b></div>
+              <div>P: <b>{tplP}</b></div>
+              <div>KPI (Max 15): <b>{tplKPI}</b></div>
+            </div>
+          </div>
+
+          {/* Preview Table */}
+          <div className="overflow-auto border rounded">
+            <table className="min-w-full text-sm">
+              <thead className="bg-gray-50 text-center">
+                <tr>
+                  <th>MSNV</th><th>Họ tên</th><th>Loại hàng</th><th>Giờ nhập</th><th>Giờ khuôn</th><th>Sản lượng</th><th>Phế</th><th>Q</th><th>P</th><th>KPI</th><th>Tuân thủ</th>
+                </tr>
+              </thead>
+              <tbody className="text-center">
+                {selectedWorkers.map((w) => (
+                    <tr key={w.msnv} className="border-t hover:bg-gray-50">
+                      <td>{w.msnv}</td><td>{w.full_name}</td><td>{tplCategory}</td><td>{tplWorkingInput}</td>
+                      <td>{tplMoldHours}</td><td>{tplOutput}</td><td>{tplDefects}</td>
+                      <td>{tplQ}</td><td>{tplP}</td><td className="font-semibold">{tplKPI}</td>
+                      <td>{COMPLIANCE_OPTIONS.find(o => o.value === tplCompliance)?.label || tplCompliance}</td>
+                    </tr>
+                  ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="flex justify-between">
             <button className="btn" onClick={() => { setStep(1); setSearchResults([]); }}>‹ Quay lại</button>
             <button className="btn btn-primary" onClick={buildReviewRows}>Tạo danh sách Review ›</button>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div><label>Ngày</label><input type="date" className="input" value={date} onChange={(e) => setDate(e.target.value)} /></div>
-            <div><label>Ca</label><select className="input" value={shift} onChange={(e) => setShift(e.target.value)}><option value="">-- Chọn ca --</option><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></div>
-            <div><label>Loại hàng</label><select className="input" value={category} onChange={e => setCategory(e.target.value)}><option value="">-- Chọn loại hàng --</option>{categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-            <div><label>Tuân thủ</label><select className="input text-center" value={compliance} onChange={(e) => setCompliance(e.target.value)}>{COMPLIANCE_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>
-            <div><label>Giờ làm việc (nhập)</label><input type="number" className="input" value={workingInput} onChange={e => setWorkingInput(e.target.value)} /></div>
-            <div><label>Số giờ khuôn chạy</label><input type="number" className="input" value={moldHours} onChange={e => setMoldHours(e.target.value)} /></div>
-            <div><label>Sản lượng / ca</label><input type="number" className="input" value={output} onChange={e => setOutput(e.target.value)} /></div>
-             <div><label>Số đôi phế</label><input type="number" className="input" value={defects} onChange={e => setDefects(e.target.value)} /></div>
-          </div>
         </div>
       )}
+
+      {/* --- Step 3: Editable Review (NÂNG CẤP) --- */}
       {step === 3 && (
-        <ReviewTableMolding
-          pageSize={pageSize} pageRows={pageRows} totalPages={totalPages} page={page} setPage={setPage}
+        <EditReviewMolding
+          pageSize={pageSize} page={page} setPage={setPage} totalPages={totalPages} pageRows={pageRows}
           selReview={selReview} toggleAllReviewOnPage={toggleAllReviewOnPage} toggleOneReview={toggleOneReview}
           saveBatch={saveBatch} saving={saving}
+          // Props mới
+          updateRow={updateRow}
+          categoryOptions={categoryOptions}
         />
       )}
     </div>
   );
 }
 
-/* ===== Bảng review (MOLDING) (Giữ nguyên) ===== */
-function ReviewTableMolding({
-  pageRows, totalPages, page, setPage, selReview, toggleAllReviewOnPage, toggleOneReview, saveBatch, saving,
+
+/* --- THÊM MỚI: Bảng Review (MOLDING) (Bản sao của EditReviewLeanline) --- */
+function EditReviewMolding({
+  pageSize, page, setPage, totalPages, pageRows, selReview,
+  toggleAllReviewOnPage, toggleOneReview, updateRow, saveBatch, saving,
+  categoryOptions 
 }) {
+  const globalIndex = (idx) => (page - 1) * pageSize + idx;
+
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
@@ -910,36 +937,71 @@ function ReviewTableMolding({
           {saving ? "Đang lưu..." : `Lưu đã chọn (${selReview.size})`}
         </button>
         <div className="ml-auto flex items-center gap-3">
-          <span>Tổng: {pageRows.length} / trang</span>
           <button className="btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>‹ Trước</button>
           <span>Trang {page}/{totalPages}</span>
           <button className="btn" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Sau ›</button>
         </div>
       </div>
+
       <div className="overflow-auto border rounded">
-        <table className="min-w-full text-sm">
+        <table className="min-w-[1300px] text-sm">
           <thead className="bg-gray-50 text-center">
             <tr>
-              <th className="p-2"><input type="checkbox" onChange={toggleAllReviewOnPage} /></th>
-              <th className="p-2">MSNV</th><th className="p-2">Họ tên</th><th className="p-2">Ngày</th><th className="p-2">Ca</th><th className="p-2">Loại hàng</th><th className="p-2">Giờ nhập</th><th className="p-2">Giờ thực tế</th><th className="p-2">Downtime</th><th className="p-2">Giờ chính xác</th><th className="p-2">Khuôn chạy</th><th className="p-2">SL/ca</th><th className="p-2">Phế</th><th className="p-2">Q</th><th className="p-2">P</th><th className="p-2">KPI</th><th className="p-2">Tuân thủ</th>
+              <th className="p-2"><input type="checkbox" onChange={toggleAllReviewOnPage} checked={pageRows.length > 0 && pageRows.every((_, idx) => selReview.has(globalIndex(idx)))} /></th>
+              <th className="p-2">MSNV</th>
+              <th className="p-2">Họ tên</th>
+              <th className="p-2">Ngày</th>
+              <th className="p-2">Ca</th>
+              <th className="p-2">Loại hàng</th>
+              <th className="p-2">Giờ nhập</th>
+              <th className="p-2">Giờ khuôn</th>
+              <th className="p-2">SL/ca</th>
+              <th className="p-2">Phế</th>
+              <th className="p-2">Giờ TT</th>
+              <th className="p-2">Giờ CX</th>
+              <th className="p-2">Q</th>
+              <th className="p-2">P</th>
+              <th className="p-2">KPI</th>
+              <th className="p-2">Tuân thủ</th>
             </tr>
           </thead>
           <tbody className="text-center">
-            {pageRows.map((r, idx) => (
-              <tr key={idx} className="border-t hover:bg-gray-50">
-                <td className="p-2"><input type="checkbox" checked={selReview.has(idx)} onChange={() => toggleOneReview(idx)} /></td>
-                <td className="p-2">{r.worker_id}</td><td className="p-2">{r.worker_name}</td><td className="p-2">{r.date}</td><td className="p-2">{r.ca}</td><td className="p-2">{r.category}</td><td className="p-2">{r.working_input}</td><td className="p-2">{r.working_real}</td><td className="p-2">{r.downtime}</td><td className="p-2">{r.working_exact}</td><td className="p-2">{r.mold_hours}</td><td className="p-2">{r.output}</td><td className="p-2">{r.defects}</td><td className="p-2">{r.q_score}</td><td className="p-2">{r.p_score}</td><td className="p-2 font-semibold">{r.day_score}</td><td className="p-2">{r.compliance_code}</td>
-              </tr>
-            ))}
-            {!pageRows.length && (<tr><td colSpan={17} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>)}
+            {pageRows.map((r, idx) => {
+              const gi = globalIndex(idx);
+              return (
+                <tr key={gi} className="border-t hover:bg-gray-50">
+                  <td className="p-2"><input type="checkbox" checked={selReview.has(gi)} onChange={() => toggleOneReview(gi)} /></td>
+                  <td className="p-2">{r.msnv}</td>
+                  <td className="p-2">{r.hoten}</td>
+                  <td className="p-2"><input type="date" className="input text-center w-32" value={r.work_date} onChange={(e) => updateRow(gi, "work_date", e.target.value)} /></td>
+                  <td className="p-2"><select className="input text-center" value={r.shift} onChange={(e) => updateRow(gi, "shift", e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></td>
+                  <td className="p-2"><select className="input text-center w-32" value={r.category} onChange={(e) => updateRow(gi, "category", e.target.value)}><option value="">--Chọn--</option>{categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}</select></td>
+                  <td className="p-2"><input type="number" className="input text-center w-20" value={r.working_input} onChange={(e) => updateRow(gi, "working_input", e.target.value)} /></td>
+                  <td className="p-2"><input type="number" className="input text-center w-20" value={r.mold_hours} onChange={(e) => updateRow(gi, "mold_hours", e.target.value)} /></td>
+                  <td className="p-2"><input type="number" className="input text-center w-20" value={r.output} onChange={(e) => updateRow(gi, "output", e.target.value)} /></td>
+                  <td className="p-2"><input type="number" className="input text-center w-20" value={r.defects} onChange={(e) => updateRow(gi, "defects", e.target.value)} /></td>
+                  <td className="p-2">{r.working_real}</td>
+                  <td className="p-2">{r.working_exact}</td>
+                  <td className="p-2">{r.q_score}</td>
+                  <td className="p-2">{r.p_score}</td>
+                  <td className="p-2 font-semibold">{r.day_score}</td>
+                  <td className="p-2"><select className="input text-center w-28" value={r.compliance_code} onChange={(e) => updateRow(gi, "compliance_code", e.target.value)}>{COMPLIANCE_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></td>
+                </tr>
+              );
+            })}
+            {!pageRows.length && (<tr><td colSpan={16} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>)}
           </tbody>
         </table>
       </div>
     </div>
   );
 }
+/* ===== (Hết Molding Nâng Cấp) ===== */
 
-/* ===== (SelfModeMolding giữ nguyên) ===== */
+
+/* ======================================================================
+   MODE 2: Tự nhập (MSNV người nhập) – MOLDING ONLY (Giữ nguyên)
+   ====================================================================== */
 function SelfModeMolding({ section }) {
   const [entrantId, setEntrantId] = useState("");
   const [entrantName, setEntrantName] = useState("");
@@ -990,23 +1052,19 @@ function SelfModeMolding({ section }) {
     }));
     setRows(base);
   }
+  
+  // Sử dụng helper tính điểm mới
   function recompute(row) {
-    const working_real = calcWorkingReal(row.ca, row.working_input);
-    let downtime = (working_real * 24 - toNum(row.mold_hours)) / 24;
-    if (downtime > 1) downtime = 1; if (downtime < 0) downtime = 0;
-    const working_exact = Number((working_real - downtime).toFixed(2));
-    const prod = working_exact > 0 ? toNum(row.output) / working_exact : 0;
-    const q = scoreByQuality(row.defects); let p = 0;
-    const rules = rulesByCat[row.category] || [];
-    for (const r of rules) { if (prod >= r.threshold) { p = r.score; break; } }
-    const day = Math.min(15, p + q);
-    return { ...row, working_real: Number(working_real.toFixed(2)), downtime: Number(downtime.toFixed(2)), working_exact, q_score: q, p_score: p, day_score: day };
+    const scores = calculateScoresMolding(row, rulesByCat);
+    return { ...row, ...scores, day_score: scores.kpi };
   }
+
   function update(i, key, val) {
     setRows((old) => {
       const copy = old.slice();
       const r = { ...copy[i], [key]: ["ca", "category", "compliance_code"].includes(key) ? val : toNum(val, 0) };
-      copy[i] = recompute(r); return copy;
+      copy[i] = recompute(r); // Recompute sử dụng helper mới
+      return copy;
     });
   }
   const [saving, setSaving] = useState(false);
@@ -1014,13 +1072,18 @@ function SelfModeMolding({ section }) {
     if (!rows.length) return alert("Không có dữ liệu để lưu.");
     const now = new Date().toISOString();
     const payload = rows.map((r) => {
-      const overflow = Math.max(0, (r.q_score + r.p_score) - 15);
+      // Recompute lần cuối để đảm bảo
+      const finalScores = calculateScoresMolding(r, rulesByCat);
+      const overflow = Math.max(0, finalScores.rawTotal - 15);
       return {
         section: r.section, date: r.date, ca: r.ca, worker_id: r.worker_id, worker_name: r.worker_name,
         approver_msnv: r.entrant_msnv, approver_name: r.entrant_name, category: r.category,
-        working_input: r.working_input, working_real: r.working_real, working_exact: r.working_exact,
-        downtime: r.downtime, mold_hours: r.mold_hours, output: r.output, defects: Number(r.defects || 0),
-        q_score: r.q_score, p_score: r.p_score, day_score: r.day_score, overflow,
+        working_input: r.working_input, 
+        working_real: finalScores.working_real, 
+        working_exact: finalScores.working_exact,
+        downtime: finalScores.downtime, 
+        mold_hours: r.mold_hours, output: r.output, defects: Number(r.defects || 0),
+        q_score: finalScores.q_score, p_score: finalScores.p_score, day_score: finalScores.day_score, overflow,
         compliance_code: r.compliance_code, status: "approved", approved_at: now,
       };
     });
