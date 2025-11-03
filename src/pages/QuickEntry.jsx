@@ -386,7 +386,7 @@ function ApproverModeLeanline({ section }) {
     .from("kpi_entries") // LUÔN LƯU VÀO kpi_entries CHO LEANLINE
     .upsert(payload, { onConflict: "worker_id,date,section" });
     setSaving(false);
-    if (error) return alert("Lưu lỗi: "D + error.message);
+    if (error) return alert("Lưu lỗi: " + error.message);
     alert(`Đã lưu ${payload.length} dòng (approved).`);
   }
 
