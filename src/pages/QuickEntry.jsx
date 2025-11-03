@@ -5,7 +5,7 @@ import { useKpiSection } from "../context/KpiSectionContext";
 import { scoreByQuality } from "../lib/scoring";
 import ApproverModeHybrid from "./QuickEntryLPS"; 
 
-/* ===== Helpers (Giữ nguyên) ===== */
+/* ===== Helpers ===== */
 const COMPLIANCE_OPTIONS = [
   { value: "NONE", label: "Không vi phạm" },
   { value: "Ký mẫu đầu chuyền trước khi sử dụng", label: "Ký mẫu đầu chuyền trước khi sử dụng" },
@@ -51,7 +51,7 @@ function scoreByProductivityLeanlineQuick(oe, allRules, section, line) {
       .sort((a, b) => Number(b.threshold) - Number(a.threshold));
   }
   for (const r of rules) {
-    if (val >= r.threshold) return Number(r.score || 0);
+    if (val >= Number(r.threshold)) return Number(r.score || 0);
   }
   return 0;
 }
@@ -61,16 +61,26 @@ const LEANLINE_MACHINES = {
     "DEFAULT": ["LEAN-D1", "LEAN-D2", "LEAN-D3", "LEAN-D4", "LEAN-H1", "LEAN-H2"],
 }
 const getLeanlineMachines = (section) => LEANLINE_MACHINES[section] || LEANLINE_MACHINES.DEFAULT;
+
+/**
+ * @param {object} entry - { shift, working_input, mold_hours, output, defects, category }
+ * @param {Array} allRules - Rules for MOLDING
+ */
 function calculateScoresMolding(entry, allRules) {
     const { shift, working_input, mold_hours, output, defects, category } = entry;
+    
     const working_real = calcWorkingReal(shift, working_input);
+    
     let downtime = (working_real * 24 - toNum(mold_hours)) / 24;
     if (downtime > 1) downtime = 1;
     if (downtime < 0) downtime = 0;
+    
     const working_exact = Number((working_real - downtime).toFixed(2));
     const prod = working_exact > 0 ? toNum(output) / working_exact : 0; // Tỷ lệ NS
+
     const qScore = scoreByQuality(defects); 
     let pScore = 0;
+    
     const catRules = (allRules || []).filter(r => r.category === category);
     for (const r of catRules) {
         if (prod >= r.threshold) {
@@ -79,16 +89,23 @@ function calculateScoresMolding(entry, allRules) {
         }
     }
     const total = pScore + qScore;
+    
     return {
-        q_score: qScore, p_score: pScore, day_score: Math.min(15, total), rawTotal: total,
-        working_real: Number(working_real.toFixed(2)), downtime: Number(downtime.toFixed(2)),
-        working_exact, prodRate: prod
+        q_score: qScore,
+        p_score: pScore,
+        day_score: Math.min(15, total),
+        rawTotal: total,
+        // Dữ liệu trung gian
+        working_real: Number(working_real.toFixed(2)),
+        downtime: Number(downtime.toFixed(2)),
+        working_exact,
+        prodRate: prod
     };
 }
 /* ===== (Hết Helpers) ===== */
 
 
-/* ===== Main (Giữ nguyên) ===== */
+/* ===== Main ===== */
 export default function QuickEntry() {
   const { section } = useKpiSection();
   const isMolding = section === "MOLDING";
@@ -318,10 +335,8 @@ function ApproverModeLeanline({ section }) {
     setSaving(false);
     if (error) return alert("Lưu lỗi: " + error.message);
     alert(`Đã lưu ${payload.length} dòng (approved).`);
-    // KHÔNG reset về step 1 tự động
   }
 
-  // --- THÊM HÀM MỚI ---
   function resetToStep1() {
     setStep(1);
     setSelectedWorkers([]);
@@ -333,7 +348,6 @@ function ApproverModeLeanline({ section }) {
   }
 
 
-  // --- JSX Render ---
   return (
     <div className="space-y-4">
       {step === 1 && (
@@ -411,7 +425,7 @@ function ApproverModeLeanline({ section }) {
             <div><label>Giờ làm việc</label><input type="number" className="input" value={tplWorkHours} onChange={(e) => setTplWorkHours(e.target.value)} /></div>
             <div><label>Giờ dừng máy</label><input type="number" className="input" value={tplStopHours} onChange={(e) => setTplStopHours(e.target.value)} /></div>
             <div><label>%OE</label><input type="number" className="input" value={tplOE} onChange={(e) => setTplOE(e.target.value)} step="0.01" /></div>
-            <div><label>Phế</label><input type="number" className="input" value={tplDefects} onChange={(e) => setTplDefects(e.target.value)} /></div>
+            <div><label>Phế</label><input type="number" className="input" value={tplDefects} onChange={(e) => setTplDefects(e.target.value)} step="0.5" /></div>
           </div>
           <div className="rounded border p-3 bg-gray-50"><div className="flex gap-6 text-sm"><div>Q: <b>{tplQ}</b></div><div>P: <b>{tplP}</b></div><div>KPI (Max 15): <b>{tplKPI}</b></div><div className="text-gray-500 ml-auto">Các giá trị này sẽ áp cho tất cả NV ở bước Review.</div></div></div>
           <div className="overflow-auto border rounded">
@@ -433,13 +447,12 @@ function ApproverModeLeanline({ section }) {
         </div>
       )}
 
-      {/* ==== STEP 3: TRUYỀN HÀM MỚI XUỐNG ĐÂY ==== */}
       {step === 3 && (
         <EditReviewLeanline
           pageSize={pageSize} page={page} setPage={setPage} totalPages={totalPages} pageRows={pageRows}
           reviewRows={reviewRows} setReviewRows={setReviewRows} selReview={selReview} setSelReview={setSelReview}
           toggleAllReviewOnPage={toggleAllReviewOnPage} updateRow={updateRow} saveBatch={saveBatch} saving={saving}
-          resetToStep1={resetToStep1} // <-- THÊM PROP
+          resetToStep1={resetToStep1} 
         />
       )}
     </div>
@@ -447,11 +460,11 @@ function ApproverModeLeanline({ section }) {
 }
 
 
-/* ==== Bảng Review (LEANLINE) (CẬP NHẬT) ==== */
+/* ==== Bảng Review (LEANLINE) ==== */
 function EditReviewLeanline({
   pageSize, page, setPage, totalPages, pageRows, reviewRows, setReviewRows, selReview, setSelReview,
   toggleAllReviewOnPage, toggleOneReview, updateRow, saveBatch, saving,
-  resetToStep1 // <-- NHẬN PROP MỚI
+  resetToStep1
 }) {
   const { section } = useKpiSection();
   const currentMachines = useMemo(() => getLeanlineMachines(section), [section]);
@@ -462,13 +475,9 @@ function EditReviewLeanline({
         <button className="btn btn-primary" onClick={saveBatch} disabled={saving || !selReview.size}>
           {saving ? "Đang lưu..." : `Lưu đã chọn (${selReview.size})`}
         </button>
-        
-        {/* --- THÊM NÚT MỚI --- */}
         <button className="btn" onClick={resetToStep1} disabled={saving}>
           ‹ Quay lại (Nhập mới)
         </button>
-        {/* --- HẾT NÚT MỚI --- */}
-        
         <div className="ml-auto flex items-center gap-3">
           <button className="btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>‹ Trước</button>
           <span>Trang {page}/{totalPages}</span>
@@ -496,7 +505,7 @@ function EditReviewLeanline({
                   <td className="p-2"><input type="number" className="input text-center" value={r.work_hours} onChange={(e) => updateRow(gi, "work_hours", e.target.value)} /></td>
                   <td className="p-2"><input type="number" className="input text-center" value={r.downtime} onChange={(e) => updateRow(gi, "downtime", e.target.value)} /></td>
                   <td className="p-2"><input type="number" className="input text-center" value={r.oe} onChange={(e) => updateRow(gi, "oe", e.target.value)} step="0.01" /></td>
-                  <td className="p-2"><input type="number" className="input text-center" value={r.defects} onChange={(e) => updateRow(gi, "defects", e.target.value)} /></td>
+                  <td className="p-2"><input type="number" className="input text-center" value={r.defects} onChange={(e) => updateRow(gi, "defects", e.target.value)} step="0.5" /></td>
                   <td className="p-2">{r.q_score}</td><td className="p-2">{r.p_score}</td><td className="p-2 font-semibold">{r.total_score}</td>
                   <td className="p-2"><select className="input text-center" value={r.compliance} onChange={(e) => updateRow(gi, "compliance", e.target.value)}>{COMPLIANCE_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></td>
                 </tr>
@@ -690,7 +699,6 @@ function ApproverModeMolding({ section }) {
     alert(`Đã lưu ${payload.length} dòng (approved).`);
   }
 
-  // --- THÊM HÀM MỚI ---
   function resetToStep1() {
     setStep(1);
     setSelectedWorkers([]);
@@ -779,7 +787,7 @@ function ApproverModeMolding({ section }) {
             <div><label>Giờ làm việc (nhập)</label><input type="number" className="input" value={tplWorkingInput} onChange={e => setTplWorkingInput(e.target.value)} /></div>
             <div><label>Số giờ khuôn chạy</label><input type="number" className="input" value={tplMoldHours} onChange={e => setTplMoldHours(e.target.value)} /></div>
             <div><label>Sản lượng / ca</label><input type="number" className="input" value={tplOutput} onChange={e => setTplOutput(e.target.value)} /></div>
-            <div><label>Số đôi phế</label><input type="number" className="input" value={tplDefects} onChange={e => setTplDefects(e.target.value)} /></div>
+            <div><label>Số đôi phế</label><input type="number" className="input" value={tplDefects} onChange={e => setTplDefects(e.target.value)} step="0.5" /></div>
           </div>
           <div className="rounded border p-3 bg-gray-50">
             <div className="flex gap-6 text-sm flex-wrap">
@@ -814,7 +822,6 @@ function ApproverModeMolding({ section }) {
         </div>
       )}
 
-      {/* --- Step 3: TRUYỀN HÀM MỚI XUỐNG ĐÂY --- */}
       {step === 3 && (
         <EditReviewMolding
           pageSize={pageSize} page={page} setPage={setPage} totalPages={totalPages} pageRows={pageRows}
@@ -822,7 +829,7 @@ function ApproverModeMolding({ section }) {
           saveBatch={saveBatch} saving={saving}
           updateRow={updateRow}
           categoryOptions={categoryOptions}
-          resetToStep1={resetToStep1} // <-- THÊM PROP
+          resetToStep1={resetToStep1} 
         />
       )}
     </div>
@@ -830,12 +837,12 @@ function ApproverModeMolding({ section }) {
 }
 
 
-/* --- Bảng Review (MOLDING) (CẬP NHẬT) --- */
+/* --- Bảng Review (MOLDING) --- */
 function EditReviewMolding({
   pageSize, page, setPage, totalPages, pageRows, selReview,
   toggleAllReviewOnPage, toggleOneReview, updateRow, saveBatch, saving,
   categoryOptions, 
-  resetToStep1 // <-- NHẬN PROP MỚI
+  resetToStep1
 }) {
   const globalIndex = (idx) => (page - 1) * pageSize + idx;
 
@@ -845,13 +852,9 @@ function EditReviewMolding({
         <button className="btn btn-primary" onClick={saveBatch} disabled={saving || !selReview.size}>
           {saving ? "Đang lưu..." : `Lưu đã chọn (${selReview.size})`}
         </button>
-        
-        {/* --- THÊM NÚT MỚI --- */}
         <button className="btn" onClick={resetToStep1} disabled={saving}>
           ‹ Quay lại (Nhập mới)
         </button>
-        {/* --- HẾT NÚT MỚI --- */}
-
         <div className="ml-auto flex items-center gap-3">
           <button className="btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>‹ Trước</button>
           <span>Trang {page}/{totalPages}</span>
@@ -895,7 +898,7 @@ function EditReviewMolding({
                   <td className="p-2"><input type="number" className="input text-center w-20" value={r.working_input} onChange={(e) => updateRow(gi, "working_input", e.target.value)} /></td>
                   <td className="p-2"><input type="number" className="input text-center w-20" value={r.mold_hours} onChange={(e) => updateRow(gi, "mold_hours", e.target.value)} /></td>
                   <td className="p-2"><input type="number" className="input text-center w-20" value={r.output} onChange={(e) => updateRow(gi, "output", e.target.value)} /></td>
-                  <td className="p-2"><input type="number" className="input text-center w-20" value={r.defects} onChange={(e) => updateRow(gi, "defects", e.target.value)} /></td>
+                  <td className="p-2"><input type="number" className="input text-center w-20" value={r.defects} onChange={(e) => updateRow(gi, "defects", e.target.value)} step="0.5" /></td>
                   <td className="p-2">{r.working_real}</td>
                   <td className="p-2">{r.working_exact}</td>
                   <td className="p-2">{r.q_score}</td>
@@ -969,7 +972,6 @@ function SelfModeMolding({ section }) {
     setRows(base);
   }
   
-  // Sử dụng helper tính điểm mới
   function recompute(row) {
     const scores = calculateScoresMolding(row, rulesByCat);
     return { 
@@ -987,7 +989,7 @@ function SelfModeMolding({ section }) {
     setRows((old) => {
       const copy = old.slice();
       const r = { ...copy[i], [key]: ["ca", "category", "compliance_code"].includes(key) ? val : toNum(val, 0) };
-      copy[i] = recompute(r); // Recompute sử dụng helper mới
+      copy[i] = recompute(r);
       return copy;
     });
   }
@@ -996,7 +998,6 @@ function SelfModeMolding({ section }) {
     if (!rows.length) return alert("Không có dữ liệu để lưu.");
     const now = new Date().toISOString();
     const payload = rows.map((r) => {
-      // Recompute lần cuối để đảm bảo
       const finalScores = calculateScoresMolding(r, rulesByCat);
       const overflow = Math.max(0, finalScores.rawTotal - 15);
       return {
@@ -1048,7 +1049,7 @@ function SelfModeMolding({ section }) {
                     <td>{r.working_real}</td><td>{r.downtime}</td><td>{r.working_exact}</td>
                     <td><input type="number" className="input text-center" value={r.mold_hours} onChange={(e) => update(i, "mold_hours", e.target.value)} /></td>
                     <td><input type="number" className="input text-center" value={r.output} onChange={(e) => update(i, "output", e.target.value)} /></td>
-                    <td><input type="number" className="input text-center" value={r.defects} onChange={(e) => update(i, "defects", e.target.value)} /></td>
+                    <td><input type="number" className="input text-center" value={r.defects} onChange={(e) => update(i, "defects", e.target.value)} step="0.5" /></td>
                     <td>{r.q_score}</td><td>{r.p_score}</td><td className="font-semibold">{r.day_score}</td>
                     <td><select className="input text-center" value={r.compliance_code} onChange={(e) => update(i, "compliance_code", e.target.value)}>{COMPLIANCE_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></td>
                   </tr>

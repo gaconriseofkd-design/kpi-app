@@ -4,7 +4,7 @@ import { useKpiSection } from "../context/KpiSectionContext";
 
 /** Quy đổi giờ làm việc thực tế từ giờ nhập + ca làm việc (mô phỏng bảng Choose section list)
  * Excel: =IF(G4<8,G4, IF(G4<9, VLOOKUP(C5, S:AM,16,0),
- *                     VLOOKUP(C5,S:AM,16,0) + IF((G4-8)>=2, G4-8-0.5, G4-8)))
+ * VLOOKUP(C5,S:AM,16,0) + IF((G4-8)>=2, G4-8-0.5, G4-8)))
  */
 function calcWorkingReal(shift, inputHours) {
   const h = Number(inputHours || 0);
@@ -163,6 +163,7 @@ export default function EntryPageMolding() {
       downtime: Number(downtime || 0),
       mold_hours: Number(moldHours || 0),
       output: Number(output || 0),         // sản lượng/ca
+      defects: Number(defects || 0),       // Gửi số phế
 
       // điểm
       q_score: qScore,
@@ -173,9 +174,7 @@ export default function EntryPageMolding() {
       // tuân thủ
       compliance_code: complianceCode,
       violations: complianceCode === "NONE" ? 0 : 1,
-
     
-      
       status: "pending",
     };
 
@@ -247,7 +246,13 @@ export default function EntryPageMolding() {
 
         <div>
           <label>Số đôi phế</label>
-          <input type="number" className="input" value={defects} onChange={e => setDefects(e.target.value)} />
+          <input 
+            type="number" 
+            className="input" 
+            value={defects} 
+            onChange={e => setDefects(e.target.value)} 
+            step="0.5" // <-- THÊM BƯỚC NÀY
+          />
         </div>
         <div>
           <label>Tuân thủ</label>

@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react"; 
 import { supabase } from "../lib/supabaseClient";
 
-/* ================= Scoring & Helpers (Giữ nguyên) ================= */
+/* ================= Scoring & Helpers ================= */
 const MACHINE_MAP = {
     "LAMINATION": ["Máy dán 1", "Máy dán 2", "Máy dán 3", "Máy dán 4", "Máy dán 5", "Máy dán 6", "Máy dán 7"],
     "PREFITTING": ["Máy cắt 1", "Máy cắt 2", "Máy cắt 3", "Máy cắt 4", "Máy cắt 5", "Máy cắt 6"],
@@ -263,7 +263,6 @@ export default function ApproverModeHybrid({ section }) {
     alert(`Đã lưu ${payload.length} dòng (approved) vào bảng ${tableName}.`);
   }
 
-  // --- THÊM HÀM MỚI ---
   function resetToStep1() {
     setStep(1);
     setSelectedWorkers([]);
@@ -353,7 +352,7 @@ export default function ApproverModeHybrid({ section }) {
             <div><label>Giờ dừng máy</label><input type="number" className="input" value={tplStopHours} onChange={(e) => setTplStopHours(e.target.value)} /></div>
             <div><label>Sản lượng/ca (Lượt dán Output)</label><input type="number" className="input" value={tplOutput} onChange={(e) => setTplOutput(e.target.value)} /></div>
             <div><label>Loại năng suất (Category)</label><select className="input" value={tplCategory} onChange={e => setTplCategory(e.target.value)} disabled={section === 'LAMINATION'}>{categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-            <div><label>Phế</label><input type="number" className="input" value={tplDefects} onChange={(e) => setTplDefects(e.target.value)} /></div>
+            <div><label>Phế</label><input type="number" className="input" value={tplDefects} onChange={(e) => setTplDefects(e.target.value)} step="0.5" /></div>
           </div>
           <div className="rounded border p-3 bg-gray-50"><div className="flex gap-6 text-sm flex-wrap">
               <div>Giờ thực tế (QĐ): <b>{scores.workingReal.toFixed(2)}</b></div>
@@ -369,24 +368,23 @@ export default function ApproverModeHybrid({ section }) {
         </div>
       )}
 
-      {/* ==== STEP 3: TRUYỀN HÀM MỚI XUỐNG ĐÂY ==== */}
       {step === 3 && (
         <EditReviewHybrid
           pageSize={pageSize} page={page} setPage={setPage} totalPages={totalPages} pageRows={pageRows}
           selReview={selReview} toggleAllReviewOnPage={toggleAllReviewOnPage} updateRow={updateRow}
           saveBatch={saveBatch} saving={saving} categoryOptions={categoryOptions}
-          resetToStep1={resetToStep1} // <-- THÊM PROP
+          resetToStep1={resetToStep1} 
         />
       )}
     </div>
   );
 }
 
-/* ==== Bảng Review (HYBRID) (CẬP NHẬT) ==== */
+/* ==== Bảng Review (HYBRID) ==== */
 function EditReviewHybrid({
     pageSize, page, setPage, totalPages, pageRows, selReview,
     toggleAllReviewOnPage, toggleOneReview, updateRow, saveBatch, saving, categoryOptions,
-    resetToStep1 // <-- NHẬN PROP MỚI
+    resetToStep1
   }) {
   const globalIndex = (idx) => (page - 1) * pageSize + idx;
   const allMachines = MACHINE_MAP.LAMINATION.concat( MACHINE_MAP.PREFITTING, MACHINE_MAP.BÀO, MACHINE_MAP.TÁCH ); 
@@ -396,13 +394,9 @@ function EditReviewHybrid({
         <button className="btn btn-primary" onClick={saveBatch} disabled={saving || !selReview.size}>
           {saving ? "Đang lưu..." : `Lưu đã chọn (${selReview.size})`}
         </button>
-
-        {/* --- THÊM NÚT MỚI --- */}
         <button className="btn" onClick={resetToStep1} disabled={saving}>
           ‹ Quay lại (Nhập mới)
         </button>
-        {/* --- HẾT NÚT MỚI --- */}
-
         <div className="ml-auto flex items-center gap-3">
             <button className="btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>‹ Trước</button>
             <span>Trang {page}/{totalPages}</span>
@@ -434,7 +428,7 @@ function EditReviewHybrid({
                   <td className="p-2"><select className="input text-center" value={r.line} onChange={(e) => updateRow(gi, "line", e.target.value)}>{allMachines.map(m => <option key={m} value={m}>{m}</option>)}</select></td>
                   <td className="p-2"><select className="input text-center" value={r.category} onChange={(e) => updateRow(gi, "category", e.target.value)}><option value="">--Chọn--</option>{categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}</select></td>
                   <td className="p-2"><input type="number" className="input text-center" value={r.output} onChange={(e) => updateRow(gi, "output", e.target.value)} /></td>
-                  <td className="p-2"><input type="number" className="input text-center" value={r.defects} onChange={(e) => updateRow(gi, "defects", e.target.value)} /></td>
+                  <td className="p-2"><input type="number" className="input text-center" value={r.defects} onChange={(e) => updateRow(gi, "defects", e.target.value)} step="0.5" /></td>
                   <td className="p-2">{r.q_score}</td><td className="p-2">{r.p_score}</td><td className="p-2 font-semibold">{r.total_score}</td>
                   <td className="p-2"><select className="input text-center" value={r.compliance} onChange={(e) => updateRow(gi, "compliance", e.target.value)}>{COMPLIANCE_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
                     </select>

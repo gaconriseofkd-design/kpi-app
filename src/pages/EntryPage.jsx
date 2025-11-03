@@ -449,6 +449,7 @@ export default function EntryPage() {
             className="input"
             value={form.defects}
             onChange={(e) => handleChange("defects", Number(e.target.value))}
+            step="0.5" // <-- THÊM BƯỚC NÀY
           />
         </label>
         
