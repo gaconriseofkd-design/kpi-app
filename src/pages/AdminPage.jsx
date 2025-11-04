@@ -4,8 +4,16 @@ import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabaseClient";
 
 const ALLOWED_ROLES = ["worker", "approver", "admin"];
-// THÊM CỘT SECTION VÀO EMPTY ROW
 const emptyRow = { msnv: "", full_name: "", section: "", role: "worker", approver_msnv: "", approver_name: "" };
+
+/* Helper: Chuẩn hóa section (MỚI) */
+function normalizeSection(s) {
+    const sec_val = (s || "").trim().toUpperCase();
+    if (sec_val.startsWith("LEANLINE")) {
+        return sec_val.replace(/\s+/g, '_');
+    }
+    return sec_val;
+}
 
 /* Helpers: map tiêu đề Excel → field DB */
 function normalizeHeader(s = "") {
@@ -20,7 +28,6 @@ function mapHeaderToField(h) {
   if (["msnv"].includes(n)) return "msnv";
   if (["ho ten","ho & ten","ho va ten","full_name","hoten","ho ten nhan vien","ho va ten nhan vien"].includes(n))
     return "full_name";
-  // THÊM MAP CHO SECTION (ĐÚNG SAU HỌ TÊN)
   if (["section", "khoi", "bo phan"].includes(n)) return "section";
   if (["role","vai tro"].includes(n)) return "role";
   if ([
@@ -151,9 +158,10 @@ function AdminMain() {
         const obj = { ...emptyRow };
         for (const [idx, field] of Object.entries(fieldIdx)) {
           const v = String(arr[idx] ?? "").trim();
-          // CẬP NHẬT: CHUẨN HÓA SECTION VỀ CHỮ IN HOA
+          
+          // CẬP NHẬT: CHUẨN HÓA SECTION
           if (field === "section") {
-            obj[field] = v.toUpperCase();
+            obj[field] = normalizeSection(v); // <-- Dùng hàm chuẩn hóa mới
           } else {
             obj[field] = v;
           }
@@ -177,13 +185,54 @@ function AdminMain() {
     }
   }
 
+  // ===== HÀM MỚI ĐỂ XUẤT EXCEL (Giữ nguyên) =====
+  async function exportToExcel() {
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("users")
+        .select("msnv, full_name, section, role, approver_msnv, approver_name")
+        .order("msnv", { ascending: true });
+        
+      if (error) throw error;
+      if (!data || data.length === 0) {
+        alert("Không có dữ liệu người dùng để xuất.");
+        return;
+      }
+
+      const sheetData = data.map(user => ({
+        "msnv": user.msnv,
+        "full_name": user.full_name,
+        "section": user.section,
+        "role": user.role,
+        "approver_msnv": user.approver_msnv,
+        "approver_name": user.approver_name
+      }));
+
+      const ws = XLSX.utils.json_to_sheet(sheetData);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Users");
+      
+      XLSX.writeFile(wb, "Danh_sach_Nguoi_dung.xlsx");
+
+    } catch (err) {
+      console.error(err);
+      alert("Xuất Excel lỗi: " + (err.message || err));
+    } finally {
+      setLoading(false);
+    }
+  }
+  // ======================================
+
   async function saveAll() {
      const toUpsert = rows
       .map(r => ({
         msnv: (r.msnv || "").trim(),
         full_name: (r.full_name || "").trim(),
-        // CẬP NHẬT: LƯU SECTION (CHUẨN HÓA IN HOA)
-        section: (r.section || "").trim().toUpperCase(),
+        
+        // CẬP NHẬT: LƯU SECTION (Dùng hàm chuẩn hóa mới)
+        section: normalizeSection(r.section), // <-- Dùng hàm chuẩn hóa mới
+
         role: (ALLOWED_ROLES.includes((r.role || "").toLowerCase()) ? r.role.toLowerCase() : "worker"),
         approver_msnv: (r.approver_msnv || "").trim(),
         approver_name: (r.approver_name || "").trim(),
@@ -350,8 +399,18 @@ function AdminMain() {
           >
             + Thêm nhân viên
           </button>
+          
           <button onClick={triggerImport} disabled={loading} className="btn">Nhập Excel</button>
           <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFile} />
+          
+          <button 
+            onClick={exportToExcel} 
+            disabled={loading} 
+            className="btn bg-blue-600 text-white hover:bg-blue-700"
+          >
+            Xuất Excel
+          </button>
+          
           <button onClick={saveAll} disabled={loading} className="btn btn-primary">
             {loading ? "Đang xử lý..." : "Lưu tất cả"}
           </button>
@@ -368,18 +427,16 @@ function AdminMain() {
         <button className="btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Sau ›</button>
       </div>
 
-      {/* CẬP NHẬT: grid-cols-6 */}
       <div className="mt-4">
         <div className="grid grid-cols-6 gap-2 mb-2">
           <SortHeader title="MSNV"            k="msnv" />
           <SortHeader title="Họ & tên"        k="full_name" />
-          <SortHeader title="Section"         k="section" /> {/* CỘT MỚI */}
+          <SortHeader title="Section"         k="section" />
           <SortHeader title="Role"            k="role" />
           <SortHeader title="Approver MSNV"   k="approver_msnv" />
           <SortHeader title="Approver Họ tên" k="approver_name" />
         </div>
 
-        {/* CẬP NHẬT: grid-cols-6 */}
         {pageRows.map((r, i) => (
           <div key={i} className="grid grid-cols-6 gap-2 mb-2">
             <input value={r.msnv} onChange={e => {
@@ -408,7 +465,7 @@ function AdminMain() {
               });
             }} placeholder="Họ & tên" className="input" />
 
-            {/* CỘT MỚI: INPUT CHO SECTION */}
+            {/* CẬP NHẬT: Input cho Section (chỉ đổi chữ hoa) */}
             <input value={r.section} onChange={e => {
               const v = e.target.value;
               const globalIndexInSorted = (page - 1) * pageSize + i;
@@ -417,7 +474,8 @@ function AdminMain() {
                   const idxInRows = prev.findIndex(item => item === originalObject);
                   if (idxInRows === -1) return prev;
                   const arr = [...prev]; 
-                  arr[idxInRows] = { ...arr[idxInRows], section: v.toUpperCase() }; // Tự động đổi chữ hoa
+                  // Chỉ đổi chữ hoa, hàm saveAll sẽ chuẩn hóa
+                  arr[idxInRows] = { ...arr[idxInRows], section: v.toUpperCase() }; 
                   return arr;
               });
             }} placeholder="SECTION" className="input" />
