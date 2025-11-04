@@ -81,7 +81,6 @@ function calculateScoresMolding(entry, allRules) {
     const qScore = scoreByQuality(defects); 
     let pScore = 0;
     
-    // SỬA LỖI: Rules phải được sort trước khi loop
     const catRules = (allRules || [])
       .filter(r => r.category === category)
       .sort((a, b) => Number(b.threshold) - Number(a.threshold)); // <-- Thêm sort
@@ -174,10 +173,7 @@ function ApproverModeLeanline({ section }) {
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [selectedWorkers, setSelectedWorkers] = useState([]);
-  
-  // ----- THAY ĐỔI 1: Thêm state cho checkbox -----
   const [searchAllSections, setSearchAllSections] = useState(false);
-  
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
   const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -225,39 +221,29 @@ function ApproverModeLeanline({ section }) {
   }, [section]);
   useEffect(() => setPage(1), [reviewRows.length]);
 
-  // ----- THAY ĐỔI 2: Cập nhật hàm searchByApprover -----
   async function searchByApprover() {
     const q = approverIdInput.trim();
     if (!q) return alert("Nhập Tên hoặc MSNV người duyệt.");
-    
     setLoadingSearch(true);
     let query;
-
     if (isNaN(Number(q))) {
-      // Tìm theo Tên người duyệt
       query = supabase.from("users")
         .select("msnv, full_name, approver_msnv, approver_name")
         .ilike("approver_name", `%${q}%`);
     } else {
-      // Tìm theo MSNV người duyệt
       query = supabase.from("users")
         .select("msnv, full_name, approver_msnv, approver_name")
         .eq("approver_msnv", q);
     }
-    
-    // Lọc theo section nếu không check "All sections"
     if (!searchAllSections) {
       query = query.eq("section", section); 
     }
-
-    const { data, error } = await query.limit(100); // Thêm limit
+    const { data, error } = await query.limit(100); 
     setLoadingSearch(false);
     if (error) return alert("Lỗi tải nhân viên: " + error.message);
     setSearchResults(data || []); 
     setSearchInput("");
   }
-  
-  // ----- THAY ĐỔI 3: Cập nhật hàm searchGlobal -----
   async function searchGlobal() {
     const q = searchInput.trim();
     if (!q) return alert("Nhập Tên hoặc MSNV nhân viên.");
@@ -268,19 +254,15 @@ function ApproverModeLeanline({ section }) {
     } else {
       query = supabase.from("users").select("msnv, full_name, approver_msnv, approver_name").eq("msnv", q);
     }
-    
-    // Lọc theo section nếu không check "All sections"
     if (!searchAllSections) {
       query = query.eq("section", section);
     }
-
     const { data, error } = await query.limit(50);
     setLoadingSearch(false);
     if (error) return alert("Lỗi tìm nhân viên: " + error.message);
     setSearchResults(data || []);
     setApproverIdInput("");
   }
-  
   function addWorker(worker) {
     setSelectedWorkers(prev => {
       if (prev.find(w => w.msnv === worker.msnv)) return prev; 
@@ -289,6 +271,20 @@ function ApproverModeLeanline({ section }) {
   }
   function removeWorker(msnv) {
     setSelectedWorkers(prev => prev.filter(w => w.msnv !== msnv));
+  }
+  
+  // ----- HÀM MỚI (LEANLINE) -----
+  function addAllResults() {
+    if (!searchResults.length) return;
+    
+    setSelectedWorkers(prev => {
+      // Dùng Set để lọc trùng hiệu quả
+      const existingIds = new Set(prev.map(w => w.msnv));
+      const newWorkersToAdd = searchResults.filter(
+        worker => !existingIds.has(worker.msnv)
+      );
+      return [...prev, ...newWorkersToAdd];
+    });
   }
   
   function proceedToTemplate() {
@@ -415,8 +411,6 @@ function ApproverModeLeanline({ section }) {
               </div>
             </div>
             <div className="border rounded p-3 bg-white space-y-3 flex flex-col">
-              
-              {/* ----- THAY ĐỔI 4: Cập nhật JSX cho Cách 1 ----- */}
               <div className="flex items-end gap-2">
                 <div className="flex-1">
                   <label className="text-sm font-medium">Cách 1: Tìm theo Người duyệt</label>
@@ -431,7 +425,6 @@ function ApproverModeLeanline({ section }) {
                 </div>
               </div>
 
-              {/* ----- THAY ĐỔI 5: Cập nhật JSX cho Cách 2 (label) ----- */}
               <div className="flex items-end gap-2">
                 <div className="flex-1">
                   <label className="text-sm font-medium">Cách 2: Tìm theo Tên/MSNV (NV)</label>
@@ -441,7 +434,20 @@ function ApproverModeLeanline({ section }) {
               </div>
               
               <div className="overflow-auto flex-1 border-t pt-2">
-                <h4 className="font-semibold mb-1">Kết quả tìm kiếm ({searchResults.length})</h4>
+                {/* ----- THÊM NÚT "+ THÊM TẤT CẢ" (LEANLINE) ----- */}
+                <div className="flex justify-between items-center mb-1">
+                  <h4 className="font-semibold">Kết quả tìm kiếm ({searchResults.length})</h4>
+                  <button 
+                    className="btn" 
+                    style={{padding: '4px 8px'}} 
+                    onClick={addAllResults}
+                    disabled={!searchResults.length}
+                    title="Thêm tất cả kết quả tìm kiếm vào danh sách 'Đã chọn'"
+                  >
+                    + Thêm tất cả
+                  </button>
+                </div>
+                
                 <table className="min-w-full text-sm">
                   <thead className="bg-gray-50"><tr><th className="p-2 text-left">MSNV</th><th className="p-2 text-left">Họ & tên</th><th className="p-2 text-center">Thêm</th></tr></thead>
                   <tbody>
@@ -467,7 +473,6 @@ function ApproverModeLeanline({ section }) {
         </>
       )}
 
-      {/* ... (Phần còn lại của Step 2 và 3 giữ nguyên) ... */}
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -585,10 +590,7 @@ function ApproverModeMolding({ section }) {
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [selectedWorkers, setSelectedWorkers] = useState([]);
-  
-  // ----- THAY ĐỔI 1 (Molding): Thêm state cho checkbox -----
   const [searchAllSections, setSearchAllSections] = useState(false);
-  
   const selectedIds = useMemo(() => new Set(selectedWorkers.map(w => w.msnv)), [selectedWorkers]);
   const [prodRules, setProdRules] = useState([]);
   const [categoryOptions, setCategoryOptions] = useState([]);
@@ -636,39 +638,30 @@ function ApproverModeMolding({ section }) {
     [reviewRows, page]
   );
 
-  // ----- THAY ĐỔI 2 (Molding): Cập nhật hàm searchByApprover -----
   async function searchByApprover() {
     const q = approverIdInput.trim();
     if (!q) return alert("Nhập Tên hoặc MSNV người duyệt.");
-    
     setLoadingSearch(true);
     let query;
-
     if (isNaN(Number(q))) {
-      // Tìm theo Tên người duyệt
       query = supabase.from("users")
         .select("msnv, full_name, approver_msnv, approver_name")
         .ilike("approver_name", `%${q}%`);
     } else {
-      // Tìm theo MSNV người duyệt
       query = supabase.from("users")
         .select("msnv, full_name, approver_msnv, approver_name")
         .eq("approver_msnv", q);
     }
-    
-    // Lọc theo section nếu không check "All sections"
     if (!searchAllSections) {
       query = query.eq("section", section); // section ở đây sẽ là "MOLDING"
     }
-
-    const { data, error } = await query.limit(100); // Thêm limit
+    const { data, error } = await query.limit(100); 
     setLoadingSearch(false);
     if (error) return alert("Lỗi tải nhân viên: " + error.message);
     setSearchResults(data || []);
     setSearchInput(""); 
   }
 
-  // ----- THAY ĐỔI 3 (Molding): Cập nhật hàm searchGlobal -----
   async function searchGlobal() {
     const q = searchInput.trim();
     if (!q) return alert("Nhập Tên hoặc MSNV nhân viên.");
@@ -679,12 +672,9 @@ function ApproverModeMolding({ section }) {
     } else {
       query = supabase.from("users").select("msnv, full_name, approver_msnv, approver_name").eq("msnv", q);
     }
-    
-    // Lọc theo section nếu không check "All sections"
     if (!searchAllSections) {
       query = query.eq("section", section);
     }
-    
     const { data, error } = await query.limit(50);
     setLoadingSearch(false);
     if (error) return alert("Lỗi tìm nhân viên: " + error.message);
@@ -701,6 +691,21 @@ function ApproverModeMolding({ section }) {
   function removeWorker(msnv) {
     setSelectedWorkers(prev => prev.filter(w => w.msnv !== msnv));
   }
+
+  // ----- HÀM MỚI (MOLDING) -----
+  function addAllResults() {
+    if (!searchResults.length) return;
+    
+    setSelectedWorkers(prev => {
+      // Dùng Set để lọc trùng hiệu quả
+      const existingIds = new Set(prev.map(w => w.msnv));
+      const newWorkersToAdd = searchResults.filter(
+        worker => !existingIds.has(worker.msnv)
+      );
+      return [...prev, ...newWorkersToAdd];
+    });
+  }
+
   function proceedToTemplate() {
     if (!selectedWorkers.length) return alert("Chưa chọn nhân viên nào.");
     if (!prodRules.length) return alert("Chưa tải được Rule điểm, vui lòng thử lại.");
@@ -774,8 +779,6 @@ function ApproverModeMolding({ section }) {
         downtime: r.downtime, mold_hours: r.mold_hours, output: r.output, defects: Number(r.defects || 0),
         q_score: scores.q_score, p_score: scores.p_score, day_score: scores.day_score, overflow,
         compliance_code: r.compliance_code, status: "approved", approved_at: now,
-        // SỬA LỖI: Cột violations không có trong bảng kpi_entries_molding
-        // violations: r.compliance_code === "NONE" ? 0 : 1, 
       };
     });
     const { error } = await supabase
@@ -829,8 +832,6 @@ function ApproverModeMolding({ section }) {
               </div>
             </div>
             <div className="border rounded p-3 bg-white space-y-3 flex flex-col">
-              
-              {/* ----- THAY ĐỔI 4 (Molding): Cập nhật JSX cho Cách 1 ----- */}
               <div className="flex items-end gap-2">
                 <div className="flex-1">
                   <label className="text-sm font-medium">Cách 1: Tìm theo Người duyệt</label>
@@ -845,7 +846,6 @@ function ApproverModeMolding({ section }) {
                 </div>
               </div>
 
-              {/* ----- THAY ĐỔI 5 (Molding): Cập nhật JSX cho Cách 2 (label) ----- */}
               <div className="flex items-end gap-2">
                 <div className="flex-1">
                   <label className="text-sm font-medium">Cách 2: Tìm theo Tên/MSNV (NV)</label>
@@ -855,7 +855,20 @@ function ApproverModeMolding({ section }) {
               </div>
 
               <div className="overflow-auto flex-1 border-t pt-2">
-                <h4 className="font-semibold mb-1">Kết quả tìm kiếm ({searchResults.length})</h4>
+                {/* ----- THÊM NÚT "+ THÊM TẤT CẢ" (MOLDING) ----- */}
+                <div className="flex justify-between items-center mb-1">
+                  <h4 className="font-semibold">Kết quả tìm kiếm ({searchResults.length})</h4>
+                  <button 
+                    className="btn" 
+                    style={{padding: '4px 8px'}} 
+                    onClick={addAllResults}
+                    disabled={!searchResults.length}
+                    title="Thêm tất cả kết quả tìm kiếm vào danh sách 'Đã chọn'"
+                  >
+                    + Thêm tất cả
+                  </button>
+                </div>
+                
                 <table className="min-w-full text-sm">
                   <thead className="bg-gray-50"><tr><th className="p-2 text-left">MSNV</th><th className="p-2 text-left">Họ & tên</th><th className="p-2 text-center">Thêm</th></tr></thead>
                   <tbody>
@@ -881,7 +894,6 @@ function ApproverModeMolding({ section }) {
         </>
       )}
 
-      {/* ... (Phần còn lại của Step 2 và 3 giữ nguyên) ... */}
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">

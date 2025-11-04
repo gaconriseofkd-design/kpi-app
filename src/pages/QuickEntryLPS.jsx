@@ -80,10 +80,7 @@ export default function ApproverModeHybrid({ section }) {
   const [loadingSearch, setLoadingSearch] = useState(false);
   const [searchResults, setSearchResults] = useState([]);
   const [selectedWorkers, setSelectedWorkers] = useState([]);
-  
-  // ----- THAY ĐỔI 1: Thêm state cho checkbox -----
   const [searchAllSections, setSearchAllSections] = useState(false);
-  
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
   const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
@@ -141,39 +138,30 @@ export default function ApproverModeHybrid({ section }) {
     return () => { cancelled = true; };
   }, [section]);
   
-  // ----- THAY ĐỔI 2: Cập nhật hàm searchByApprover -----
   async function searchByApprover() {
     const q = approverIdInput.trim();
     if (!q) return alert("Nhập Tên hoặc MSNV người duyệt.");
-    
     setLoadingSearch(true);
     let query;
-
     if (isNaN(Number(q))) {
-      // Tìm theo Tên người duyệt
       query = supabase.from("users")
         .select("msnv, full_name, approver_msnv, approver_name")
         .ilike("approver_name", `%${q}%`);
     } else {
-      // Tìm theo MSNV người duyệt
       query = supabase.from("users")
         .select("msnv, full_name, approver_msnv, approver_name")
         .eq("approver_msnv", q); 
     }
-    
-    // Lọc theo section nếu không check "All sections"
     if (!searchAllSections) {
       query = query.eq("section", section); 
     }
-
-    const { data, error } = await query.limit(100); // Thêm limit
+    const { data, error } = await query.limit(100); 
     setLoadingSearch(false);
     if (error) return alert("Lỗi tải nhân viên: " + error.message);
     setSearchResults(data || []);
     setSearchInput(""); 
   }
 
-  // ----- THAY ĐỔI 3: Cập nhật hàm searchGlobal -----
   async function searchGlobal() {
     const q = searchInput.trim();
     if (!q) return alert("Nhập Tên hoặc MSNV nhân viên.");
@@ -184,12 +172,9 @@ export default function ApproverModeHybrid({ section }) {
     } else {
       query = supabase.from("users").select("msnv, full_name, approver_msnv, approver_name").eq("msnv", q);
     }
-
-    // Lọc theo section nếu không check "All sections"
     if (!searchAllSections) {
       query = query.eq("section", section);
     }
-
     const { data, error } = await query.limit(50);
     setLoadingSearch(false);
     if (error) return alert("Lỗi tìm nhân viên: " + error.message);
@@ -205,6 +190,20 @@ export default function ApproverModeHybrid({ section }) {
   }
   function removeWorker(msnv) {
     setSelectedWorkers(prev => prev.filter(w => w.msnv !== msnv));
+  }
+
+  // ----- HÀM MỚI (HYBRID) -----
+  function addAllResults() {
+    if (!searchResults.length) return;
+    
+    setSelectedWorkers(prev => {
+      // Dùng Set để lọc trùng hiệu quả
+      const existingIds = new Set(prev.map(w => w.msnv));
+      const newWorkersToAdd = searchResults.filter(
+        worker => !existingIds.has(worker.msnv)
+      );
+      return [...prev, ...newWorkersToAdd];
+    });
   }
 
   function proceedToTemplate() {
@@ -338,8 +337,6 @@ export default function ApproverModeHybrid({ section }) {
               </div>
             </div>
             <div className="border rounded p-3 bg-white space-y-3 flex flex-col">
-              
-              {/* ----- THAY ĐỔI 4: Cập nhật JSX cho Cách 1 ----- */}
               <div className="flex items-end gap-2">
                 <div className="flex-1">
                   <label className="text-sm font-medium">Cách 1: Tìm theo Người duyệt</label>
@@ -354,7 +351,6 @@ export default function ApproverModeHybrid({ section }) {
                 </div>
               </div>
               
-              {/* ----- THAY ĐỔI 5: Cập nhật JSX cho Cách 2 (label) ----- */}
               <div className="flex items-end gap-2">
                 <div className="flex-1">
                   <label className="text-sm font-medium">Cách 2: Tìm theo Tên/MSNV (NV)</label>
@@ -364,7 +360,20 @@ export default function ApproverModeHybrid({ section }) {
               </div>
               
               <div className="overflow-auto flex-1 border-t pt-2">
-                <h4 className="font-semibold mb-1">Kết quả tìm kiếm ({searchResults.length})</h4>
+                {/* ----- THÊM NÚT "+ THÊM TẤT CẢ" (HYBRID) ----- */}
+                <div className="flex justify-between items-center mb-1">
+                  <h4 className="font-semibold">Kết quả tìm kiếm ({searchResults.length})</h4>
+                  <button 
+                    className="btn" 
+                    style={{padding: '4px 8px'}} 
+                    onClick={addAllResults}
+                    disabled={!searchResults.length}
+                    title="Thêm tất cả kết quả tìm kiếm vào danh sách 'Đã chọn'"
+                  >
+                    + Thêm tất cả
+                  </button>
+                </div>
+                
                 <table className="min-w-full text-sm">
                   <thead className="bg-gray-50"><tr><th className="p-2 text-left">MSNV</th><th className="p-2 text-left">Họ & tên</th><th className="p-2 text-center">Thêm</th></tr></thead>
                   <tbody>
@@ -390,7 +399,6 @@ export default function ApproverModeHybrid({ section }) {
         </>
       )}
 
-      {/* ... (Phần còn lại của Step 2 và 3 giữ nguyên) ... */}
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
@@ -442,7 +450,7 @@ function EditReviewHybrid({
     <div className="space-y-3">
       <div className="flex items-center gap-2">
         <button className="btn btn-primary" onClick={saveBatch} disabled={saving || !selReview.size}>
-          {saving ? "Đang lưu!..." : `Lưu đã chọn (${selReview.size})`}
+          {saving ? "Đang lưu..." : `Lưu đã chọn (${selReview.size})`}
         </button>
         <button className="btn" onClick={resetToStep1} disabled={saving}>
           ‹ Quay lại (Nhập mới)
