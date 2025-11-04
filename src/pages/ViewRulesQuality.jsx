@@ -10,6 +10,17 @@ const HARDCODED_Q_RULES = [
   { threshold: "Trên 6", score: 0, note: "Nhiều hơn 6 phế" },
 ];
 
+// ----- THAY ĐỔI 1: Tạo mảng text mới cho cột "Số lượng phế" -----
+// Dựa trên logic tính điểm (0.5, 1, 1.5, 2 -> 8 điểm), (2.5, 3, 3.5, 4 -> 6 điểm)
+const Q_SCORE_LABELS = [
+  "0 đôi",
+  "Từ 0.5 đến 2 đôi",
+  "Từ 2.5 đến 4 đôi",
+  "Từ 4.5 đến 6 đôi",
+  "Trên 6 đôi"
+];
+// ----------------------------------------------------------------
+
 export default function ViewRulesQuality() {
   return (
     <div className="p-4 sm:p-6">
@@ -38,12 +49,12 @@ export default function ViewRulesQuality() {
                 key={idx} 
                 className="border-b border-gray-100 last:border-b-0 hover:bg-gray-50"
               >
+                {/* ----- THAY ĐỔI 2: Sử dụng mảng text mới ----- */}
                 <td className="p-3">
-                  {typeof rule.threshold === 'number'
-                    ? `Từ ${idx === 0 ? 0 : (HARDCODED_Q_RULES[idx-1].threshold + 0.1).toFixed(0)} đến ${rule.threshold}`
-                    : rule.threshold
-                  }
+                  {Q_SCORE_LABELS[idx] || rule.threshold}
                 </td>
+                {/* ------------------------------------------- */}
+                
                 <td className="p-3 font-semibold text-lg text-blue-600">{rule.score}</td>
                 <td className="p-3 text-gray-700">{rule.note}</td>
               </tr>
