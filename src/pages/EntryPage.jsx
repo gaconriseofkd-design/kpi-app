@@ -159,6 +159,9 @@ export default function EntryPage() {
   const [loading, setLoading] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState([]);
 
+  // Lấy ngày hôm nay để chặn nhập tương lai
+  const today = new Date().toISOString().slice(0, 10);
+
   // Lấy danh sách máy cho section hiện tại
   const currentMachines = useMemo(() => {
     return MACHINE_MAP[section] || MACHINE_MAP.LEANLINE_DEFAULT;
@@ -171,7 +174,7 @@ export default function EntryPage() {
     const defaultLine = currentMachines[0] || DEFAULT_FORM.line;
     setForm(f => ({ 
         ...DEFAULT_FORM, 
-        date: f.date,
+        date: f.date, // Giữ lại ngày đã chọn trước đó nếu có
         line: defaultLine,
         category: isHybridSection(section) ? f.category : "", 
         output: isHybridSection(section) ? f.output : 0, 
@@ -201,7 +204,7 @@ export default function EntryPage() {
     return () => {
       cancelled = true;
     };
-  }, [section]);
+  }, [section]); // Dependency array đã có 'section'
 
   // ====== auto fill họ tên + approver từ bảng users (Giữ nguyên) ======
   const userCache = useRef(new Map());
@@ -257,6 +260,11 @@ export default function EntryPage() {
   }
 
   async function handleSubmit() {
+    // THÊM KIỂM TRA NGÀY HIỆN TẠI
+    if (form.date > today) {
+      return alert("Không thể nhập KPI cho ngày trong tương lai.");
+    }
+
     if (!form.workerId) return alert("Nhập MSNV.");
     if (!form.approverId) return alert("Không tìm thấy Người duyệt cho MSNV này.");
     if (!form.date) return alert("Chọn ngày.");
@@ -375,6 +383,7 @@ export default function EntryPage() {
             className="input"
             value={form.date}
             onChange={(e) => handleChange("date", e.target.value)}
+            max={today} // THÊM THUỘC TÍNH MAX
           />
         </label>
 
