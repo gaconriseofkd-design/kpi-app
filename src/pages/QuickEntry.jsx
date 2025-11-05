@@ -107,6 +107,8 @@ function calculateScoresMolding(entry, allRules) {
 }
 /* ===== (Hết Helpers) ===== */
 
+// Lấy ngày hôm nay
+const today = new Date().toISOString().slice(0, 10);
 
 /* ===== Main ===== */
 export default function QuickEntry() {
@@ -176,7 +178,7 @@ function ApproverModeLeanline({ section }) {
   const [searchAllSections, setSearchAllSections] = useState(false);
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
-  const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [tplDate, setTplDate] = useState(today); // <-- SỬ DỤNG 'today'
   const [tplShift, setTplShift] = useState("Ca 1");
   const [tplWorkHours, setTplWorkHours] = useState(8);
   const [tplStopHours, setTplStopHours] = useState(0);
@@ -295,6 +297,11 @@ function ApproverModeLeanline({ section }) {
   }
 
   function buildReviewRows() {
+    // THÊM KIỂM TRA NGÀY
+    if (tplDate > today) {
+        return alert("Không thể chọn ngày trong tương lai.");
+    }
+    
     if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
     if (!selectedWorkers.length) return alert("Chưa chọn nhân viên.");
     const rows = selectedWorkers.map((w) => {
@@ -312,6 +319,14 @@ function ApproverModeLeanline({ section }) {
   }
 
   function updateRow(i, key, val) {
+    // THÊM KIỂM TRA NGÀY
+    if (key === "work_date") {
+        if (val > today) {
+            alert("Không thể chọn ngày trong tương lai.");
+            return; // Không cập nhật state
+        }
+    }
+    
     setReviewRows((old) => {
       const arr = old.slice();
       const r0 = arr[i] || {};
@@ -476,7 +491,13 @@ function ApproverModeLeanline({ section }) {
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div><label>Ngày</label><input type="date" className="input" value={tplDate} onChange={(e) => setTplDate(e.target.value)} /></div>
+            <div><label>Ngày</label><input 
+                type="date" 
+                className="input" 
+                value={tplDate} 
+                onChange={(e) => setTplDate(e.target.value)} 
+                max={today} // <-- THÊM THUỘC TÍNH NÀY
+            /></div>
             <div><label>Ca</label><select className="input" value={tplShift} onChange={(e) => setTplShift(e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></div>
             <div><label>Máy làm việc</label><select className="input" value={tplLine} onChange={(e) => setTplLine(e.target.value)}>{currentMachines.map(m => (<option key={m} value={m}>{m}</option>))}</select></div>
             <div><label>Tuân thủ</label><select className="input text-center" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>{COMPLIANCE_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>
@@ -509,7 +530,9 @@ function ApproverModeLeanline({ section }) {
         <EditReviewLeanline
           pageSize={pageSize} page={page} setPage={setPage} totalPages={totalPages} pageRows={pageRows}
           reviewRows={reviewRows} setReviewRows={setReviewRows} selReview={selReview} setSelReview={setSelReview}
-          toggleAllReviewOnPage={toggleAllReviewOnPage} updateRow={updateRow} saveBatch={saveBatch} saving={saving}
+          toggleAllReviewOnPage={toggleAllReviewOnPage} 
+          toggleOneReview={toggleOneReview} // <-- THÊM PROP NÀY
+          updateRow={updateRow} saveBatch={saveBatch} saving={saving}
           resetToStep1={resetToStep1} 
         />
       )}
@@ -557,7 +580,13 @@ function EditReviewLeanline({
                 <tr key={gi} className="border-t hover:bg-gray-50">
                   <td className="p-2"><input type="checkbox" checked={selReview.has(gi)} onChange={() => toggleOneReview(gi)} /></td>
                   <td className="p-2">{r.msnv}</td><td className="p-2">{r.hoten}</td>
-                  <td className="p-2"><input type="date" className="input text-center" value={r.work_date} onChange={(e) => updateRow(gi, "work_date", e.target.value)} /></td>
+                  <td className="p-2"><input 
+                    type="date" 
+                    className="input text-center" 
+                    value={r.work_date} 
+                    onChange={(e) => updateRow(gi, "work_date", e.target.value)} 
+                    max={today} // <-- THÊM THUỘC TÍNH NÀY
+                  /></td>
                   <td className="p-2"><select className="input text-center" value={r.shift} onChange={(e) => updateRow(gi, "shift", e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></td>
                   <td className="p-2"><select className="input text-center" value={r.line || ""} onChange={(e) => updateRow(gi, "line", e.target.value)}>{currentMachines.map(m => (<option key={m} value={m}>{m}</option>))}</select></td>
                   <td className="p-2"><input type="number" className="input text-center" value={r.work_hours} onChange={(e) => updateRow(gi, "work_hours", e.target.value)} /></td>
@@ -594,7 +623,7 @@ function ApproverModeMolding({ section }) {
   const selectedIds = useMemo(() => new Set(selectedWorkers.map(w => w.msnv)), [selectedWorkers]);
   const [prodRules, setProdRules] = useState([]);
   const [categoryOptions, setCategoryOptions] = useState([]);
-  const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [tplDate, setTplDate] = useState(today); // <-- SỬ DỤNG 'today'
   const [tplShift, setTplShift] = useState("Ca 1");
   const [tplWorkingInput, setTplWorkingInput] = useState(8);
   const [tplMoldHours, setTplMoldHours] = useState(0);
@@ -713,6 +742,11 @@ function ApproverModeMolding({ section }) {
   }
 
   function buildReviewRows() {
+    // THÊM KIỂM TRA NGÀY
+    if (tplDate > today) {
+        return alert("Không thể chọn ngày trong tương lai.");
+    }
+    
     if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
     if (!tplCategory) return alert("Chọn Loại hàng.");
     const rows = selectedWorkers.map((w) => {
@@ -733,6 +767,14 @@ function ApproverModeMolding({ section }) {
   }
 
   function updateRow(i, key, val) {
+    // THÊM KIỂM TRA NGÀY
+    if (key === "work_date") {
+        if (val > today) {
+            alert("Không thể chọn ngày trong tương lai.");
+            return; // Không cập nhật state
+        }
+    }
+    
     setReviewRows((old) => {
       const arr = old.slice();
       const r0 = arr[i] || {};
@@ -897,8 +939,14 @@ function ApproverModeMolding({ section }) {
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div><label>Ngày</label><input type="date" className="input" value={tplDate} onChange={(e) => setTplDate(e.target.value)} /></div>
-            <div><label>Ca</label><select className="input" value={tplShift} onChange={(e) => setTplShift(e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></div>
+            <div><label>Ngày</label><input 
+                type="date" 
+                className="input" 
+                value={tplDate} 
+                onChange={e => setTplDate(e.target.value)} 
+                max={today} // <-- THÊM THUỘC TÍNH NÀY
+            /></div>
+            <div><label>Ca</label><select className="input" value={tplShift} onChange={e => setTplShift(e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></div>
             <div><label>Loại hàng</label><select className="input" value={tplCategory} onChange={e => setTplCategory(e.target.value)}><option value="">-- Chọn loại --</option>{categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
             <div><label>Tuân thủ</label><select className="input text-center" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>{COMPLIANCE_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>
             <div><label>Giờ làm việc (nhập)</label><input type="number" className="input" value={tplWorkingInput} onChange={e => setTplWorkingInput(e.target.value)} /></div>
@@ -943,6 +991,7 @@ function ApproverModeMolding({ section }) {
         <EditReviewMolding
           pageSize={pageSize} page={page} setPage={setPage} totalPages={totalPages} pageRows={pageRows}
           selReview={selReview} toggleAllReviewOnPage={toggleAllReviewOnPage}
+          toggleOneReview={toggleOneReview} // <-- THÊM PROP NÀY
           saveBatch={saveBatch} saving={saving}
           updateRow={updateRow}
           categoryOptions={categoryOptions}
@@ -1009,7 +1058,13 @@ function EditReviewMolding({
                   <td className="p-2"><input type="checkbox" checked={selReview.has(gi)} onChange={() => toggleOneReview(gi)} /></td>
                   <td className="p-2">{r.msnv}</td>
                   <td className="p-2">{r.hoten}</td>
-                  <td className="p-2"><input type="date" className="input text-center w-32" value={r.work_date} onChange={(e) => updateRow(gi, "work_date", e.target.value)} /></td>
+                  <td className="p-2"><input 
+                    type="date" 
+                    className="input text-center w-32" 
+                    value={r.work_date} 
+                    onChange={(e) => updateRow(gi, "work_date", e.target.value)} 
+                    max={today} // <-- THÊM THUỘC TÍNH NÀY
+                  /></td>
                   <td className="p-2"><select className="input text-center" value={r.shift} onChange={(e) => updateRow(gi, "shift", e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></td>
                   <td className="p-2"><select className="input text-center w-32" value={r.category} onChange={(e) => updateRow(gi, "category", e.target.value)}><option value="">--Chọn--</option>{categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}</select></td>
                   <td className="p-2"><input type="number" className="input text-center w-20" value={r.working_input} onChange={(e) => updateRow(gi, "working_input", e.target.value)} /></td>
@@ -1077,6 +1132,11 @@ function SelfModeMolding({ section }) {
     return res;
   }
   function buildRowsByDates() {
+    // THÊM KIỂM TRA NGÀY
+    if (dateFrom > today || dateTo > today) {
+        return alert("Khoảng ngày không thể ở tương lai.");
+    }
+    
     if (!entrantId.trim()) return alert("Nhập MSNV người nhập trước.");
     if (!dateFrom || !dateTo) return alert("Chọn khoảng ngày.");
     if (new Date(dateFrom) > new Date(dateTo)) return alert("Khoảng ngày không hợp lệ.");
@@ -1144,8 +1204,20 @@ function SelfModeMolding({ section }) {
           <label>MSNV/Họ tên (áp dụng = người nhập)<input className="input" value={`${workerId} / ${workerName}`} readOnly /></label>
         </div>
         <div className="grid md:grid-cols-3 gap-3">
-          <label>Từ ngày<input type="date" className="input" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} /></label>
-          <label>Đến ngày<input type="date" className="input" value={dateTo} onChange={(e) => setDateTo(e.target.value)} /></label>
+          <label>Từ ngày<input 
+            type="date" 
+            className="input" 
+            value={dateFrom} 
+            onChange={(e) => setDateFrom(e.target.value)} 
+            max={today} // <-- THÊM THUỘC TÍNH NÀY
+          /></label>
+          <label>Đến ngày<input 
+            type="date" 
+            className="input" 
+            value={dateTo} 
+            onChange={(e) => setDateTo(e.target.value)} 
+            max={today} // <-- THÊM THUỘC TÍNH NÀY
+          /></label>
           <div className="flex items-end"><button className="btn" onClick={buildRowsByDates}>Tạo danh sách ngày</button></div>
         </div>
       </div>

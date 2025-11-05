@@ -83,7 +83,11 @@ export default function ApproverModeHybrid({ section }) {
   const [searchAllSections, setSearchAllSections] = useState(false);
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
-  const [tplDate, setTplDate] = useState(() => new Date().toISOString().slice(0, 10));
+  
+  // Lấy ngày hôm nay
+  const today = new Date().toISOString().slice(0, 10);
+  
+  const [tplDate, setTplDate] = useState(today); // <-- Đặt mặc định là hôm nay
   const [tplShift, setTplShift] = useState("Ca 1");
   const [tplWorkHours, setTplWorkHours] = useState(8);
   const [tplStopHours, setTplStopHours] = useState(0);
@@ -213,6 +217,11 @@ export default function ApproverModeHybrid({ section }) {
   }
 
   function buildReviewRows() {
+    // THÊM KIỂM TRA NGÀY
+    if (tplDate > today) {
+        return alert("Không thể chọn ngày trong tương lai.");
+    }
+
     if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
     if (!tplCategory) return alert("Vui lòng chọn Loại năng suất.");
     if (!selectedWorkers.length) return alert("Chưa chọn nhân viên.");
@@ -237,6 +246,14 @@ export default function ApproverModeHybrid({ section }) {
   }
 
   function updateRow(i, key, val) {
+    // THÊM KIỂM TRA NGÀY
+    if (key === "work_date") {
+        if (val > today) {
+            alert("Không thể chọn ngày trong tương lai.");
+            return; // Không cập nhật state
+        }
+    }
+    
     setReviewRows((old) => {
       const arr = old.slice(); const r0 = arr[i] || {};
       const r = ["compliance", "category", "line", "shift", "work_date"].includes(key)
@@ -402,7 +419,13 @@ export default function ApproverModeHybrid({ section }) {
       {step === 2 && (
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-            <div><label>Ngày</label><input type="date" className="input" value={tplDate} onChange={(e) => setTplDate(e.target.value)} /></div>
+            <div><label>Ngày</label><input 
+                type="date" 
+                className="input" 
+                value={tplDate} 
+                onChange={(e) => setTplDate(e.target.value)} 
+                max={today} // <-- THÊM THUỘC TÍNH NÀY
+            /></div>
             <div><label>Ca</label><select className="input" value={tplShift} onChange={(e) => setTplShift(e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></div>
             <div><label>Máy làm việc</label><select className="input" value={tplLine} onChange={(e) => setTplLine(e.target.value)}>{currentMachines.map(m => (<option key={m} value={m}>{m}</option>))}</select></div>
             <div><label>Tuân thủ</label><select className="input text-center" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>{COMPLIANCE_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>
@@ -429,9 +452,12 @@ export default function ApproverModeHybrid({ section }) {
       {step === 3 && (
         <EditReviewHybrid
           pageSize={pageSize} page={page} setPage={setPage} totalPages={totalPages} pageRows={pageRows}
-          selReview={selReview} toggleAllReviewOnPage={toggleAllReviewOnPage} updateRow={updateRow}
+          selReview={selReview} toggleAllReviewOnPage={toggleAllReviewOnPage} 
+          toggleOneReview={toggleOneReview} // <-- THÊM PROP NÀY
+          updateRow={updateRow}
           saveBatch={saveBatch} saving={saving} categoryOptions={categoryOptions}
           resetToStep1={resetToStep1} 
+          today={today} // <-- THÊM PROP NÀY
         />
       )}
     </div>
@@ -442,7 +468,8 @@ export default function ApproverModeHybrid({ section }) {
 function EditReviewHybrid({
     pageSize, page, setPage, totalPages, pageRows, selReview,
     toggleAllReviewOnPage, toggleOneReview, updateRow, saveBatch, saving, categoryOptions,
-    resetToStep1
+    resetToStep1,
+    today // <-- NHẬN PROP 'today'
   }) {
   const globalIndex = (idx) => (page - 1) * pageSize + idx;
   const allMachines = MACHINE_MAP.LAMINATION.concat( MACHINE_MAP.PREFITTING, MACHINE_MAP.BÀO, MACHINE_MAP.TÁCH ); 
@@ -477,7 +504,13 @@ function EditReviewHybrid({
                 <tr key={gi} className="border-t hover:bg-gray-50">
                   <td className="p-2"><input type="checkbox" checked={selReview.has(gi)} onChange={() => toggleOneReview(gi)} /></td>
                   <td className="p-2">{r.msnv}</td><td className="p-2">{r.hoten}</td>
-                  <td className="p-2"><input type="date" className="input text-center" value={r.work_date} onChange={(e) => updateRow(gi, "work_date", e.target.value)} /></td>
+                  <td className="p-2"><input 
+                    type="date" 
+                    className="input text-center" 
+                    value={r.work_date} 
+                    onChange={(e) => updateRow(gi, "work_date", e.target.value)} 
+                    max={today} // <-- THÊM THUỘC TÍNH NÀY
+                  /></td>
                   <td className="p-2"><select className="input text-center" value={r.shift} onChange={(e) => updateRow(gi, "shift", e.target.value)}><option value="Ca 1">Ca 1</option> <option value="Ca 2">Ca 2</option> <option value="Ca 3">Ca 3</option> <option value="Ca HC">Ca HC</option></select></td>
                   <td className="p-2"><input type="number" className="input text-center" value={r.work_hours} onChange={(e) => updateRow(gi, "work_hours", e.target.value)} /></td>
                   <td className="p-2"><input type="number" className="input text-center" value={r.stop_hours} onChange={(e) => updateRow(gi, "stop_hours", e.target.value)} /></td>

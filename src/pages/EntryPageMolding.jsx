@@ -38,6 +38,9 @@ function calcQ(defects) {
 export default function EntryPageMolding() {
   const { section } = useKpiSection(); // sẽ là "MOLDING"
 
+  // Lấy ngày hôm nay
+  const today = new Date().toISOString().slice(0, 10);
+
   // Người nhập
   const [workerId, setWorkerId] = useState("");
   const [workerName, setWorkerName] = useState("");
@@ -47,7 +50,7 @@ export default function EntryPageMolding() {
   const [approverName, setApproverName] = useState("");
 
   // Form cơ bản
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(today); // Đặt ngày mặc định là hôm nay
   const [shift, setShift] = useState("");
   const [inputHours, setInputHours] = useState(8);
 
@@ -137,6 +140,11 @@ export default function EntryPageMolding() {
   const overflow = Math.max(0, pScore + qScore - 15);
 
   async function saveEntry() {
+    // THÊM KIỂM TRA NGÀY
+    if (date > today) {
+      return alert("Không thể nhập KPI cho ngày trong tương lai.");
+    }
+
     if (!workerId || !date || !shift || !category) {
       alert("Vui lòng nhập đủ: MSNV, Ngày, Ca, Loại hàng.");
       return;
@@ -210,7 +218,13 @@ export default function EntryPageMolding() {
 
         <div>
           <label>Ngày làm việc</label>
-          <input type="date" className="input" value={date} onChange={e => setDate(e.target.value)} />
+          <input 
+            type="date" 
+            className="input" 
+            value={date} 
+            onChange={e => setDate(e.target.value)} 
+            max={today} // THÊM THUỘC TÍNH MAX
+          />
         </div>
         <div>
           <label>Ca làm việc</label>
