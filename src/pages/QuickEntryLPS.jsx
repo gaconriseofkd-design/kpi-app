@@ -5,10 +5,10 @@ import { supabase } from "../lib/supabaseClient";
 
 /* ================= Scoring & Helpers ================= */
 const MACHINE_MAP = {
-    "LAMINATION": ["Máy dán 1", "Máy dán 2", "Máy dán 3", "Máy dán 4", "Máy dán 5", "Máy dán 6", "Máy dán 7"],
-    "PREFITTING": ["Máy cắt 1", "Máy cắt 2", "Máy cắt 3", "Máy cắt 4", "Máy cắt 5", "Máy cắt 6"],
-    "BÀO": ["Máy bào 1", "Máy bào 2", "Máy bào 3", "Máy bào 4"],
-    "TÁCH": ["Máy tách 1", "Máy tách 2", "Máy tách 3", "Máy tách 4"],
+    "LAMINATION": ["Máy dán 1", "Máy dán 2", "Máy dán 3", "Máy dán 4", "Máy dán 5", "Máy dán 6", "Máy dán 7", "Vòng ngoài"],
+    "PREFITTING": ["Máy cắt 1", "Máy cắt 2", "Máy cắt 3", "Máy cắt 4", "Máy cắt 5", "Máy cắt 6", "Vòng ngoài"],
+    "BÀO": ["Máy bào 1", "Máy bào 2", "Máy bào 3", "Máy bào 4", "Vòng ngoài"],
+    "TÁCH": ["Máy tách 1", "Máy tách 2", "Máy tách 3", "Máy tách 4", "Vòng ngoài"],
 };
 function calcWorkingReal(shift, inputHours) {
   const h = Number(inputHours || 0);
