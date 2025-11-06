@@ -198,9 +198,11 @@ export default function EntryPageMolding() {
       <h2 className="text-xl font-semibold">Nhập KPI - Molding</h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        // pages/EntryPageMolding.jsx
+        
         <div>
           <label>MSNV người nhập</label>
-          <input className="input" value={workerId} onChange={e => setWorkerId(e.target.value)} />
+          <input className="input" value={workerId} onChange={e => setWorkerId(e.target.value.trim())} />
         </div>
         <div>
           <label>Họ & tên người nhập</label>

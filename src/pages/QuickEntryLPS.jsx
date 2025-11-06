@@ -357,7 +357,7 @@ export default function ApproverModeHybrid({ section }) {
               <div className="flex items-end gap-2">
                 <div className="flex-1">
                   <label className="text-sm font-medium">Cách 1: Tìm theo Người duyệt</label>
-                  <input className="input w-full" value={approverIdInput} onChange={(e) => setApproverIdInput(e.target.value)} placeholder="Nhập Tên hoặc MSNV người duyệt..." />
+                  <input className="input w-full" value={approverIdInput} onChange={(e) => setApproverIdInput(e.target.value.trim())} placeholder="Nhập Tên hoặc MSNV người duyệt..." />
                 </div>
                 <div className="flex flex-col justify-end">
                   <label className="text-sm flex items-center gap-1 mb-2">
@@ -371,7 +371,7 @@ export default function ApproverModeHybrid({ section }) {
               <div className="flex items-end gap-2">
                 <div className="flex-1">
                   <label className="text-sm font-medium">Cách 2: Tìm theo Tên/MSNV (NV)</label>
-                  <input className="input w-full" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Nhập Tên hoặc MSNV nhân viên..." />
+                  <input className="input w-full" value={searchInput} onChange={(e) => setSearchInput(e.target.value.trim())} placeholder="Nhập Tên hoặc MSNV nhân viên..." />
                 </div>
                  <button className="btn" onClick={searchGlobal} disabled={loadingSearch}>{loadingSearch ? "..." : "Tìm"}</button>
               </div>

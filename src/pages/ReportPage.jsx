@@ -418,7 +418,7 @@ function ReportContent() {
             const cellRef = XLSX.utils.encode_cell({ c: dateColumnIndex, r: i + 1 });
             // Chỉ định dạng nếu ô đó là kiểu 'd' (date)
             if (ws[cellRef] && ws[cellRef].t === 'd') { 
-              ws[cellRef].z = 'mm/dd/yyyy'; // Áp dụng định dạng mong muốn
+              ws[cellRef].z = 'm/d/yyyy'; // <-- SỬA DÒNG NÀY
             }
           }
         }
