@@ -316,7 +316,7 @@ function ReportContent() {
           const [y, m, d] = iso.split("T")[0].split("-").map(Number);
           // Công thức chuyển date sang serial Excel (1900-based)
           const excelSerial = Math.floor((Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000);
-          return { v: excelSerial, t: 'n', z: 'm/d/yyyy' }; // kiểu number có format ngày
+          return { v: excelSerial, t: 'n', z: 'mm/dd/yyyy' }; // kiểu number có format ngày
         };
         
 
