@@ -311,13 +311,14 @@ function ReportContent() {
         const day = Number(r.day_score || 0);
         const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
         const total = day + overflow;
-  
+        const cleanDate = (iso) => iso ? iso.split("T")[0] : "";
+
         return {
           "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "MOLDING")),
           "MSNV": r.worker_id || "",
           "HỌ VÀ TÊN": r.worker_name || "",
           "CA LÀM VIỆC": r.ca || "",
-          "NGÀY LÀM VIỆC": { v: r.date.slice(0,10), t: 'd' },
+          "NGÀY LÀM VIỆC": cleanDate(r.date),
           "THỜI GIAN LÀM VIỆC": Number(r.working_input ?? 0),
           "Số đôi phế": Number(r.defects ?? 0),
           "Điểm chất lượng": q,
