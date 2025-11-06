@@ -317,8 +317,8 @@ function ReportContent() {
           "MSNV": r.worker_id || "",
           "HỌ VÀ TÊN": r.worker_name || "",
           "CA LÀM VIỆC": r.ca || "",
-          "NGÀY LÀM VIỆC": parseDate(r.date) ? { v: parseDate(r.date), t: 'd', z: 'm/d/yyyy' } : null, // <-- SỬA 1
-          "THỜI GIAN LÀM VIỆC": Number(r.working_input ?? 0),
+          "NGÀY LÀM VIỆC": r.date ? r.date.slice(0, 10) : "",
+          "NGÀY LÀM VIỆC": { v: r.date.slice(0,10), t: 'd' },
           "Số đôi phế": Number(r.defects ?? 0),
           "Điểm chất lượng": q,
           "Sản lượng/ca": Number(r.output ?? 0),
