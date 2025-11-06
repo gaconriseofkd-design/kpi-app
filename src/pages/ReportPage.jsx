@@ -311,16 +311,22 @@ function ReportContent() {
         const day = Number(r.day_score || 0);
         const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
         const total = day + overflow;
-        const cleanDate = (iso) => iso ? iso.split("T")[0] : "";
+        const toExcelDate = (iso) => {
+          if (!iso) return "";
+          const [y, m, d] = iso.split("T")[0].split("-").map(Number);
+          // Công thức chuyển date sang serial Excel (1900-based)
+          const excelSerial = Math.floor((Date.UTC(y, m - 1, d) - Date.UTC(1899, 11, 30)) / 86400000);
+          return { v: excelSerial, t: 'n', z: 'm/d/yyyy' }; // kiểu number có format ngày
+        };
+        
 
         return {
           "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "MOLDING")),
           "MSNV": r.worker_id || "",
           "HỌ VÀ TÊN": r.worker_name || "",
           "CA LÀM VIỆC": r.ca || "",
-          "NGÀY LÀM VIỆC": cleanDate(r.date)
-                  ? { v: new Date(cleanDate(r.date)), t: 'd', z: 'mm/dd/yyyy' }
-                  : "",
+          "NGÀY LÀM VIỆC": toExcelDate(r.date),
+
           "THỜI GIAN LÀM VIỆC": Number(r.working_input ?? 0),
           "Số đôi phế": Number(r.defects ?? 0),
           "Điểm chất lượng": q,
