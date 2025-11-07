@@ -467,29 +467,36 @@ function ReportContent() {
         XLSX.writeFile(wb, `kpi_report_${section}_${dateFrom}_to_${dateTo}.xlsx`);
       }
 
+  // ----- (SỬA ĐỔI) HÀM XUẤT EXCEL CHI TIẾT TẤT CẢ NGÀY THIẾU -----
   function exportMissingXLSXFull() {
     if (!missingReportFull.length) return alert("Không có nhân viên nào thiếu KPI để xuất.");
     
+    const sectionName = viSection(section);
+    const approver = approverId.trim() || "all_section";
+    
     // SỬA LỖI: flatMap sử dụng trường 'missing' (mảng)
+    // SỬA LỖI 2: Thêm cột người duyệt
     const data = missingReportFull.flatMap(r => 
         r.missing.map(date => ({
-            "SECTION": viSection(section),
+            "SECTION": sectionName,
+            "NGÀY THIẾU KPI": date,
             "MSNV": r.msnv,
             "HỌ VÀ TÊN": r.name,
-            "NGÀY THIẾU KPI": date,
-            "NGÀY BẮT ĐẦU LỌC": dateFrom,
-            "NGÀY KẾT THÚC LỌC": dateTo
+            "MSNV NGƯỜI DUYỆT": r.approver_msnv,
+            "TÊN NGƯỜI DUYỆT": r.approver_name || ""
         }))
     );
     
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "KPI_Missing_Dates");
+    XLSX.utils.book_append_sheet(wb, ws, "Missing_All_Details"); // <-- Sửa tên sheet
     
-    XLSX.writeFile(wb, `kpi_missing_full_${section}_${approverId||"all"}_${dateFrom}_to_${dateTo}.xlsx`);
+    // <-- Sửa tên file
+    XLSX.writeFile(wb, `kpi_missing_details_all_${sectionName}_${approver}_${dateFrom}_to_${dateTo}.xlsx`);
   }
+  // -----------------------------------------------------------------
 
-  // ----- (MỚI) HÀM XUẤT EXCEL THEO NGÀY -----
+  // ----- (MỚI) HÀM XUẤT EXCEL THEO NGÀY (CHI TIẾT) -----
   function exportMissingByDateXLSX(date, missingList) {
     if (!missingList || missingList.length === 0) {
       return alert("Không có dữ liệu để xuất.");
@@ -513,6 +520,32 @@ function ReportContent() {
     XLSX.writeFile(wb, `kpi_missing_list_for_${sectionName}_${date}.xlsx`);
   }
   // ------------------------------------------
+
+  // ----- (MỚI) HÀM XUẤT EXCEL THEO NGÀY (TỔNG HỢP) -----
+  function exportMissingSummaryByDay() {
+    if (!summaryByDay.length) {
+      return alert("Không có dữ liệu thống kê theo ngày để xuất.");
+    }
+    
+    const sectionName = viSection(section);
+    const approver = approverId.trim() || "all_section";
+
+    const data = summaryByDay.map(day => ({
+      "SECTION": sectionName,
+      "NGÀY": day.date,
+      "TỔNG NHÂN VIÊN": day.totalWorkers,
+      "ĐÃ NỘP": day.submittedCount,
+      "CÒN THIẾU": day.missingCount,
+      "TỶ LỆ NỘP": day.percentage.toFixed(0) + "%"
+    }));
+    
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `Summary_Missing_by_Day`);
+    
+    XLSX.writeFile(wb, `kpi_missing_summary_by_day_${sectionName}_${approver}_${dateFrom}_to_${dateTo}.xlsx`);
+  }
+  // ----------------------------------------------
 
 
   // ----- 4. Effects (Triggering data load/reset) -----
@@ -655,7 +688,30 @@ function ReportContent() {
       {/* === BÁO CÁO NHANH THEO NGÀY (SỬA ĐỔI) === */}
       {approverWorkers.length > 0 && (
           <div className="p-4 border rounded bg-white space-y-3">
-            <h3 className="text-lg font-semibold">Thống kê gửi KPI theo ngày</h3>
+            {/* ----- SỬA ĐỔI TIÊU ĐỀ VÀ THÊM 2 NÚT XUẤT ----- */}
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <h3 className="text-lg font-semibold">Thống kê gửi KPI theo ngày</h3>
+              <div className="flex items-center gap-2">
+                <button
+                    className="btn btn-sm"
+                    onClick={exportMissingSummaryByDay}
+                    disabled={!summaryByDay.length}
+                    title="Xuất file Excel tổng hợp: Ngày, Tổng NV, Đã nộp, Còn thiếu, Tỷ lệ %"
+                >
+                    Xuất tổng hợp (theo ngày)
+                </button>
+                <button 
+                    className="btn btn-sm bg-green-600 text-white hover:bg-green-700"
+                    onClick={exportMissingXLSXFull}
+                    disabled={!missingReportFull.length}
+                    title="Xuất file Excel chi tiết: một hàng cho mỗi lượt nhân viên thiếu KPI của tất cả các ngày"
+                >
+                    Xuất chi tiết (toàn bộ)
+                </button>
+              </div>
+            </div>
+            {/* ----- KẾT THÚC SỬA ĐỔI ----- */}
+
             <div className="max-h-72 overflow-y-auto pr-2 space-y-2">
               {summaryByDay.map(day => (
                 <div key={day.date} className="border rounded">
@@ -761,6 +817,8 @@ function ReportContent() {
                         ): <b>{approverWorkers.length}</b>
                     </span>
                     <span className="font-medium">NV thiếu KPI: <b className="text-red-600">{missingReportFull.length}</b></span>
+                    
+                    {/* ----- NÚT ĐÃ BỊ DI CHUYỂN LÊN TRÊN -----
                     <button 
                         className="btn ml-auto" 
                         onClick={exportMissingXLSXFull} 
@@ -768,6 +826,7 @@ function ReportContent() {
                     >
                         Xuất XLSX (Tổng hợp)
                     </button>
+                    */}
                 </div>
                 
                 <div className="overflow-x-auto">
