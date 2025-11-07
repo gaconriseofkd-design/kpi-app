@@ -221,6 +221,8 @@ function ReportContent() {
             report.push({
                 msnv: w.msnv,
                 name: w.full_name,
+                approver_msnv: w.approver_msnv, // <-- SỬA LỖI 2: Thêm data người duyệt
+                approver_name: w.approver_name, // <-- SỬA LỖI 2: Thêm data người duyệt
                 missing: missingDates, // LƯU DƯỚI DẠNG MẢNG
                 missingDisplay: missingDates.join(", "), // LƯU DƯỚI DẠNG CHUỖI
                 missingCount: missingDates.length,
@@ -232,7 +234,7 @@ function ReportContent() {
     return report.sort((a, b) => b.missingCount - a.missingCount); 
   }, [approverWorkers, rows, dateFrom, dateTo, allDates]); // Thêm allDates
 
-  // ----- (MỚI) BÁO CÁO THIẾU (THEO NGÀY) -----
+  // ----- BÁO CÁO THIẾU (THEO NGÀY) -----
   const summaryByDay = useMemo(() => {
     const totalWorkers = approverWorkers.length;
     if (totalWorkers === 0 || !allDates.length) return [];
@@ -241,13 +243,14 @@ function ReportContent() {
     const missingByDate = new Map();
     // Tận dụng 'missingReportFull' đã tính toán
     for (const workerReport of missingReportFull) {
-      // workerReport = { msnv, name, missing: [...] }
+      // workerReport = { msnv, name, missing: [...], approver_msnv, approver_name }
       for (const date of workerReport.missing) {
         if (!missingByDate.has(date)) missingByDate.set(date, []);
         missingByDate.get(date).push({ 
             msnv: workerReport.msnv, 
             name: workerReport.name,
-            approver_msnv: approverId.trim() || "(N/A)" // Lấy người duyệt đang lọc, hoặc N/A
+            approver_msnv: workerReport.approver_msnv, // <-- SỬA LỖI 3: Lấy data đúng
+            approver_name: workerReport.approver_name  // <-- SỬA LỖI 3: Lấy data đúng
         });
       }
     }
@@ -269,8 +272,7 @@ function ReportContent() {
       };
     }).sort((a, b) => b.date.localeCompare(a.date)); // Sắp xếp ngày mới nhất lên đầu
 
-  }, [missingReportFull, allDates, approverWorkers.length, approverId]);
-  // ------------------------------------------------
+  }, [missingReportFull, allDates, approverWorkers.length]); // Bỏ approverId
 
 
   const missingTotalPages = useMemo(() => Math.max(1, Math.ceil(missingReportFull.length / missingPageSize)), [missingReportFull.length]);
@@ -532,7 +534,8 @@ function ReportContent() {
     const id = approverId.trim();
     const currentSection = section.toUpperCase();
 
-    let query = supabase.from("users").select("msnv, full_name");
+    // SỬA LỖI 1: Tải thêm approver_msnv và approver_name
+    let query = supabase.from("users").select("msnv, full_name, approver_msnv, approver_name");
 
     if (id) {
       // Logic cũ: Nếu có ID người duyệt, lọc theo người duyệt
@@ -673,7 +676,8 @@ function ReportContent() {
                             <tr key={w.msnv} className="border-b last:border-b-0">
                               <td className="p-1">{w.msnv}</td>
                               <td className="p-1">{w.name}</td>
-                              <td className="p-1">{w.approver_msnv}</td>
+                              {/* SỬA LỖI 4: Hiển thị Tên, fallback về MSNV */}
+                              <td className="p-1">{w.approver_name || w.approver_msnv || "(N/A)"}</td>
                             </tr>
                           ))}
                         </tbody>
