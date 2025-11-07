@@ -489,6 +489,31 @@ function ReportContent() {
     XLSX.writeFile(wb, `kpi_missing_full_${section}_${approverId||"all"}_${dateFrom}_to_${dateTo}.xlsx`);
   }
 
+  // ----- (MỚI) HÀM XUẤT EXCEL THEO NGÀY -----
+  function exportMissingByDateXLSX(date, missingList) {
+    if (!missingList || missingList.length === 0) {
+      return alert("Không có dữ liệu để xuất.");
+    }
+    
+    const sectionName = viSection(section);
+
+    const data = missingList.map(w => ({
+        "SECTION": sectionName,
+        "NGÀY THIẾU KPI": date,
+        "MSNV": w.msnv,
+        "HỌ VÀ TÊN": w.name,
+        "MSNV NGƯỜI DUYỆT": w.approver_msnv,
+        "TÊN NGƯỜI DUYỆT": w.approver_name || ""
+    }));
+    
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, `Missing_${date}`);
+    
+    XLSX.writeFile(wb, `kpi_missing_list_for_${sectionName}_${date}.xlsx`);
+  }
+  // ------------------------------------------
+
 
   // ----- 4. Effects (Triggering data load/reset) -----
   useEffect(() => {
@@ -662,26 +687,40 @@ function ReportContent() {
                   
                   {/* Bảng chi tiết (hiện khi click) */}
                   {selectedMissingDate === day.date && day.missingList.length > 0 && (
-                    <div className="p-2 bg-gray-50 border-t max-h-40 overflow-y-auto">
-                      <table className="min-w-full text-xs">
-                        <thead className="bg-gray-200 sticky top-0">
-                          <tr>
-                            <th className="p-1 text-left">MSNV</th>
-                            <th className="p-1 text-left">Họ & Tên</th>
-                            <th className="p-1 text-left">Người duyệt</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {day.missingList.map(w => (
-                            <tr key={w.msnv} className="border-b last:border-b-0">
-                              <td className="p-1">{w.msnv}</td>
-                              <td className="p-1">{w.name}</td>
-                              {/* SỬA LỖI 4: Hiển thị Tên, fallback về MSNV */}
-                              <td className="p-1">{w.approver_name || w.approver_msnv || "(N/A)"}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                    <div className="p-2 bg-gray-50 border-t">
+                        {/* ----- NÚT XUẤT EXCEL MỚI ----- */}
+                        <button
+                            className="btn btn-sm bg-blue-600 text-white hover:bg-blue-700 mb-2"
+                            onClick={(e) => {
+                                e.stopPropagation(); // Ngăn không cho sự kiện click đóng thẻ chi tiết
+                                exportMissingByDateXLSX(day.date, day.missingList);
+                            }}
+                        >
+                            Xuất Excel ({day.missingList.length})
+                        </button>
+                        {/* ------------------------------- */}
+                        
+                        <div className="max-h-40 overflow-y-auto">
+                          <table className="min-w-full text-xs">
+                            <thead className="bg-gray-200 sticky top-0">
+                              <tr>
+                                <th className="p-1 text-left">MSNV</th>
+                                <th className="p-1 text-left">Họ & Tên</th>
+                                <th className="p-1 text-left">Người duyệt</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {day.missingList.map(w => (
+                                <tr key={w.msnv} className="border-b last:border-b-0">
+                                  <td className="p-1">{w.msnv}</td>
+                                  <td className="p-1">{w.name}</td>
+                                  {/* SỬA LỖI 4: Hiển thị Tên, fallback về MSNV */}
+                                  <td className="p-1">{w.approver_name || w.approver_msnv || "(N/A)"}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                     </div>
                   )}
                   {selectedMissingDate === day.date && day.missingList.length === 0 && (
