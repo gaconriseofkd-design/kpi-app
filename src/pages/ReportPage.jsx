@@ -247,7 +247,7 @@ function ReportContent() {
         missingByDate.get(date).push({ 
             msnv: workerReport.msnv, 
             name: workerReport.name,
-            approver_msnv: approverId.trim() // Người duyệt chính là người đang xem
+            approver_msnv: approverId.trim() || "(N/A)" // Lấy người duyệt đang lọc, hoặc N/A
         });
       }
     }
@@ -484,7 +484,7 @@ function ReportContent() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "KPI_Missing_Dates");
     
-    XLSX.writeFile(wb, `kpi_missing_full_${section}_${approverId}_${dateFrom}_to_${dateTo}.xlsx`);
+    XLSX.writeFile(wb, `kpi_missing_full_${section}_${approverId||"all"}_${dateFrom}_to_${dateTo}.xlsx`);
   }
 
 
@@ -505,6 +505,7 @@ function ReportContent() {
     setRows([]); setCategory(""); setWorkerId(""); setApproverId(""); setStatus("all"); setOnlyApproved(false);
     setMissingWorkerId("");
     setSelectedMissingDate(null); // <-- (MỚI) Đóng chi tiết khi đổi section
+    setApproverWorkers([]); // <-- (MỚI) Xóa danh sách NV khi đổi section
   }, [section]);
   
   // Reruns when workerOptions changes (used for chart default)
@@ -526,21 +527,37 @@ function ReportContent() {
       });
   }, [section, isMolding, isHybrid]);
   
-  // Load Workers by Approver (for Missing KPI Report)
+  // ----- (SỬA ĐỔI) Load Workers by Approver HOẶC Section -----
   useEffect(() => {
     const id = approverId.trim();
-    if (!id) { setApproverWorkers([]); return; }
+    const currentSection = section.toUpperCase();
 
-    const approverCol = "approver_msnv"; // FIX: LUÔN DÙNG approver_msnv CHO BẢNG USERS
+    let query = supabase.from("users").select("msnv, full_name");
 
-    supabase.from("users")
-        .select("msnv, full_name")
-        .eq(approverCol, id) // Dùng cột cố định
-        .then(({ data, error }) => {
-            if (error) { console.error("Error loading approver workers:", error); return; }
-            setApproverWorkers(data || []);
-        });
-  }, [approverId, isMolding]); // (isMolding dependency không còn cần thiết, nhưng giữ lại cũng không sao)
+    if (id) {
+      // Logic cũ: Nếu có ID người duyệt, lọc theo người duyệt
+      const approverCol = "approver_msnv"; // Luôn dùng 'approver_msnv' cho bảng users
+      query = query.eq(approverCol, id);
+      // Bạn có thể thêm lọc section ở đây nếu muốn
+      // query = query.eq("section", currentSection);
+    } else {
+      // Logic MỚI: Nếu không có ID, lọc theo section hiện tại
+      query = query.eq("section", currentSection);
+    }
+
+    // Luôn đặt lại danh sách NV trước khi tải
+    setApproverWorkers([]); 
+    
+    query.then(({ data, error }) => {
+        if (error) { 
+          console.error("Error loading workers:", error); 
+          setApproverWorkers([]); // Đảm bảo rỗng nếu có lỗi
+          return; 
+        }
+        setApproverWorkers(data || []);
+    });
+    
+  }, [approverId, section]); // Thay đổi dependency
 
 
   // --- JSX Rendering Starts Here ---
@@ -607,8 +624,8 @@ function ReportContent() {
         <SummaryCard title="Số nhân viên" value={summary.workers} />
       </div>
 
-      {/* === BÁO CÁO NHANH THEO NGÀY (MỚI) === */}
-      {approverId.trim() && approverWorkers.length > 0 && (
+      {/* === BÁO CÁO NHANH THEO NGÀY (SỬA ĐỔI) === */}
+      {approverWorkers.length > 0 && (
           <div className="p-4 border rounded bg-white space-y-3">
             <h3 className="text-lg font-semibold">Thống kê gửi KPI theo ngày</h3>
             <div className="max-h-72 overflow-y-auto pr-2 space-y-2">
@@ -671,23 +688,35 @@ function ReportContent() {
                 </div>
               ))}
             </div>
-            {!rows.length && approverId.trim() && <p className="text-gray-500">Đang chờ tải dữ liệu KPI chi tiết để kiểm tra.</p>}
+            {!rows.length && <p className="text-gray-500">Đang chờ tải dữ liệu KPI chi tiết để kiểm tra.</p>}
           </div>
         )}
       {/* === HẾT PHẦN MỚI === */}
 
 
-      {/* Tra cứu ngày thiếu KPI (Bảng cũ) */}
+      {/* Tra cứu ngày thiếu KPI (Bảng cũ) (SỬA ĐỔI) */}
       <div className="p-4 border rounded bg-white space-y-3">
         <h3 className="text-lg font-semibold">Tra cứu ngày thiếu KPI theo Nhân viên</h3>
         
-        {!approverId.trim() && <p className="text-gray-500">Vui lòng nhập MSNV Người duyệt để tra cứu.</p>}
-        {approverId.trim() && approverWorkers.length === 0 && !loading && <p className="text-red-500">Không tìm thấy nhân viên nào dưới quyền người duyệt này.</p>}
+        {/* ----- SỬA ĐỔI KHỐI NÀY ----- */}
+        {approverWorkers.length === 0 && !loading && (
+            <p className="text-gray-500">
+                {approverId.trim() 
+                    ? "Không tìm thấy nhân viên nào dưới quyền người duyệt này." 
+                    : "Không tìm thấy nhân viên nào trong Section này. Vui lòng kiểm tra trang Quản lý User."}
+            </p>
+        )}
+        {/* ----- HẾT SỬA ĐỔI ----- */}
+
 
         {approverWorkers.length > 0 && (
             <>
                 <div className="flex items-center gap-3">
-                    <span className="font-medium">Tổng số NV cần theo dõi: <b>{approverWorkers.length}</b></span>
+                    <span className="font-medium">
+                        Tổng số NV đang theo dõi (
+                        {approverId.trim() ? `của ${approverId}` : `thuộc ${section}`}
+                        ): <b>{approverWorkers.length}</b>
+                    </span>
                     <span className="font-medium">NV thiếu KPI: <b className="text-red-600">{missingReportFull.length}</b></span>
                     <button 
                         className="btn ml-auto" 
