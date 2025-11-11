@@ -379,7 +379,7 @@ function ReportContent() {
 
     if (status !== "all") q1 = q1.eq("status", status);
     if (onlyApproved)     q1 = q1.eq("status", "approved");
-    if (trimmedWorkerId)  q1 = q1.eq("worker_id", trimmedWorkerId); // (SỬA)
+    if (trimmedWorkerId)  q1 = q1.ilike("worker_id", `${trimmedWorkerId}%`); // (SỬA) Dùng ilike
     
     if (trimmedApproverId) { // (SỬA)
       const approverCol = isMolding ? "approver_msnv" : "approver_id";
@@ -401,7 +401,7 @@ function ReportContent() {
     // === Query 2: Báo cáo thiếu (Bỏ qua filter status và workerId) ===
     let q2 = supabase
       .from(tableName)
-      .select("worker_id, date") // Chỉ cần 2 cột này
+      .select("id, worker_id, date") // <-- (SỬA ĐỔI) THÊM 'id'
       .gte("date", dateFrom)
       .lte("date", dateTo)
       .eq("section", section);
@@ -422,6 +422,7 @@ function ReportContent() {
     } else {
       // (SỬA ĐỔI) TRIM() DỮ LIỆU NGAY KHI TẢI
       const cleanMissingData = (missingData || []).map(r => ({ 
+          id: r.id, // <-- (SỬA ĐỔI) Giữ lại 'id'
           worker_id: (r.worker_id || "").trim(), 
           date: r.date 
       }));
