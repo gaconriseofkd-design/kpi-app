@@ -32,8 +32,8 @@ function getAllDatesInRange(start, end) {
   return dates;
 }
 
-// ----- (MỚI) Helper tải toàn bộ data cho Excel (VỚI BỘ LỌC NGÀY) -----
-async function fetchAllDataForExport(tableName, section, dateFrom, dateTo) {
+// ----- (MỚI) Helper tải toàn bộ data cho Excel (VỚI BỘ LỌC NGÀY + APPROVER) -----
+async function fetchAllDataForExport(tableName, section, dateFrom, dateTo, approverId, isMolding) {
   let allRows = [];
   const PAGE_SIZE = 1000; // Giới hạn chuẩn của Supabase
   let page = 0;
@@ -50,6 +50,12 @@ async function fetchAllDataForExport(tableName, section, dateFrom, dateTo) {
     // (SỬA ĐỔI) Thêm bộ lọc ngày
     if (dateFrom) query = query.gte("date", dateFrom);
     if (dateTo) query = query.lte("date", dateTo);
+
+    // (SỬA ĐỔI) Thêm bộ lọc approverId (dùng ilike để bắt khoảng trắng)
+    if (approverId.trim()) {
+      const approverCol = isMolding ? "approver_msnv" : "approver_id";
+      query = query.ilike(approverCol, `${approverId.trim()}%`);
+    }
 
     const { data, error } = await query
       .order("date", { ascending: true }) // Sắp xếp ngày cũ trước
@@ -363,6 +369,8 @@ function ReportContent() {
     if (new Date(dateFrom) > new Date(dateTo)) return alert("Khoảng ngày không hợp lệ.");
 
     setLoading(true);
+    const trimmedApproverId = approverId.trim(); // (SỬA) Dùng 1 biến chung
+    const trimmedWorkerId = workerId.trim();     // (SỬA) Dùng 1 biến chung
 
     // === Query 1: Báo cáo chi tiết (Tôn trọng tất cả filter) ===
     let q1 = supabase.from(tableName).select("*").gte("date", dateFrom).lte("date", dateTo);
@@ -371,11 +379,11 @@ function ReportContent() {
 
     if (status !== "all") q1 = q1.eq("status", status);
     if (onlyApproved)     q1 = q1.eq("status", "approved");
-    if (workerId.trim())  q1 = q1.eq("worker_id", workerId.trim());
+    if (trimmedWorkerId)  q1 = q1.eq("worker_id", trimmedWorkerId); // (SỬA)
     
-    if (approverId.trim()) {
+    if (trimmedApproverId) { // (SỬA)
       const approverCol = isMolding ? "approver_msnv" : "approver_id";
-      q1 = q1.eq(approverCol, approverId.trim());
+      q1 = q1.ilike(approverCol, `${trimmedApproverId}%`); // (SỬA) Dùng ilike
     }
     
     if ((isMolding || isHybrid) && category) q1 = q1.eq("category", category);
@@ -398,9 +406,9 @@ function ReportContent() {
       .lte("date", dateTo)
       .eq("section", section);
 
-    if (approverId.trim()) {
+    if (trimmedApproverId) { // (SỬA)
       const approverCol = isMolding ? "approver_msnv" : "approver_id";
-      q2 = q2.eq(approverCol, approverId.trim());
+      q2 = q2.ilike(approverCol, `${trimmedApproverId}%`); // (SỬA) Dùng ilike
     }
     // (Bỏ qua category vì không ảnh hưởng đến việc nộp hay không)
 
@@ -475,8 +483,8 @@ function ReportContent() {
         setExporting(true);
         let allData;
         try {
-            // (SỬA ĐỔI) Truyền dateFrom, dateTo vào helper
-            allData = await fetchAllDataForExport(tableName, section, dateFrom, dateTo); 
+            // (SỬA ĐỔI) Truyền dateFrom, dateTo, approverId, isMolding vào helper
+            allData = await fetchAllDataForExport(tableName, section, dateFrom, dateTo, approverId, isMolding); 
         } catch (error) {
             setExporting(false);
             return alert("Lỗi khi tải toàn bộ dữ liệu: " + error.message);
@@ -601,8 +609,10 @@ function ReportContent() {
         const wb = XLSX.utils.book_new();
       
         XLSX.utils.book_append_sheet(wb, ws, viSection(section));
-        // SỬA ĐỔI: Tên file bao gồm ngày tháng
-        XLSX.writeFile(wb, `kpi_report_ALL_${section}_${dateFrom}_to_${dateTo}.xlsx`);
+        
+        // (SỬA ĐỔI) Tên file giờ đây cũng có thể bao gồm cả approver
+        const approverFilter = approverId.trim() ? `_${approverId.trim()}` : "_ALL";
+        XLSX.writeFile(wb, `kpi_report_${section}${approverFilter}_${dateFrom}_to_${dateTo}.xlsx`);
       }
   // ----- (HẾT SỬA ĐỔI exportXLSX) -----
 
@@ -736,9 +746,7 @@ function ReportContent() {
     if (id) {
       // Logic cũ: Nếu có ID người duyệt, lọc theo người duyệt
       const approverCol = "approver_msnv"; // Luôn dùng 'approver_msnv' cho bảng users
-      query = query.eq(approverCol, id);
-      // Bạn có thể thêm lọc section ở đây nếu muốn
-      // query = query.eq("section", currentSection);
+      query = query.ilike(approverCol, `${id}%`); // (SỬA) Dùng ilike
     } else {
       // Logic MỚI: Nếu không có ID, lọc theo section hiện tại
       query = query.eq("section", currentSection);
@@ -783,7 +791,7 @@ function ReportContent() {
           <input 
             className="input" 
             value={approverId} 
-            onChange={e=>setApproverId(e.target.value.trim())} // <-- Thêm .trim()
+            onChange={e=>setApproverId(e.target.value)} // (SỬA) Bỏ .trim() ở đây
             placeholder={isMolding ? "VD: 04126 (approver_msnv)" : "VD: 04126 (approver_id)"} />
         </label>
 
