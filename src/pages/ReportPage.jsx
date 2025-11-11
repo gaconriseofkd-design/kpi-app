@@ -258,7 +258,7 @@ function ReportContent() {
     if (!approverWorkers.length || !dateFrom || !dateTo) return [];
 
     const submittedMap = new Map(); 
-    // SỬA ĐỔI: Dùng 'missingReportData'
+    // SỬA ĐỔI: Dùng 'missingReportData' (ĐÃ ĐƯỢC trim() khi tải)
     for (const r of missingReportData) {
         if (!submittedMap.has(r.worker_id)) {
             submittedMap.set(r.worker_id, new Set());
@@ -269,7 +269,7 @@ function ReportContent() {
     // const allDates = getAllDatesInRange(dateFrom, dateTo); // Đã mang ra ngoài
     
     const report = [];
-    approverWorkers.forEach(w => {
+    approverWorkers.forEach(w => { // (w.msnv đã được trim() khi tải)
         const submittedDates = submittedMap.get(w.msnv) || new Set();
         const missingDates = allDates.filter(d => !submittedDates.has(d));
         
@@ -291,13 +291,20 @@ function ReportContent() {
   }, [approverWorkers, missingReportData, dateFrom, dateTo, allDates]); // <-- Sửa dependency
 
   // ----- BÁO CÁO THIẾU (THEO NGÀY) -----
+  // ===== (SỬA ĐỔI) LOGIC TÍNH TOÁN 'summaryByDay' =====
   const summaryByDay = useMemo(() => {
     const totalWorkers = approverWorkers.length;
     if (totalWorkers === 0 || !allDates.length) return [];
 
-    // 1. Tạo Map: date -> list of missing workers
+    // Bước 1: (MỚI) Đếm số LƯỢT nộp (records) theo ngày
+    const submittedRecordsByDate = new Map();
+    for (const r of missingReportData) { // Dùng data đã trim()
+      const count = submittedRecordsByDate.get(r.date) || 0;
+      submittedRecordsByDate.set(r.date, count + 1);
+    }
+
+    // Bước 2: (CŨ) Lấy danh sách người thiếu (logic này vẫn cần giữ nguyên)
     const missingByDate = new Map();
-    // Tận dụng 'missingReportFull' đã tính toán
     for (const workerReport of missingReportFull) {
       // workerReport = { msnv, name, missing: [...], approver_msnv, approver_name }
       for (const date of workerReport.missing) {
@@ -311,24 +318,32 @@ function ReportContent() {
       }
     }
     
-    // 2. Map 'allDates' để tạo report
+    // Bước 3: Map 'allDates' để tạo report
     return allDates.map(date => {
       const missingList = missingByDate.get(date) || [];
-      const missingCount = missingList.length;
-      const submittedCount = totalWorkers - missingCount;
-      const percentage = totalWorkers > 0 ? (submittedCount / totalWorkers) * 100 : 100;
+      const missingCount = missingList.length; // Số người thiếu (ví dụ: 132)
+      
+      // Số người đã nộp (duy nhất)
+      const submittedWorkerCount = totalWorkers - missingCount; // (ví dụ: 164 - 132 = 32)
+      
+      // (MỚI) Lấy số lượt nộp (records)
+      const submittedRecordCount = submittedRecordsByDate.get(date) || 0; // (ví dụ: 35)
+      
+      // Tỷ lệ % vẫn tính trên SỐ NGƯỜI
+      const percentage = totalWorkers > 0 ? (submittedWorkerCount / totalWorkers) * 100 : 100;
       
       return {
         date,
         totalWorkers,
-        submittedCount,
-        missingCount,
+        submittedCount: submittedRecordCount, // <-- Gán SỐ LƯỢT NỘP (35) vào đây
+        missingCount, // Giữ nguyên SỐ NGƯỜI THIẾU (132)
         percentage: percentage,
         missingList
       };
     }).sort((a, b) => b.date.localeCompare(a.date)); // Sắp xếp ngày mới nhất lên đầu
 
-  }, [missingReportFull, allDates, approverWorkers.length]); // Bỏ approverId
+  }, [missingReportFull, allDates, approverWorkers.length, missingReportData]); // <-- Thêm missingReportData
+  // ===== (HẾT SỬA ĐỔI) =====
 
 
   const missingTotalPages = useMemo(() => Math.max(1, Math.ceil(missingReportFull.length / missingPageSize)), [missingReportFull.length]);
@@ -397,7 +412,12 @@ function ReportContent() {
       alert("Lỗi tải dữ liệu báo cáo thiếu: " + missingError.message);
       setMissingReportData([]);
     } else {
-      setMissingReportData(missingData || []);
+      // (SỬA ĐỔI) TRIM() DỮ LIỆU NGAY KHI TẢI
+      const cleanMissingData = (missingData || []).map(r => ({ 
+          worker_id: (r.worker_id || "").trim(), 
+          date: r.date 
+      }));
+      setMissingReportData(cleanMissingData);
     }
 
     setLoading(false); // Dời xuống cuối
@@ -465,7 +485,7 @@ function ReportContent() {
         setExporting(false);
 
         if (!allData || !allData.length) {
-          return alert("Không có dữ liệu nào trong bảng " + tableName + " để xuất.");
+          return alert("Không có dữ liệu nào trong bảng " + tableName + " để xuất trong khoảng ngày này.");
         }
         // ----- (HẾT SỬA ĐỔI) -----
       
@@ -651,9 +671,9 @@ function ReportContent() {
       "SECTION": sectionName,
       "NGÀY": day.date,
       "TỔNG NHÂN VIÊN": day.totalWorkers,
-      "ĐÃ NỘP": day.submittedCount,
-      "CÒN THIẾU": day.missingCount,
-      "TỶ LỆ NỘP": day.percentage.toFixed(0) + "%"
+      "ĐÃ NỘP (Lượt)": day.submittedCount, // Sửa tên cột
+      "CÒN THIẾU (Người)": day.missingCount, // Sửa tên cột
+      "TỶ LỆ NỘP (Người)": day.percentage.toFixed(0) + "%" // Sửa tên cột
     }));
     
     const ws = XLSX.utils.json_to_sheet(data);
@@ -733,7 +753,13 @@ function ReportContent() {
           setApproverWorkers([]); // Đảm bảo rỗng nếu có lỗi
           return; 
         }
-        setApproverWorkers(data || []);
+        
+        // (SỬA ĐỔI) TRIM() DỮ LIỆU NGAY KHI TẢI
+        const cleanApprovers = (data || []).map(w => ({ 
+            ...w, 
+            msnv: (w.msnv || "").trim() 
+        }));
+        setApproverWorkers(cleanApprovers);
     });
     
   }, [approverId, section]); // Thay đổi dependency
@@ -842,17 +868,19 @@ function ReportContent() {
                   >
                     <div>
                       <span className="font-semibold text-blue-600">{fmtDate(day.date)}</span>
+                      
+                      {/* ================= SỬA ĐỔI HIỂN THỊ ================= */}
                       <span className="ml-3 text-sm">
-                        {/* ================= SỬA 1 (ĐÃ SỬA Ở LẦN TRƯỚC) ================= */}
-                        Đã nộp: <b className="text-green-600">{day.submittedCount}/{day.totalWorkers}</b>
+                        Lượt nộp: <b className="text-green-600">{day.submittedCount}</b>
+                        <span className="text-gray-500">/{day.totalWorkers} (người)</span>
                       </span>
-                      {/* ================= SỬA 2 (ĐÃ SỬA Ở LẦN TRƯỚC) ================= */}
                       {day.missingCount > 0 && (
                          <span className="ml-3 text-sm">
-                           {/* ================= SỬA 3 (ĐÃ SỬA Ở LẦN TRƯỚC) ================= */}
-                           Thiếu: <b className="text-red-600">{day.missingCount}</b>
+                           Số người thiếu: <b className="text-red-600">{day.missingCount}</b>
                          </span>
                       )}
+                      {/* ================= HẾT SỬA ĐỔI HIỂN THỊ ================= */}
+
                     </div>
                     <div className="flex items-center gap-2">
                       <span className={`font-bold text-sm ${day.percentage === 100 ? 'text-green-600' : (day.percentage > 80 ? 'text-yellow-600' : 'text-red-600')}`}>
