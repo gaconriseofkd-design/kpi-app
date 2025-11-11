@@ -238,6 +238,7 @@ export default function ApproverModeHybrid({ section }) {
         output: toNum(tplOutput), category: tplCategory, defects: toNum(tplDefects),
         q_score: s.q_score, p_score: s.p_score, total_score: s.day_score,
         compliance: tplCompliance, working_real: s.workingReal, status: "approved",
+        approver_note: "", // <-- ĐÂY LÀ DÒNG ĐÃ THÊM
       };
     });
     setReviewRows(rows);
@@ -256,7 +257,8 @@ export default function ApproverModeHybrid({ section }) {
     
     setReviewRows((old) => {
       const arr = old.slice(); const r0 = arr[i] || {};
-      const r = ["compliance", "category", "line", "shift", "work_date"].includes(key)
+      // CẬP NHẬT: Thêm "approver_note" vào mảng các trường text
+      const r = ["compliance", "category", "line", "shift", "work_date", "approver_note"].includes(key)
           ? { ...r0, [key]: val } : { ...r0, [key]: toNum(val, 0) };
       const s = deriveDayScoresHybrid({
           section, defects: r.defects, category: r.category, output: r.output, 
@@ -301,6 +303,7 @@ export default function ApproverModeHybrid({ section }) {
         section: r.section, working_real: r.working_real,
         violations: r.compliance === "NONE" ? 0 : 1, 
         status: "approved", approved_at: now,
+        approver_note: r.approver_note || null, // <-- ĐÂY LÀ DÒNG ĐÃ THÊM
       };
     });
     const { error } = await supabase
@@ -489,11 +492,14 @@ function EditReviewHybrid({
         </div>
       </div>
       <div className="overflow-auto border rounded">
-        <table className="min-w-[1300px] text-sm">
+        {/* CẬP NHẬT: Tăng min-w từ 1300px lên 1450px */}
+        <table className="min-w-[1450px] text-sm">
           <thead className="bg-gray-50 text-center">
             <tr>
               <th className="p-2"><input type="checkbox" onChange={toggleAllReviewOnPage} checked={pageRows.length > 0 && pageRows.every((_, idx) => selReview.has(globalIndex(idx)))} /></th>
               <th className="p-2">MSNV</th><th className="p-2">Họ tên</th><th className="p-2">Ngày</th><th className="p-2">Ca</th><th className="p-2">Giờ nhập</th><th className="p-2">Giờ dừng</th><th className="p-2">Giờ TT (QĐ)</th><th className="p-2">Giờ CX</th><th className="p-2">Máy làm việc</th><th className="p-2">Loại NS</th><th className="p-2">SL (Output)</th><th className="p-2">Phế</th><th className="p-2">Q</th><th className="p-2">P</th><th className="p-2">KPI</th><th className="p-2">Tuân thủ</th>
+              {/* THÊM CỘT MỚI */}
+              <th className="p-2">Ghi chú</th>
             </tr>
           </thead>
           <tbody className="text-center">
@@ -524,10 +530,21 @@ function EditReviewHybrid({
                   <td className="p-2"><select className="input text-center" value={r.compliance} onChange={(e) => updateRow(gi, "compliance", e.target.value)}>{COMPLIANCE_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
                     </select>
                   </td>
+                  {/* THÊM CỘT INPUT GHI CHÚ */}
+                  <td className="p-2">
+                    <input
+                      type="text"
+                      className="input text-center w-28"
+                      value={r.approver_note || ""}
+                      onChange={(e) => updateRow(gi, "approver_note", e.target.value)}
+                      placeholder="Ghi chú..."
+                    />
+                  </td>
                 </tr>
               );
             })}
-            {!pageRows.length && (<tr><td colSpan={17} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>)}
+            {/* CẬP NHẬT: Tăng colSpan */}
+            {!pageRows.length && (<tr><td colSpan={18} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>)}
           </tbody>
         </table>
       </div>
