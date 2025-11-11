@@ -384,7 +384,8 @@ function ReportContent() {
               "Số giờ khuôn chạy thực tế": Number(r.mold_hours ?? 0),
               "Thời gian dừng /24 khuôn (h)": Number(r.downtime ?? 0),
               "MSNV người duyệt": r.approver_msnv || "",
-              "Người duyệt": r.approver_name || ""
+              "Người duyệt": r.approver_name || "",
+              "Ghi chú duyệt": r.approver_note || "", // <-- THÊM CỘT NÀY
             };
           });
         } else if (isHybrid) {
@@ -420,6 +421,7 @@ function ReportContent() {
               "Họ và Tên Người duyệt": r.approver_name || "",
               "Máy làm việc": r.line || "",
               "THỜI GIAN DỪNG MÁY": Number(r.stop_hours ?? 0),
+              "Ghi chú duyệt": r.approver_note || "", // <-- THÊM CỘT NÀY
             };
           });
 
@@ -451,7 +453,8 @@ function ReportContent() {
               "THỜI GIAN DOWNTIME": Number(r.stop_hours ?? 0),
               "MSNV người duyệt": r.approver_id || "",
               "Họ và Tên Người duyệt": r.approver_name || "",
-              "Line làm việc": r.line || ""
+              "Line làm việc": r.line || "",
+              "Ghi chú duyệt": r.approver_note || "", // <-- THÊM CỘT NÀY
             };
           });
         }
@@ -722,10 +725,13 @@ function ReportContent() {
                     <div>
                       <span className="font-semibold text-blue-600">{fmtDate(day.date)}</span>
                       <span className="ml-3 text-sm">
+                        {/* ================= SỬA 1 ================= */}
                         Đã nộp: <b className="text-green-600">{day.submittedCount}/{day.totalWorkers}</b>
                       </span>
+                      {/* ================= SỬA 2 ================= */}
                       {day.missingCount > 0 && (
                          <span className="ml-3 text-sm">
+                           {/* ================= SỬA 3 ================= */}
                            Thiếu: <b className="text-red-600">{day.missingCount}</b>
                          </span>
                       )}
