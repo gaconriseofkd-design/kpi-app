@@ -32,6 +32,51 @@ function getAllDatesInRange(start, end) {
   return dates;
 }
 
+// ----- (MỚI) Helper tải toàn bộ data cho Excel (VỚI BỘ LỌC NGÀY) -----
+async function fetchAllDataForExport(tableName, section, dateFrom, dateTo) {
+  let allRows = [];
+  const PAGE_SIZE = 1000; // Giới hạn chuẩn của Supabase
+  let page = 0;
+  
+  while (true) {
+    const from = page * PAGE_SIZE;
+    const to = from + PAGE_SIZE - 1;
+    
+    let query = supabase
+      .from(tableName)
+      .select("*") 
+      .eq("section", section);
+
+    // (SỬA ĐỔI) Thêm bộ lọc ngày
+    if (dateFrom) query = query.gte("date", dateFrom);
+    if (dateTo) query = query.lte("date", dateTo);
+
+    const { data, error } = await query
+      .order("date", { ascending: true }) // Sắp xếp ngày cũ trước
+      .range(from, to);
+
+    if (error) {
+      throw error; // Hàm 'exportXLSX' sẽ bắt lỗi này
+    }
+
+    if (data && data.length > 0) {
+      allRows = allRows.concat(data);
+      page++;
+    } else {
+      // Không còn data, dừng vòng lặp
+      break; 
+    }
+    
+    // Dừng nếu lỡ trang cuối cùng trả về đúng 1000
+    if (data.length < PAGE_SIZE) {
+        break;
+    }
+  }
+  return allRows;
+}
+// ----- (HẾT Helper) -----
+
+
 /* =============== Gate đăng nhập =============== */
 export default function ReportPage() {
   const [authed, setAuthed] = useState(() => sessionStorage.getItem("rp_authed") === "1");
@@ -360,45 +405,6 @@ function ReportContent() {
   // ----- (HẾT SỬA ĐỔI runQuery) -----
 
 
-  // ----- (MỚI) Helper tải toàn bộ data cho Excel -----
-  async function fetchAllDataForExport(tableName, section) {
-    let allRows = [];
-    const PAGE_SIZE = 1000; // Giới hạn chuẩn của Supabase
-    let page = 0;
-    
-    while (true) {
-      const from = page * PAGE_SIZE;
-      const to = from + PAGE_SIZE - 1;
-      
-      const { data, error } = await supabase
-        .from(tableName)
-        .select("*") 
-        .eq("section", section)
-        .order("date", { ascending: true }) // Sắp xếp ngày cũ trước
-        .range(from, to);
-
-      if (error) {
-        throw error; // Hàm 'exportXLSX' sẽ bắt lỗi này
-      }
-
-      if (data && data.length > 0) {
-        allRows = allRows.concat(data);
-        page++;
-      } else {
-        // Không còn data, dừng vòng lặp
-        break; 
-      }
-      
-      // Dừng nếu lỡ trang cuối cùng trả về đúng 1000
-      if (data.length < PAGE_SIZE) {
-          break;
-      }
-    }
-    return allRows;
-  }
-  // ----- (HẾT Helper) -----
-
-
   // ----- (SỬA ĐỔI) exportXLSX giờ dùng 'filteredRows' -----
   async function exportXLSX() { // <-- Đã ASYNC
         
@@ -440,10 +446,17 @@ function ReportContent() {
         };
         
         // ----- (SỬA ĐỔI) LẤY DATA MỚI TỪ SUPABASE (CÓ PHÂN TRANG) -----
+        
+        // (SỬA ĐỔI) Thêm kiểm tra ngày
+        if (!dateFrom || !dateTo) {
+          return alert("Vui lòng chọn 'Từ ngày' và 'Đến ngày' trước khi xuất.");
+        }
+        
         setExporting(true);
         let allData;
         try {
-            allData = await fetchAllDataForExport(tableName, section); // <-- Gọi helper mới
+            // (SỬA ĐỔI) Truyền dateFrom, dateTo vào helper
+            allData = await fetchAllDataForExport(tableName, section, dateFrom, dateTo); 
         } catch (error) {
             setExporting(false);
             return alert("Lỗi khi tải toàn bộ dữ liệu: " + error.message);
@@ -568,8 +581,8 @@ function ReportContent() {
         const wb = XLSX.utils.book_new();
       
         XLSX.utils.book_append_sheet(wb, ws, viSection(section));
-        // SỬA ĐỔI: Tên file không còn bao gồm ngày tháng
-        XLSX.writeFile(wb, `kpi_report_ALL_${section}.xlsx`);
+        // SỬA ĐỔI: Tên file bao gồm ngày tháng
+        XLSX.writeFile(wb, `kpi_report_ALL_${section}_${dateFrom}_to_${dateTo}.xlsx`);
       }
   // ----- (HẾT SỬA ĐỔI exportXLSX) -----
 
@@ -779,7 +792,7 @@ function ReportContent() {
           <button className="btn btn-primary" onClick={runQuery}>{loading ? "Đang tải..." : "Xem báo cáo"}</button>
           {/* SỬA ĐỔI NÚT XUẤT */}
           <button className="btn" onClick={exportXLSX} disabled={loading || exporting}>
-            {exporting ? "Đang xuất..." : "Xuất XLSX (Toàn bộ)"}
+            {exporting ? "Đang xuất..." : "Xuất XLSX (Theo ngày)"}
           </button>
         </div>
       </div>
