@@ -360,8 +360,47 @@ function ReportContent() {
   // ----- (HẾT SỬA ĐỔI runQuery) -----
 
 
+  // ----- (MỚI) Helper tải toàn bộ data cho Excel -----
+  async function fetchAllDataForExport(tableName, section) {
+    let allRows = [];
+    const PAGE_SIZE = 1000; // Giới hạn chuẩn của Supabase
+    let page = 0;
+    
+    while (true) {
+      const from = page * PAGE_SIZE;
+      const to = from + PAGE_SIZE - 1;
+      
+      const { data, error } = await supabase
+        .from(tableName)
+        .select("*") 
+        .eq("section", section)
+        .order("date", { ascending: true }) // Sắp xếp ngày cũ trước
+        .range(from, to);
+
+      if (error) {
+        throw error; // Hàm 'exportXLSX' sẽ bắt lỗi này
+      }
+
+      if (data && data.length > 0) {
+        allRows = allRows.concat(data);
+        page++;
+      } else {
+        // Không còn data, dừng vòng lặp
+        break; 
+      }
+      
+      // Dừng nếu lỡ trang cuối cùng trả về đúng 1000
+      if (data.length < PAGE_SIZE) {
+          break;
+      }
+    }
+    return allRows;
+  }
+  // ----- (HẾT Helper) -----
+
+
   // ----- (SỬA ĐỔI) exportXLSX giờ dùng 'filteredRows' -----
-  async function exportXLSX() { // <-- THÊM ASYNC
+  async function exportXLSX() { // <-- Đã ASYNC
         
         // CÁC HÀM HELPER GIỮ NGUYÊN
         const titleCase = (s) =>
@@ -369,7 +408,7 @@ function ReportContent() {
         const complianceLabel = (code) => {
           switch ((code || "NONE").toUpperCase()) {
             case "NONE": return "Không vi phạm";
-            case "KÝ MẪU ĐẦU CHUYỀN TRƯC KHI SỬ DỤNG":
+            case "KÝ MẪU ĐẦU CHUYỀN TRƯỚC KHI SỬ DỤNG":
             case "LATE": return "Ký mẫu đầu chuyền trước khi sử dụng";
             case "QUY ĐỊNH VỀ KIỂM TRA ĐIỀU KIỆN MÁY TRƯỚC/TRONG KHI SẢN XUẤT":
             case "PPE":  return "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất";
@@ -400,20 +439,18 @@ function ReportContent() {
             return null; 
         };
         
-        // ----- (SỬA ĐỔI) LẤY DATA MỚI TỪ SUPABASE -----
+        // ----- (SỬA ĐỔI) LẤY DATA MỚI TỪ SUPABASE (CÓ PHÂN TRANG) -----
         setExporting(true);
-        const tableName = getTableName(section);
-        const { data: allData, error } = await supabase
-          .from(tableName)
-          .select("*")
-          .eq("section", section) // Luôn lọc theo section
-          .order("date", { ascending: false });
+        let allData;
+        try {
+            allData = await fetchAllDataForExport(tableName, section); // <-- Gọi helper mới
+        } catch (error) {
+            setExporting(false);
+            return alert("Lỗi khi tải toàn bộ dữ liệu: " + error.message);
+        }
         
         setExporting(false);
 
-        if (error) {
-          return alert("Lỗi khi tải toàn bộ dữ liệu: " + error.message);
-        }
         if (!allData || !allData.length) {
           return alert("Không có dữ liệu nào trong bảng " + tableName + " để xuất.");
         }
