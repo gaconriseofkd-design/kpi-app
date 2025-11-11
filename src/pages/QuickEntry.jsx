@@ -312,6 +312,7 @@ function ApproverModeLeanline({ section }) {
       line: tplLine, work_hours: toNum(tplWorkHours), downtime: toNum(tplStopHours),
       oe: toNum(tplOE), defects: toNum(tplDefects), q_score: scores.qScore,
       p_score: scores.pScore, total_score: scores.kpi, compliance: tplCompliance, status: "approved",
+      approver_note: "", // <-- THÊM DÒNG NÀY
     }});
     setReviewRows(rows);
     setSelReview(new Set(rows.map((_, i) => i)));
@@ -331,7 +332,8 @@ function ApproverModeLeanline({ section }) {
       const arr = old.slice();
       const r0 = arr[i] || {};
       const r =
-        key === "compliance" || key === "line" || key === "shift" || key === "work_date"
+        // CẬP NHẬT: Thêm "approver_note"
+        key === "compliance" || key === "line" || key === "shift" || key === "work_date" || key === "approver_note"
           ? { ...r0, [key]: val }
           : { ...r0, [key]: toNum(val, 0) };
       const scores = calculateScores(r.oe, r.defects, prodRules, section, r.line);
@@ -373,6 +375,7 @@ function ApproverModeLeanline({ section }) {
         oe: Number(r.oe || 0), defects: Number(r.defects || 0),
         p_score: r.p_score, q_score: r.q_score, day_score: r.total_score, overflow,
         compliance_code: r.compliance, section: r.section, status: "approved", approved_at: now,
+        approver_note: r.approver_note || null, // <-- THÊM DÒNG NÀY
       };
     });
     const { error } = await supabase
@@ -566,11 +569,14 @@ function EditReviewLeanline({
         </div>
       </div>
       <div className="overflow-auto border rounded">
-        <table className="min-w-[1100px] text-sm">
+        {/* CẬP NHẬT: Tăng min-w từ 1100px lên 1200px */}
+        <table className="min-w-[1200px] text-sm">
           <thead className="bg-gray-50 text-center">
             <tr>
               <th className="p-2"><input type="checkbox" onChange={toggleAllReviewOnPage} checked={pageRows.length > 0 && pageRows.every((_, idx) => selReview.has(globalIndex(idx)))} /></th>
               <th className="p-2">MSNV</th><th className="p-2">Họ tên</th><th className="p-2">Ngày</th><th className="p-2">Ca</th><th className="p-2">Máy làm việc</th><th className="p-2">Giờ làm</th><th className="p-2">Giờ dừng</th><th className="p-2">%OE</th><th className="p-2">Phế</th><th className="p-2">Q</th><th className="p-2">P</th><th className="p-2">KPI</th><th className="p-2">Tuân thủ</th>
+              {/* THÊM CỘT MỚI */}
+              <th className="p-2">Ghi chú</th>
             </tr>
           </thead>
           <tbody className="text-center">
@@ -595,10 +601,21 @@ function EditReviewLeanline({
                   <td className="p-2"><input type="number" className="input text-center" value={r.defects} onChange={(e) => updateRow(gi, "defects", e.target.value)} step="0.5" /></td>
                   <td className="p-2">{r.q_score}</td><td className="p-2">{r.p_score}</td><td className="p-2 font-semibold">{r.total_score}</td>
                   <td className="p-2"><select className="input text-center" value={r.compliance} onChange={(e) => updateRow(gi, "compliance", e.target.value)}>{COMPLIANCE_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></td>
+                  {/* THÊM CỘT INPUT GHI CHÚ */}
+                  <td className="p-2">
+                    <input
+                      type="text"
+                      className="input text-center w-28"
+                      value={r.approver_note || ""}
+                      onChange={(e) => updateRow(gi, "approver_note", e.target.value)}
+                      placeholder="Ghi chú..."
+                    />
+                  </td>
                 </tr>
               );
             })}
-            {!pageRows.length && (<tr><td colSpan={14} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>)}
+            {/* CẬP NHẬT: Tăng colSpan */}
+            {!pageRows.length && (<tr><td colSpan={15} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>)}
           </tbody>
         </table>
       </div>
@@ -759,6 +776,7 @@ function ApproverModeMolding({ section }) {
         compliance_code: tplCompliance, q_score: scores.q_score, p_score: scores.p_score,
         day_score: scores.day_score, working_real: scores.working_real,
         downtime: scores.downtime, working_exact: scores.working_exact, status: "approved",
+        approver_note: "", // <-- THÊM DÒNG NÀY
       };
     });
     setReviewRows(rows);
@@ -778,7 +796,8 @@ function ApproverModeMolding({ section }) {
     setReviewRows((old) => {
       const arr = old.slice();
       const r0 = arr[i] || {};
-      const r = ["compliance_code", "category", "shift", "work_date"].includes(key)
+      // CẬP NHẬT: Thêm "approver_note"
+      const r = ["compliance_code", "category", "shift", "work_date", "approver_note"].includes(key)
           ? { ...r0, [key]: val } : { ...r0, [key]: toNum(val, 0) };
       const scores = calculateScoresMolding(r, prodRules);
       arr[i] = { 
@@ -821,6 +840,7 @@ function ApproverModeMolding({ section }) {
         downtime: r.downtime, mold_hours: r.mold_hours, output: r.output, defects: Number(r.defects || 0),
         q_score: scores.q_score, p_score: scores.p_score, day_score: scores.day_score, overflow,
         compliance_code: r.compliance_code, status: "approved", approved_at: now,
+        approver_note: r.approver_note || null, // <-- THÊM DÒNG NÀY
       };
     });
     const { error } = await supabase
@@ -1029,7 +1049,8 @@ function EditReviewMolding({
       </div>
 
       <div className="overflow-auto border rounded">
-        <table className="min-w-[1300px] text-sm">
+        {/* CẬP NHẬT: Tăng min-w từ 1300px lên 1450px */}
+        <table className="min-w-[1450px] text-sm">
           <thead className="bg-gray-50 text-center">
             <tr>
               <th className="p-2"><input type="checkbox" onChange={toggleAllReviewOnPage} checked={pageRows.length > 0 && pageRows.every((_, idx) => selReview.has(globalIndex(idx)))} /></th>
@@ -1048,6 +1069,8 @@ function EditReviewMolding({
               <th className="p-2">P</th>
               <th className="p-2">KPI</th>
               <th className="p-2">Tuân thủ</th>
+              {/* THÊM CỘT MỚI */}
+              <th className="p-2">Ghi chú</th>
             </tr>
           </thead>
           <tbody className="text-center">
@@ -1077,10 +1100,21 @@ function EditReviewMolding({
                   <td className="p-2">{r.p_score}</td>
                   <td className="p-2 font-semibold">{r.day_score}</td>
                   <td className="p-2"><select className="input text-center w-28" value={r.compliance_code} onChange={(e) => updateRow(gi, "compliance_code", e.target.value)}>{COMPLIANCE_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></td>
+                  {/* THÊM CỘT INPUT GHI CHÚ */}
+                  <td className="p-2">
+                    <input
+                      type="text"
+                      className="input text-center w-28"
+                      value={r.approver_note || ""}
+                      onChange={(e) => updateRow(gi, "approver_note", e.target.value)}
+                      placeholder="Ghi chú..."
+                    />
+                  </td>
                 </tr>
               );
             })}
-            {!pageRows.length && (<tr><td colSpan={16} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>)}
+            {/* CẬP NHẬT: Tăng colSpan */}
+            {!pageRows.length && (<tr><td colSpan={17} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>)}
           </tbody>
         </table>
       </div>
