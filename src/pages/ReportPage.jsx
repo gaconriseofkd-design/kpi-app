@@ -395,20 +395,48 @@ function ReportContent() {
     }
     setFilteredRows(filteredData || []);
 
-    // === Query 2: Báo cáo thiếu (Bỏ qua filter status và workerId) ===
-    let q2 = supabase
-      .from(tableName)
-      .select("id, worker_id, date") // <-- (SỬA ĐỔI) THÊM 'id'
-      .gte("date", dateFrom)
-      .lte("date", dateTo)
-      .eq("section", section);
-
-    // (SỬA ĐỔI) BỎ LỌC APPROVER ID KHỎI ĐÂY
-    // if (trimmedApproverId) { ... } // <-- ĐÃ XÓA
+    // === Query 2: Báo cáo thiếu (PHẢI PHÂN TRANG ĐỂ LẤY HẾT) ===
     
-    // (Bỏ qua category vì không ảnh hưởng đến việc nộp hay không)
+    let allMissingData = [];
+    const PAGE_SIZE_Q2 = 1000; // Giới hạn chuẩn
+    let page_q2 = 0;
+    let missingError = null;
 
-    const { data: missingData, error: missingError } = await q2;
+    while (true) {
+        const from = page_q2 * PAGE_SIZE_Q2;
+        const to = from + PAGE_SIZE_Q2 - 1;
+
+        let q2 = supabase
+          .from(tableName)
+          .select("id, worker_id, date") // Vẫn chỉ select 3 cột
+          .gte("date", dateFrom)
+          .lte("date", dateTo)
+          .eq("section", section)
+          .range(from, to); // <-- THÊM .range()
+
+        // (Vẫn bỏ qua approverId filter)
+
+        const { data: missingDataPage, error: pageError } = await q2;
+
+        if (pageError) {
+            missingError = pageError;
+            break; // Dừng vòng lặp nếu có lỗi
+        }
+
+        if (missingDataPage && missingDataPage.length > 0) {
+            allMissingData = allMissingData.concat(missingDataPage);
+            page_q2++;
+        } else {
+            break; // Không còn data, dừng
+        }
+
+        // Dừng nếu lỡ trang cuối cùng trả về đúng 1000
+        if (missingDataPage.length < PAGE_SIZE_Q2) {
+            break;
+        }
+    }
+    
+    // (Kết thúc vòng lặp)
 
     if (missingError) {
       // Không dừng lại, nhưng báo lỗi
@@ -416,15 +444,15 @@ function ReportContent() {
       alert("Lỗi tải dữ liệu báo cáo thiếu: " + missingError.message);
       setMissingReportData([]);
     } else {
-      // (SỬA ĐỔI) TRIM() DỮ LIỆU NGAY KHI TẢI
-      const cleanMissingData = (missingData || []).map(r => ({ 
-          id: r.id, // <-- (SỬA ĐỔI) Giữ lại 'id'
+      // TRIM() DỮ LIỆU NGAY KHI TẢI (Sử dụng allMissingData)
+      const cleanMissingData = (allMissingData || []).map(r => ({ 
+          id: r.id, 
           worker_id: (r.worker_id || "").trim(), 
           date: r.date 
       }));
       setMissingReportData(cleanMissingData);
     }
-
+    
     setLoading(false); // Dời xuống cuối
   }
   // ----- (HẾT SỬA ĐỔI runQuery) -----
