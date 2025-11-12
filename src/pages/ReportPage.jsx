@@ -33,7 +33,8 @@ function getAllDatesInRange(start, end) {
 }
 
 // ----- (MỚI) Helper tải toàn bộ data cho Excel (VỚI BỘ LỌC NGÀY + APPROVER) -----
-async function fetchAllDataForExport(tableName, section, dateFrom, dateTo, approverId, isMolding) {
+// (SỬA ĐỔI) BỎ approverId, isMolding khỏi hàm này. Nút này sẽ luôn xuất toàn section theo ngày
+async function fetchAllDataForExport(tableName, section, dateFrom, dateTo) {
   let allRows = [];
   const PAGE_SIZE = 1000; // Giới hạn chuẩn của Supabase
   let page = 0;
@@ -51,11 +52,7 @@ async function fetchAllDataForExport(tableName, section, dateFrom, dateTo, appro
     if (dateFrom) query = query.gte("date", dateFrom);
     if (dateTo) query = query.lte("date", dateTo);
 
-    // (SỬA ĐỔI) Thêm bộ lọc approverId (dùng ilike để bắt khoảng trắng)
-    if (approverId.trim()) {
-      const approverCol = isMolding ? "approver_msnv" : "approver_id";
-      query = query.ilike(approverCol, `${approverId.trim()}%`);
-    }
+    // (SỬA ĐỔI) Xóa bộ lọc approverId khỏi đây
 
     const { data, error } = await query
       .order("date", { ascending: true }) // Sắp xếp ngày cũ trước
@@ -406,10 +403,9 @@ function ReportContent() {
       .lte("date", dateTo)
       .eq("section", section);
 
-    if (trimmedApproverId) { // (SỬA)
-      const approverCol = isMolding ? "approver_msnv" : "approver_id";
-      q2 = q2.ilike(approverCol, `${trimmedApproverId}%`); // (SỬA) Dùng ilike
-    }
+    // (SỬA ĐỔI) BỎ LỌC APPROVER ID KHỎI ĐÂY
+    // if (trimmedApproverId) { ... } // <-- ĐÃ XÓA
+    
     // (Bỏ qua category vì không ảnh hưởng đến việc nộp hay không)
 
     const { data: missingData, error: missingError } = await q2;
@@ -484,8 +480,8 @@ function ReportContent() {
         setExporting(true);
         let allData;
         try {
-            // (SỬA ĐỔI) Truyền dateFrom, dateTo, approverId, isMolding vào helper
-            allData = await fetchAllDataForExport(tableName, section, dateFrom, dateTo, approverId, isMolding); 
+            // (SỬA ĐỔI) Bỏ approverId, isMolding khỏi helper
+            allData = await fetchAllDataForExport(tableName, section, dateFrom, dateTo); 
         } catch (error) {
             setExporting(false);
             return alert("Lỗi khi tải toàn bộ dữ liệu: " + error.message);
@@ -612,8 +608,8 @@ function ReportContent() {
         XLSX.utils.book_append_sheet(wb, ws, viSection(section));
         
         // (SỬA ĐỔI) Tên file giờ đây cũng có thể bao gồm cả approver
-        const approverFilter = approverId.trim() ? `_${approverId.trim()}` : "_ALL";
-        XLSX.writeFile(wb, `kpi_report_${section}${approverFilter}_${dateFrom}_to_${dateTo}.xlsx`);
+        // const approverFilter = approverId.trim() ? `_${approverId.trim()}` : "_ALL"; // Bỏ approver filter
+        XLSX.writeFile(wb, `kpi_report_${section}_${dateFrom}_to_${dateTo}.xlsx`);
       }
   // ----- (HẾT SỬA ĐỔI exportXLSX) -----
 
@@ -744,15 +740,9 @@ function ReportContent() {
     // SỬA LỖI 1: Tải thêm approver_msnv và approver_name
     let query = supabase.from("users").select("msnv, full_name, approver_msnv, approver_name");
 
-    if (id) {
-      // Logic cũ: Nếu có ID người duyệt, lọc theo người duyệt
-      const approverCol = "approver_msnv"; // Luôn dùng 'approver_msnv' cho bảng users
-      query = query.ilike(approverCol, `${id}%`); // (SỬA) Dùng ilike
-    } else {
-      // Logic MỚI: Nếu không có ID, lọc theo section hiện tại
-      query = query.eq("section", currentSection);
-    }
-
+    // (SỬA ĐỔI) Bỏ bộ lọc approverId khỏi đây. Luôn tải toàn bộ section.
+    query = query.eq("section", currentSection);
+    
     // Luôn đặt lại danh sách NV trước khi tải
     setApproverWorkers([]); 
     
@@ -771,7 +761,7 @@ function ReportContent() {
         setApproverWorkers(cleanApprovers);
     });
     
-  }, [approverId, section]); // Thay đổi dependency
+  }, [section]); // (SỬA ĐỔI) Chỉ phụ thuộc vào section
 
 
   // --- JSX Rendering Starts Here ---
@@ -962,9 +952,8 @@ function ReportContent() {
         {/* ----- SỬA ĐỔI KHỐI NÀY ----- */}
         {approverWorkers.length === 0 && !loading && (
             <p className="text-gray-500">
-                {approverId.trim() 
-                    ? "Không tìm thấy nhân viên nào dưới quyền người duyệt này." 
-                    : "Không tìm thấy nhân viên nào trong Section này. Vui lòng kiểm tra trang Quản lý User."}
+                {/*(SỬA ĐỔI) Bỏ kiểm tra approverId.trim() vì nó luôn tải all*/}
+                Không tìm thấy nhân viên nào trong Section này. Vui lòng kiểm tra trang Quản lý User.
             </p>
         )}
         {/* ----- HẾT SỬA ĐỔI ----- */}
@@ -975,7 +964,8 @@ function ReportContent() {
                 <div className="flex items-center gap-3">
                     <span className="font-medium">
                         Tổng số NV đang theo dõi (
-                        {approverId.trim() ? `của ${approverId}` : `thuộc ${section}`}
+                        {/*(SỬA ĐỔI) Luôn hiển thị section*/}
+                        thuộc {section}
                         ): <b>{approverWorkers.length}</b>
                     </span>
                     <span className="font-medium">NV thiếu KPI: <b className="text-red-600">{missingReportFull.length}</b></span>
@@ -1020,7 +1010,7 @@ function ReportContent() {
             </>
         )}
         {/* SỬA ĐỔI: Dùng missingReportData để kiểm tra */}
-        {!missingReportData.length && approverId.trim() && !loading && <p className="text-gray-500">Đang chờ tải dữ liệu KPI chi tiết để kiểm tra.</p>}
+        {!missingReportData.length && !loading && <p className="text-gray-500">Đang chờ tải dữ liệu KPI chi tiết để kiểm tra.</p>}
       </div>
 
       {/* Chart */}
