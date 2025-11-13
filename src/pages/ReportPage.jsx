@@ -459,6 +459,7 @@ function ReportContent() {
 
 
   // ----- (SỬA ĐỔI) exportXLSX giờ dùng 'filteredRows' -----
+  // ----- (SỬA ĐỔI) exportXLSX giờ dùng 'filteredRows' -----
   async function exportXLSX() { // <-- Đã ASYNC
         
         // CÁC HÀM HELPER GIỮ NGUYÊN
@@ -480,23 +481,30 @@ function ReportContent() {
             default:     return code;
           }
         };
+        
+        // ===== BẮT ĐẦU THAY ĐỔI =====
+        // Sửa hàm parseDate để sử dụng Date.UTC, tránh các vấn đề về múi giờ
         const parseDate = (iso) => {
             if (!iso) return null; 
             try {
-                const parts = iso.split('-');
+                // Luôn cắt lấy 10 ký tự đầu (YYYY-MM-DD) để loại bỏ mọi thông tin về giờ
+                const isoDate = String(iso).slice(0, 10);
+                const parts = isoDate.split('-');
                 if (parts.length === 3) {
                     const y = parseInt(parts[0], 10);
-                    const m = parseInt(parts[1], 10) - 1; 
+                    const m = parseInt(parts[1], 10) - 1; // JS month (0-11)
                     const d = parseInt(parts[2], 10);
                     
                     if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
-                        return new Date(y, m, d); 
+                        // Tạo ngày lúc 00:00:00 UTC
+                        return new Date(Date.UTC(y, m, d)); 
                     }
                 }
             } catch (e) {
             }
             return null; 
         };
+        // ===== KẾT THÚC THAY ĐỔI =====
         
         // ----- (SỬA ĐỔI) LẤY DATA MỚI TỪ SUPABASE (CÓ PHÂN TRANG) -----
         
@@ -537,7 +545,8 @@ function ReportContent() {
               "MSNV": r.worker_id || "",
               "HỌ VÀ TÊN": r.worker_name || "",
               "CA LÀM VIỆC": r.ca || "",
-              "NGÀY LÀM VIỆC": parseDate(r.date) ? { v: parseDate(r.date), t: 'd', z: 'm/d/yyyy' } : null, 
+              // ===== THAY ĐỔI ĐỊNH DẠNG: 'm/d/yyyy' -> 'mm/dd/yyyy' =====
+              "NGÀY LÀM VIỆC": parseDate(r.date) ? { v: parseDate(r.date), t: 'd', z: 'mm/dd/yyyy' } : null, 
               "THỜI GIAN LÀM VIỆC": Number(r.working_input ?? 0),
               "Số đôi phế": Number(r.defects ?? 0),
               "Điểm chất lượng": q,
@@ -572,7 +581,8 @@ function ReportContent() {
               "MSNV": r.worker_id || "",
               "HỌ VÀ TÊN": r.worker_name || "",
               "CA LÀM VIỆC": r.ca || "",
-              "NGÀY LÀM VIỆC": parseDate(r.date) ? { v: parseDate(r.date), t: 'd', z: 'm/d/yyyy' } : null, 
+              // ===== THAY ĐỔI ĐỊNH DẠNG: 'm/d/yyyy' -> 'mm/dd/yyyy' =====
+              "NGÀY LÀM VIỆC": parseDate(r.date) ? { v: parseDate(r.date), t: 'd', z: 'mm/dd/yyyy' } : null, 
               "THỜI GIAN LÀM VIỆC (Nhập)": Number(r.work_hours ?? 0),
               "THỜI GIAN THỰC TẾ (Quy đổi)": Number(r.working_real ?? 0),
               "THỜI GIAN CHÍNH XÁC": exactHours,
@@ -609,7 +619,199 @@ function ReportContent() {
               "MSNV": r.worker_id || "",
               "HỌ VÀ TÊN": r.worker_name || "",
               "CA LÀM VIỆC": r.ca || "",
-              "NGÀY LÀM VIỆC": parseDate(r.date) ? { v: parseDate(r.date), t: 'd', z: 'm/d/yyyy' } : null, 
+              // ===== THAY ĐỔI ĐỊNH DẠNG: 'm/d/yyyy' -> 'mm/dd/yyyy' =====
+              "NGÀY LÀM VIỆC": parseDate(r.date) ? { v: parseDate(r.date), t: 'd', z: 'mm/dd/yyyy' } : null, 
+              "THỜI GIAN LÀM VIỆC": Number(r.work_hours ?? 0),
+              "Số đôi phế": Number(r.defects ?? 0),
+              "Điểm chất lượng": q,
+              "%OE": Number(r.oe ?? 0),
+              "Điểm sản lượng": p,
+              "Tuân thủ": complianceLabel(r.compliance_code),
+              "Vi phạm": r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0),
+              "Điểm KPI ngày": day,
+              "Điểm dư": overflow,
+              "Điểm KPI tổng tháng": totalMonth,
+              "THỜI GIAN DOWNTIME": Number(r.stop_hours ?? 0),
+              "MSNV người duyệt": r.approver_id || "",
+              "Họ và Tên Người duyệt": r.approver_name || "",
+              "Line làm việc": r.line || "",
+              "Ghi chú duyệt": r.approver_note || "", 
+              "Trạng thái": r.status || "pending", // <-- THÊM CỘT NÀY
+            };
+          });
+        }
+      
+        const ws = XLSX.utils.json_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+      
+        XLSX.utils.book_append_sheet(wb, ws, viSection(section));
+        
+        // (SỬA ĐỔI) Tên file giờ đây cũng có thể bao gồm cả approver
+        // const approverFilter = approverId.trim() ? `_${approverId.trim()}` : "_ALL"; // Bỏ approver filter
+        XLSX.writeFile(wb, `kpi_report_${section}_${dateFrom}_to_${dateTo}.xlsx`);
+      }// ----- (SỬA ĐỔI) exportXLSX giờ dùng 'filteredRows' -----
+  // ----- (SỬA ĐỔI) exportXLSX giờ dùng 'filteredRows' -----
+      async function exportXLSX() { // <-- Đã ASYNC
+            
+        // CÁC HÀM HELPER GIỮ NGUYÊN
+        const titleCase = (s) =>
+          s ? s.toString().toLowerCase().replace(/^\w/u, (c) => c.toUpperCase()) : "";
+        const complianceLabel = (code) => {
+          switch ((code || "NONE").toUpperCase()) {
+            case "NONE": return "Không vi phạm";
+            case "KÝ MẪU ĐẦU CHUYỀN TRƯỚC KHI SỬ DỤNG":
+            case "LATE": return "Ký mẫu đầu chuyền trước khi sử dụng";
+            case "QUY ĐỊNH VỀ KIỂM TRA ĐIỀU KIỆN MÁY TRƯỚC/TRONG KHI SẢN XUẤT":
+            case "PPE":  return "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất";
+            case "QUY ĐỊNH VỀ KIỂM TRA NGUYÊN LIỆU TRƯỚC/TRONG KHI SẢN XUẤT":
+            case "MAT":  return "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất";
+            case "QUY ĐỊNH VỀ KIỂM TRA QUY CÁCH/TIÊU CHUẨN SẢN PHẨM TRƯỚC/TRONG KHI SẢN XUẤT":
+            case "SPEC": return "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất";
+            case "VI PHẠM NỘI QUY BỘ PHẬN/CÔNG TY":
+            case "RULE": return "Vi phạm nội quy bộ phận/công ty";
+            default:     return code;
+          }
+        };
+        
+        // ===== BẮT ĐẦU THAY ĐỔI =====
+        // Sửa hàm parseDate để sử dụng Date.UTC, tránh các vấn đề về múi giờ
+        const parseDate = (iso) => {
+            if (!iso) return null; 
+            try {
+                // Luôn cắt lấy 10 ký tự đầu (YYYY-MM-DD) để loại bỏ mọi thông tin về giờ
+                const isoDate = String(iso).slice(0, 10);
+                const parts = isoDate.split('-');
+                if (parts.length === 3) {
+                    const y = parseInt(parts[0], 10);
+                    const m = parseInt(parts[1], 10) - 1; // JS month (0-11)
+                    const d = parseInt(parts[2], 10);
+                    
+                    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+                        // Tạo ngày lúc 00:00:00 UTC
+                        return new Date(Date.UTC(y, m, d)); 
+                    }
+                }
+            } catch (e) {
+            }
+            return null; 
+        };
+        // ===== KẾT THÚC THAY ĐỔI =====
+        
+        // ----- (SỬA ĐỔI) LẤY DATA MỚI TỪ SUPABASE (CÓ PHÂN TRANG) -----
+        
+        // (SỬA ĐỔI) Thêm kiểm tra ngày
+        if (!dateFrom || !dateTo) {
+          return alert("Vui lòng chọn 'Từ ngày' và 'Đến ngày' trước khi xuất.");
+        }
+        
+        setExporting(true);
+        let allData;
+        try {
+            // (SỬA ĐỔI) Bỏ approverId, isMolding khỏi helper
+            allData = await fetchAllDataForExport(tableName, section, dateFrom, dateTo); 
+        } catch (error) {
+            setExporting(false);
+            return alert("Lỗi khi tải toàn bộ dữ liệu: " + error.message);
+        }
+        
+        setExporting(false);
+
+        if (!allData || !allData.length) {
+          return alert("Không có dữ liệu nào trong bảng " + tableName + " để xuất trong khoảng ngày này.");
+        }
+        // ----- (HẾT SỬA ĐỔI) -----
+      
+        let data;
+        if (isMolding) {
+          // Logic Export Molding
+          data = allData.map((r) => { // Sửa: rows -> allData
+            const p = Number(r.p_score || 0);
+            const q = Number(r.q_score || 0);
+            const day = Number(r.day_score || 0);
+            const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
+            const total = day + overflow;
+      
+            return {
+              "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "MOLDING")),
+              "MSNV": r.worker_id || "",
+              "HỌ VÀ TÊN": r.worker_name || "",
+              "CA LÀM VIỆC": r.ca || "",
+              // ===== THAY ĐỔI ĐỊNH DẠNG: 'm/d/yyyy' -> 'mm/dd/yyyy' =====
+              "NGÀY LÀM VIỆC": parseDate(r.date) ? { v: parseDate(r.date), t: 'd', z: 'mm/dd/yyyy' } : null, 
+              "THỜI GIAN LÀM VIỆC": Number(r.working_input ?? 0),
+              "Số đôi phế": Number(r.defects ?? 0),
+              "Điểm chất lượng": q,
+              "Sản lượng/ca": Number(r.output ?? 0),
+              "Điểm Sản lượng": p,
+              "Tuân thủ": complianceLabel(r.compliance_code),
+              "Vi phạm": r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0),
+              "Điểm KPI ngày": day,
+              "Điểm dư": overflow,
+              "Điểm tổng": total,
+              "Loại hàng": r.category || "",
+              "Số giờ khuôn chạy thực tế": Number(r.mold_hours ?? 0),
+              "Thời gian dừng /24 khuôn (h)": Number(r.downtime ?? 0),
+              "MSNV người duyệt": r.approver_msnv || "",
+              "Người duyệt": r.approver_name || "",
+              "Ghi chú duyệt": r.approver_note || "", 
+              "Trạng thái": r.status || "pending", // <-- THÊM CỘT NÀY
+            };
+          });
+        } else if (isHybrid) {
+          // Logic Export HYBRID (LAMINATION, PREFITTING, BÀO, TÁCH)
+          data = allData.map((r) => { // Sửa: rows -> allData
+            const p = Number(r.p_score || 0);
+            const q = Number(r.q_score || 0);
+            const day = Number(r.day_score || 0);
+            const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
+            const exactHours = Math.max(0, Number(r.working_real || 0) - Number(r.stop_hours || 0));
+            const prodRate = exactHours > 0 ? Number(r.output || 0) / exactHours : 0;
+      
+            return {
+              "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "")),
+              "MSNV": r.worker_id || "",
+              "HỌ VÀ TÊN": r.worker_name || "",
+              "CA LÀM VIỆC": r.ca || "",
+              // ===== THAY ĐỔI ĐỊNH DẠNG: 'm/d/yyyy' -> 'mm/dd/yyyy' =====
+              "NGÀY LÀM VIỆC": parseDate(r.date) ? { v: parseDate(r.date), t: 'd', z: 'mm/dd/yyyy' } : null, 
+              "THỜI GIAN LÀM VIỆC (Nhập)": Number(r.work_hours ?? 0),
+              "THỜI GIAN THỰC TẾ (Quy đổi)": Number(r.working_real ?? 0),
+              "THỜI GIAN CHÍNH XÁC": exactHours,
+              "Số đôi phế": Number(r.defects ?? 0),
+              "Điểm chất lượng": q,
+              "Sản lượng (Output)": Number(r.output ?? 0),
+              "Tỷ lệ Năng suất": Number(prodRate),
+              "Loại năng suất": r.category || "",
+              "Điểm Sản lượng": p,
+              "Tuân thủ": complianceLabel(r.compliance_code),
+              "Vi phạm": r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0),
+              "Điểm KPI ngày": day,
+              "Điểm dư": overflow,
+              "MSNV người duyệt": r.approver_id || "",
+              "Họ và Tên Người duyệt": r.approver_name || "",
+              "Máy làm việc": r.line || "",
+              "THỜI GIAN DỪNG MÁY": Number(r.stop_hours ?? 0),
+              "Ghi chú duyệt": r.approver_note || "", 
+              "Trạng thái": r.status || "pending", // <-- THÊM CỘT NÀY
+            };
+          });
+
+        } else {
+          // Logic Export LEANLINE DC & LEANLINE MOLDED
+          data = allData.map((r) => { // Sửa: rows -> allData
+            const p = Number(r.p_score || 0);
+            const q = Number(r.q_score || 0);
+            const day = Number(r.day_score || 0);
+            const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
+            const totalMonth = day + overflow;
+      
+            return {
+              "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "")),
+              "MSNV": r.worker_id || "",
+              "HỌ VÀ TÊN": r.worker_name || "",
+              "CA LÀM VIỆC": r.ca || "",
+              // ===== THAY ĐỔI ĐỊNH DẠNG: 'm/d/yyyy' -> 'mm/dd/yyyy' =====
+              "NGÀY LÀM VIỆC": parseDate(r.date) ? { v: parseDate(r.date), t: 'd', z: 'mm/dd/yyyy' } : null, 
               "THỜI GIAN LÀM VIỆC": Number(r.work_hours ?? 0),
               "Số đôi phế": Number(r.defects ?? 0),
               "Điểm chất lượng": q,
