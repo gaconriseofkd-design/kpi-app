@@ -674,28 +674,28 @@ function ReportContent() {
         };
         
         // ===== BẮT ĐẦU THAY ĐỔI =====
-        // Sửa hàm parseDate để sử dụng Date.UTC, tránh các vấn đề về múi giờ
+        // ===== BẮT ĐẦU THAY ĐỔI =====
+        // Sửa hàm parseDate để tạo ngày theo giờ ĐỊA PHƯƠNG, không dùng UTC
         const parseDate = (iso) => {
-            if (!iso) return null; 
-            try {
-                // Luôn cắt lấy 10 ký tự đầu (YYYY-MM-DD) để loại bỏ mọi thông tin về giờ
-                const isoDate = String(iso).slice(0, 10);
-                const parts = isoDate.split('-');
-                if (parts.length === 3) {
-                    const y = parseInt(parts[0], 10);
-                    const m = parseInt(parts[1], 10) - 1; // JS month (0-11)
-                    const d = parseInt(parts[2], 10);
-                    
-                    if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
-                        // Tạo ngày lúc 00:00:00 UTC
-                        return new Date(Date.UTC(y, m, d)); 
-                    }
-                }
-            } catch (e) {
-            }
-            return null; 
-        };
-        // ===== KẾT THÚC THAY ĐỔI =====
+          if (!iso) return null; 
+          try {
+              // Luôn cắt lấy 10 ký tự đầu (YYYY-MM-DD) để loại bỏ mọi thông tin về giờ
+              const isoDate = String(iso).slice(0, 10);
+              const parts = isoDate.split('-');
+              if (parts.length === 3) {
+                  const y = parseInt(parts[0], 10);
+                  const m = parseInt(parts[1], 10) - 1; // JS month (0-11)
+                  const d = parseInt(parts[2], 10);
+                  
+                  if (!isNaN(y) && !isNaN(m) && !isNaN(d)) {
+                      // Tạo ngày lúc 00:00:00 theo giờ ĐỊA PHƯƠNG (local time)
+                      return new Date(y, m, d); // <--- ĐÃ XÓA Date.UTC()
+                  }
+              }
+          } catch (e) {
+          }
+          return null; 
+      };
         
         // ----- (SỬA ĐỔI) LẤY DATA MỚI TỪ SUPABASE (CÓ PHÂN TRANG) -----
         
