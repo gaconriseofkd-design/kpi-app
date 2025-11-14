@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
-import { supabase } from "../supabaseClient";
+import { supabase } from "../lib/supabaseClient";
+
 
 // VAI TRÒ HỢP LỆ (LOWERCASE)
 const ALLOWED_ROLES = ["worker", "approver", "admin"];
