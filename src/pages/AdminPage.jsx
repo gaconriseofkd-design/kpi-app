@@ -89,13 +89,25 @@ function AdminMain() {
     setRows(prev => [emptyRow, ...prev]);
   };
   
+  // SỬA LỖI: Củng cố logic tìm index và thêm kiểm tra null/undefined
+  const findIndexInRows = (prevRows, originalObject) => {
+    if (!originalObject) return -1;
+    // Tìm bằng MSNV nếu có, nếu không thì dùng object reference (cho dòng mới)
+    return originalObject.msnv
+      ? prevRows.findIndex(item => item.msnv === originalObject.msnv)
+      : prevRows.findIndex(item => item === originalObject);
+  }
+  
   const removeRow = (i) => {
     // Tìm index của row trong `rows` dựa vào `sortedRows` và `pageRows`
     const globalIndexInSorted = (page - 1) * pageSize + i;
     const originalObject = sortedRows[globalIndexInSorted];
     
+    // FIX: Thêm kiểm tra
+    if (!originalObject) return;
+    
     setRows(prev => {
-        const idxInRows = prev.findIndex(item => item === originalObject);
+        const idxInRows = findIndexInRows(prev, originalObject);
         if (idxInRows === -1) return prev;
         
         // Dùng slice để xóa (không nên dùng splice)
@@ -107,8 +119,11 @@ function AdminMain() {
     const globalIndexInSorted = (page - 1) * pageSize + i;
     const originalObject = sortedRows[globalIndexInSorted];
     
+    // FIX: Thêm kiểm tra
+    if (!originalObject) return;
+    
     setRows(prev => {
-        const idxInRows = prev.findIndex(item => item === originalObject);
+        const idxInRows = findIndexInRows(prev, originalObject);
         if (idxInRows === -1) return prev;
         
         const arr = [...prev]; 
@@ -131,8 +146,11 @@ function AdminMain() {
     const globalIndexInSorted = (page - 1) * pageSize + i;
     const originalObject = sortedRows[globalIndexInSorted];
     
+    // FIX: Thêm kiểm tra
+    if (!originalObject) return;
+
     setRows(prev => {
-        const idxInRows = prev.findIndex(item => item === originalObject);
+        const idxInRows = findIndexInRows(prev, originalObject);
         if (idxInRows === -1) return prev;
         
         const arr = [...prev]; 
@@ -145,8 +163,9 @@ function AdminMain() {
             if (data && data.full_name) {
               setRows(current => {
                 const arr2 = [...current];
-                const idxInRows2 = arr2.findIndex(item => item === originalObject);
-                if(idxInRows2 !== -1) { // Kiểm tra lại index vì state có thể đã thay đổi
+                // Phải tìm lại index vì state có thể đã thay đổi
+                const idxInRows2 = findIndexInRows(arr2, originalObject); 
+                if(idxInRows2 !== -1) { 
                     arr2[idxInRows2] = { ...arr2[idxInRows2], approver_name: data.full_name };
                 }
                 return arr2;
@@ -206,7 +225,6 @@ function AdminMain() {
     [sortedRows, page]
   );
   
-  const globalIndex = (i) => (page - 1) * pageSize + i;
   const isNewRow = (r) => !r.msnv_original; // Giả định row mới không có trường này
 
   const requestSort = (key) => {
@@ -237,7 +255,7 @@ function AdminMain() {
     if (!r.msnv || !r.full_name || !r.section) {
       return alert("MSNV, Họ & tên và Section không được để trống.");
     }
-    if (!ALLOWED_ROLES.includes(r.role)) {
+    if (!ALLOWED_ROLES.includes((r.role || "").toLowerCase())) {
       return alert("Vai trò không hợp lệ.");
     }
     
@@ -251,7 +269,7 @@ function AdminMain() {
         full_name: r.full_name,
         section: r.section,
         line: (r.line || "").trim().toUpperCase(), // Đảm bảo line được chuẩn hóa trước khi lưu
-        role: r.role,
+        role: (r.role || "").toLowerCase(),
         approver_msnv: r.approver_msnv || null,
         approver_name: r.approver_name || null,
     };
@@ -277,7 +295,19 @@ function AdminMain() {
   const deleteRow = async (i) => {
     const globalIndexInSorted = (page - 1) * pageSize + i;
     const r = sortedRows[globalIndexInSorted];
-    if (!r || !r.msnv) return;
+    if (!r || !r.msnv) {
+        // Nếu là dòng mới chưa có MSNV, ta chỉ cần xóa nó khỏi state
+        if (!r) return; // Không tìm thấy dòng
+        
+        // Dùng logic removeRow để xóa dòng mới trong state
+        const originalObject = sortedRows[globalIndexInSorted];
+        setRows(prev => {
+            const idxInRows = findIndexInRows(prev, originalObject);
+            if (idxInRows === -1) return prev;
+            return [...prev.slice(0, idxInRows), ...prev.slice(idxInRows + 1)];
+        });
+        return;
+    }
 
     if (!window.confirm(`Bạn có chắc muốn xoá User ${r.msnv} - ${r.full_name}?`)) return;
 
@@ -309,7 +339,6 @@ function AdminMain() {
         const ws = wb.Sheets[wsname];
         
         // Đọc header và dữ liệu
-        const header = XLSX.utils.sheet_to_json(ws, { header: 1 })[0];
         const data = XLSX.utils.sheet_to_json(ws);
         
         if (!data || data.length === 0) return alert("File Excel không có dữ liệu.");
@@ -437,7 +466,7 @@ function AdminMain() {
               <th className="p-2 cursor-pointer text-left" onClick={() => requestSort("full_name")}>Họ & tên {getClassNamesFor("full_name")}</th>
               <th className="p-2 cursor-pointer text-left" onClick={() => requestSort("section")}>Section {getClassNamesFor("section")}</th>
               
-              {/* ===== THÊM CỘT HEADER MỚI ===== */}
+              {/* ===== CỘT HEADER VỊ TRÍ LÀM VIỆC (LINE) ===== */}
               <th className="p-2 cursor-pointer text-left" onClick={() => requestSort("line")}>Vị trí LV (Line) {getClassNamesFor("line")}</th> 
               {/* ================================= */}
               
@@ -451,7 +480,6 @@ function AdminMain() {
             {pageRows.map((r, i) => {
               const globalIndex = (page - 1) * pageSize + i;
               const isUpdating = saving.has(globalIndex);
-              const originalObject = sortedRows[globalIndex];
               
               return (
                 <tr key={r.msnv || `new-${i}`} className="border-t">
@@ -483,7 +511,7 @@ function AdminMain() {
                     />
                   </td>
                   
-                  {/* ===== THÊM CỘT INPUT VỊ TRÍ LÀM VIỆC (LINE) MỚI ===== */}
+                  {/* ===== CỘT INPUT VỊ TRÍ LÀM VIỆC (LINE) MỚI ===== */}
                   <td className="p-2">
                     <input 
                       value={r.line || ""} 
@@ -498,15 +526,7 @@ function AdminMain() {
                   <td className="p-2">
                     <select value={r.role} onChange={e => {
                         const v = e.target.value;
-                        const globalIndexInSorted = (page - 1) * pageSize + i;
-                        const originalObject = sortedRows[globalIndexInSorted];
-                        setRows(prev => {
-                            const idxInRows = prev.findIndex(item => item === originalObject);
-                            if (idxInRows === -1) return prev;
-                            const arr = [...prev]; 
-                            arr[idxInRows] = { ...arr[idxInRows], role: v }; 
-                            return arr;
-                        });
+                        updateRow(i, "role", v); // Dùng lại updateRow
                     }} className="input">
                         {ALLOWED_ROLES.map(x => <option key={x} value={x}>{x}</option>)}
                     </select>
@@ -522,18 +542,7 @@ function AdminMain() {
                   <td className="p-2">
                     <input 
                         value={r.approver_name || ""} 
-                        onChange={e => { 
-                            const v = e.target.value; 
-                            const globalIndexInSorted = (page - 1) * pageSize + i; 
-                            const originalObject = sortedRows[globalIndexInSorted];
-                            setRows(prev => {
-                                const idxInRows = prev.findIndex(item => item === originalObject);
-                                if (idxInRows === -1) return prev;
-                                const arr = [...prev]; 
-                                arr[idxInRows] = { ...arr[idxInRows], approver_name: v }; 
-                                return arr;
-                            });
-                        }} 
+                        onChange={e => updateRow(i, "approver_name", e.target.value)} // Dùng lại updateRow
                         placeholder="Approver Tên" 
                         className="input" 
                     />
@@ -549,7 +558,7 @@ function AdminMain() {
                     <button 
                       className="btn bg-red-500 text-white hover:bg-red-600" 
                       onClick={() => deleteRow(i)} 
-                      disabled={isNewRow(r) || loading}
+                      disabled={loading} // Bỏ điều kiện isNewRow(r) để xóa dòng mới chưa lưu được
                     >
                       Xoá
                     </button>
