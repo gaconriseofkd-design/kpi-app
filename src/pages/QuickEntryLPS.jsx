@@ -1,481 +1,642 @@
 // src/pages/QuickEntryLPS.jsx
-import { useEffect, useMemo, useState } from "react";
-import { supabase } from "../lib/supabaseClient";
-import { scoreByQuality, scoreByProductivityLPSQuick } from "../lib/scoring";
-// import { useKpiSection } from "../context/KpiSectionContext"; // Không cần thiết ở đây vì đã nhận prop section
 
-/* ===== Helpers ===== */
+import React, { useEffect, useMemo, useState } from "react";
+import { supabase } from "../lib/supabaseClient";
+
+/* ================= Scoring & Helpers ================= */
+const MACHINE_MAP = {
+    "LAMINATION": ["Máy dán 1", "Máy dán 2", "Máy dán 3", "Máy dán 4", "Máy dán 5", "Máy dán 6", "Máy dán 7", "Vòng ngoài"],
+    "PREFITTING": ["Máy cắt 1", "Máy cắt 2", "Máy cắt 3", "Máy cắt 4", "Máy cắt 5", "Máy cắt 6", "Vòng ngoài"],
+    "BÀO": ["Máy bào 1", "Máy bào 2", "Máy bào 3", "Máy bào 4", "Vòng ngoài"],
+    "TÁCH": ["Máy tách 1", "Máy tách 2", "Máy tách 3", "Máy tách 4", "Vòng ngoài"],
+};
+function calcWorkingReal(shift, inputHours) {
+  const h = Number(inputHours || 0);
+  if (h < 8) return h;
+  const BASE_BY_SHIFT = { "Ca 1": 7.17, "Ca 2": 7.17, "Ca 3": 6.92, "Ca HC": 6.67 };
+  const base = BASE_BY_SHIFT[shift] ?? 7.17;
+  if (h < 9) return base;
+  const extra = h - 8;
+  const adj = extra >= 2 ? extra - 0.5 : extra; 
+  return base + adj;
+}
+const getTableName = (sectionKey) => "kpi_lps_entries";
+function scoreByQuality(defects) {
+  const d = Number(defects || 0);
+  if (d === 0) return 10;
+  if (d <= 2) return 8;
+  if (d <= 4) return 6;
+  if (d <= 6) return 4;
+  return 0;
+}
+function scoreByProductivityHybrid(prodRate, category, allRules) {
+  const val = Number(prodRate ?? 0);
+  const rules = (allRules || []).filter(r => 
+    r.active !== false && 
+    r.category === category
+  ).sort((a, b) => Number(b.threshold) - Number(a.threshold));
+  for (const r of rules) {
+    if (val >= Number(r.threshold)) return Number(r.score || 0);
+  }
+  return 0;
+}
+function deriveDayScoresHybrid({ section, defects, category, output, workHours, stopHours, shift }, prodRules) {
+  const q = scoreByQuality(defects);
+  const workingReal = calcWorkingReal(shift, workHours);
+  const exactHours = Math.max(0, workingReal - Number(stopHours || 0));
+  const prodRate = exactHours > 0 ? Number(output || 0) / exactHours : 0;
+  const p = scoreByProductivityHybrid(prodRate, category, prodRules);
+  const total = p + q;
+  return {
+    p_score: p, q_score: q, day_score: Math.min(15, total),
+    prodRate: prodRate, workingReal: workingReal, rawTotal: total,
+  };
+}
 const COMPLIANCE_OPTIONS = [
     { value: "NONE", label: "Không vi phạm" },
-    { value: "Ký mẫu đầu chuyền trước khi sử dụng", label: "Ký mẫu đầu chuyền trước khi sử dụng" },
-    { value: "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất", label: "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất" },
-    { value: "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất", label: "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất" },
-    { value: "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất", label: "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất" },
-    { value: "Vi phạm nội quy bộ phận/công ty", label: "Vi phạm nội quy bộ phận/công ty" },
+    { value: "LATE", label: "Ký mẫu đầu chuyền trước khi sử dụng" },
+    { value: "PPE", label: "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất" },
+    { value: "MAT", label: "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất" },
+    { value: "SPEC", label: "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất" },
+    { value: "RULE", label: "Vi phạm nội quy bộ phận/công ty" },
 ];
-const cx = (...classes) => classes.filter(Boolean).join(" ");
-const currentMachines = {
-    LAMINATION: ["Dán 1", "Dán 2", "Dán 3"],
-    PREFITTING: ["Line 1", "Line 2", "Line 3", "Line 4", "Line 5"],
-    BÀO: ["Bào 1", "Bào 2"],
-    TÁCH: ["Tách 1", "Tách 2"],
+const cx = (...a) => a.filter(Boolean).join(" ");
+const toNum = (v, d = 0) => {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : d;
 };
-const defaultCategoryBySection = {
-    LAMINATION: 'Lượt dán/giờ',
-    PREFITTING: 'Sản lượng/giờ',
-    BÀO: 'Sản lượng/giờ',
-    TÁCH: 'Sản lượng/giờ',
-};
+/* ================= (Hết Helpers) ================= */
 
 
 /* ================= Approver Mode HYBRID ================= */
 
 export default function ApproverModeHybrid({ section }) {
+  const [step, setStep] = useState(1);
+  const [prodRules, setProdRules] = useState([]); 
+  const [categoryOptions, setCategoryOptions] = useState([]);
+  const tableName = getTableName(section);
+  const [approverIdInput, setApproverIdInput] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const [loadingSearch, setLoadingSearch] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+  const [selectedWorkers, setSelectedWorkers] = useState([]);
+  const [searchAllSections, setSearchAllSections] = useState(false);
+  const [reviewRows, setReviewRows] = useState([]);
+  const [selReview, setSelReview] = useState(() => new Set());
+  
+  // Lấy ngày hôm nay
+  const today = new Date().toISOString().slice(0, 10);
+  
+  const [tplDate, setTplDate] = useState(today); // <-- Đặt mặc định là hôm nay
+  const [tplShift, setTplShift] = useState("Ca 1");
+  const [tplWorkHours, setTplWorkHours] = useState(8);
+  const [tplStopHours, setTplStopHours] = useState(0);
+  const [tplOutput, setTplOutput] = useState(100); 
+  const [tplDefects, setTplDefects] = useState(0);
+  const [tplCompliance, setTplCompliance] = useState("NONE");
+  const [saving, setSaving] = useState(false);
+  const pageSize = 50;
+  const [page, setPage] = useState(1);
+  const currentMachines = useMemo(() => MACHINE_MAP[section] || [], [section]);
+  const [tplLine, setTplLine] = useState(currentMachines[0] || ""); 
+  const defaultCategory = section === 'LAMINATION' ? 'Lượt dán/giờ' : '';
+  const [tplCategory, setTplCategory] = useState(defaultCategory);
+
+  const selectedIds = useMemo(() => new Set(selectedWorkers.map(w => w.msnv)), [selectedWorkers]);
+  
+  // ===== THÊM STATE VÀ LOGIC LỌC THEO LINE MỚI =====
+  const [lineFilter, setLineFilter] = useState(""); // <-- THÊM DÒNG NÀY
+
+  const availableLines = useMemo(() => {
+    // Chỉ lấy lines từ kết quả tìm kiếm hiện tại
+    const lines = new Set(searchResults.map(w => w.line).filter(Boolean));
+    return ["", ...Array.from(lines).sort()];
+  }, [searchResults]);
+
+  const filteredSearchResults = useMemo(() => {
+      if (!lineFilter) return searchResults;
+      return searchResults.filter(w => w.line === lineFilter);
+  }, [searchResults, lineFilter]);
+  // =================================================
+
+  // THÊM HÀM XOÁ TẤT CẢ
+  function removeAllWorkers() {
+    if (window.confirm(`Bạn có chắc muốn xoá ${selectedWorkers.length} nhân viên đã chọn?`)) {
+        setSelectedWorkers([]);
+    }
+  }
+
+  const scores = useMemo(
+    () => deriveDayScoresHybrid({ 
+        section, defects: tplDefects, category: tplCategory, output: tplOutput, 
+        workHours: tplWorkHours, stopHours: tplStopHours, shift: tplShift 
+    }, prodRules),
+    [section, tplDefects, tplCategory, tplOutput, tplWorkHours, tplStopHours, tplShift, prodRules]
+  );
+  const tplKPI = scores.day_score;
+  const tplProdRate = scores.prodRate;
+  const tplQ = scores.q_score;
+  const tplP = scores.p_score;
+  const tplExactHours = Math.max(0, scores.workingReal - toNum(tplStopHours));
+  const totalPages = Math.max(1, Math.ceil(reviewRows.length / pageSize));
+  const pageRows = useMemo(
+    () => reviewRows.slice((page - 1) * pageSize, page * pageSize),
+    [reviewRows, page]
+  );
+  
+  useEffect(() => {
+    if (section === 'LAMINATION') setTplCategory('Lượt dán/giờ');
+    else setTplCategory('');
+  }, [section]);
+  useEffect(() => {
+    let cancelled = false; const dbSection = section.toUpperCase();
+    (async () => {
+      const { data, error } = await supabase.from("kpi_rule_productivity")
+        .select("*").eq("active", true).eq("section", dbSection) 
+        .order("threshold", { ascending: false });
+      if (!cancelled) {
+        if (error) console.error("Load rules error:", error);
+        setProdRules(data || []);
+        const opts = [...new Set((data || []).map(r => r.category).filter(Boolean))].sort();
+        setCategoryOptions(opts);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [section]);
+  
+  async function searchByApprover() {
+    const q = approverIdInput.trim();
+    if (!q) return alert("Nhập Tên hoặc MSNV người duyệt.");
+    setLoadingSearch(true);
+    let query;
+    if (isNaN(Number(q))) {
+      query = supabase.from("users")
+        .select("msnv, full_name, section, line, approver_msnv, approver_name") // <-- ĐÃ CẬP NHẬT: THÊM section, line
+        .ilike("approver_name", `%${q}%`);
+    } else {
+      query = supabase.from("users")
+        .select("msnv, full_name, section, line, approver_msnv, approver_name") // <-- ĐÃ CẬP NHẬT: THÊM section, line
+        .eq("approver_msnv", q); 
+    }
+    if (!searchAllSections) {
+      query = query.eq("section", section); 
+    }
+    const { data, error } = await query.limit(100); 
+    setLoadingSearch(false);
+    if (error) return alert("Lỗi tải nhân viên: " + error.message);
+    setSearchResults(data || []);
+    setSearchInput(""); 
+    setLineFilter(""); // Reset filter khi tìm kiếm mới
+  }
+
+  async function searchGlobal() {
+    const q = searchInput.trim();
+    if (!q) return alert("Nhập Tên hoặc MSNV nhân viên.");
+    setLoadingSearch(true);
+    let query;
+    if (isNaN(Number(q))) {
+      query = supabase.from("users").select("msnv, full_name, section, line, approver_msnv, approver_name").ilike("full_name", `%${q}%`); // <-- ĐÃ CẬP NHẬT: THÊM section, line
+    } else {
+      query = supabase.from("users").select("msnv, full_name, section, line, approver_msnv, approver_name").eq("msnv", q); // <-- ĐÃ CẬP NHẬT: THÊM section, line
+    }
+    if (!searchAllSections) {
+      query = query.eq("section", section);
+    }
+    const { data, error } = await query.limit(50);
+    setLoadingSearch(false);
+    if (error) return alert("Lỗi tìm nhân viên: " + error.message);
+    setSearchResults(data || []);
+    setApproverIdInput("");
+    setLineFilter(""); // Reset filter khi tìm kiếm mới
+  }
+
+  function addWorker(worker) {
+    setSelectedWorkers(prev => {
+      if (prev.find(w => w.msnv === worker.msnv)) return prev; 
+      return [worker, ...prev]; 
+    });
+  }
+  function removeWorker(msnv) {
+    setSelectedWorkers(prev => prev.filter(w => w.msnv !== msnv));
+  }
+  
+  function addAllResults() {
+    setSelectedWorkers(prev => {
+      const existingIds = new Set(prev.map(w => w.msnv));
+      const newWorkersToAdd = filteredSearchResults.filter(
+        worker => !existingIds.has(worker.msnv)
+      );
+      return [...prev, ...newWorkersToAdd];
+    });
+  }
+
+  function proceedToTemplate() {
+    if (!selectedWorkers.length) return alert("Chưa chọn nhân viên nào.");
+    if (!prodRules.length) return alert("Chưa tải được Rule điểm, vui lòng thử lại.");
+    setStep(2);
+  }
+  
+  function buildReviewRows() {
+    // THÊM KIỂM TRA NGÀY
+    if (tplDate > today) {
+        return alert("Không thể chọn ngày trong tương lai.");
+    }
     
-    const [step, setStep] = useState(1);
-    const [prodRules, setProdRules] = useState([]); 
-    const [selectedWorkers, setSelectedWorkers] = useState([]);
-    const [searchResults, setSearchResults] = useState([]);
-    const [approverIdInput, setApproverIdInput] = useState("");
-    const [searchInput, setSearchInput] = useState("");
-    const [loadingSearch, setLoadingSearch] = useState(false);
-    const [searchAllSections, setSearchAllSections] = useState(false);
-    const [lineFilter, setLineFilter] = useState("");
-    const [tplTargetValue, setTplTargetValue] = useState(0); 
-    const [tplDefects, setTplDefects] = useState(0); 
-    const defaultCategory = defaultCategoryBySection[section] || '';
-    const [tplLine, setTplLine] = useState(currentMachines[section]?.[0] || ""); 
-    const [tplCategory, setTplCategory] = useState(defaultCategory);
-    const [saving, setSaving] = useState(false);
-    const pageSize = 50;
-    const [page, setPage] = useState(1);
-    const selectedIds = useMemo(() => new Set(selectedWorkers.map(w => w.msnv)), [selectedWorkers]);
+    if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
+    if (!tplCategory) return alert("Vui lòng chọn Loại năng suất.");
+    if (!selectedWorkers.length) return alert("Chưa chọn nhân viên.");
     
-    // Thêm hàm xoá tất cả
-    function removeAllWorkers() {
-        if (window.confirm(`Bạn có chắc muốn xoá ${selectedWorkers.length} nhân viên đã chọn?`)) {
-            setSelectedWorkers([]);
+    const rows = selectedWorkers.map((w) => {
+      const s = deriveDayScoresHybrid({ 
+          section, defects: tplDefects, category: tplCategory, output: tplOutput, 
+          workHours: tplWorkHours, stopHours: tplStopHours, shift: tplShift 
+      }, prodRules);
+      return { 
+          section, work_date: tplDate, shift: tplShift, msnv: w.msnv, hoten: w.full_name,
+          approver_id: w.approver_msnv || approverIdInput, approver_name: w.approver_name,
+          line: w.line || tplLine, // LẤY LINE CỦA WORKER HOẶC TEMPLATE NẾU KHÔNG CÓ
+          work_hours: toNum(tplWorkHours), stop_hours: toNum(tplStopHours),
+          output: toNum(tplOutput), defects: toNum(tplDefects), 
+          q_score: s.q_score, p_score: s.p_score, total_score: s.day_score,
+          prod_rate: s.prodRate, compliance: tplCompliance, category: tplCategory,
+          status: "approved", approver_note: "", // <-- THÊM DÒNG NÀY
+      };
+    });
+    setReviewRows(rows);
+    setSelReview(new Set(rows.map((_, i) => i)));
+    setStep(3);
+  }
+
+  function updateRow(i, key, val) {
+    // THÊM KIỂM TRA NGÀY
+    if (key === "work_date") {
+        if (val > today) {
+            alert("Không thể chọn ngày trong tương lai.");
+            return; // Không cập nhật state
         }
-    }
-
-    const filteredSearchResults = useMemo(() => {
-        if (!lineFilter) return searchResults;
-        return searchResults.filter(w => w.line === lineFilter);
-    }, [searchResults, lineFilter]);
-
-    const calculateScores = (targetValue, defects, rules, sec, category) => {
-        const q = scoreByQuality(defects);
-        const p = scoreByProductivityLPSQuick(targetValue, rules, sec, category);
-        const total = q + p;
-        return { qScore: q, pScore: p, kpi: Math.min(15, total), rawTotal: total };
-    };
-
-    const reviewRows = useMemo(() => {
-        const today = new Date().toISOString().split('T')[0];
-        return selectedWorkers.map(w => {
-            const { qScore, pScore, kpi } = calculateScores(tplTargetValue, tplDefects, prodRules, section, tplCategory);
-            return {
-                ...w,
-                date: today,
-                section,
-                line: tplLine,
-                category: tplCategory,
-                target_value: tplTargetValue,
-                defects: tplDefects,
-                q_score: qScore,
-                p_score: pScore,
-                day_score: kpi,
-                compliance_code: w.compliance_code || "NONE" // Lấy compliance_code từ selectedWorkers
-            };
-        });
-    }, [selectedWorkers, tplTargetValue, tplDefects, tplLine, tplCategory, prodRules, section]);
-
-    const totalPages = useMemo(() => Math.max(1, Math.ceil(reviewRows.length / pageSize)), [reviewRows.length]);
-    const pageRows = useMemo(
-        () => reviewRows.slice((page - 1) * pageSize, page * pageSize),
-        [reviewRows, page]
-    );
-
-    useEffect(() => {
-        let cancelled = false;
-        async function loadRules() {
-            const { data: rules, error } = await supabase
-                .from("kpi_rules_prod_lps")
-                .select("*")
-                .eq("section", section);
-            if (!cancelled) {
-                if (error) {
-                    console.error("Lỗi tải rules:", error);
-                } else {
-                    setProdRules(rules || []);
-                }
-            }
-        }
-        loadRules();
-        
-        // Reset template category khi section thay đổi
-        setTplCategory(defaultCategoryBySection[section] || '');
-        setTplLine(currentMachines[section]?.[0] || "");
-        
-        return () => { cancelled = true; };
-    }, [section]);
-    useEffect(() => setPage(1), [reviewRows.length]);
-
-    function addWorker(worker) {
-        if (!selectedIds.has(worker.msnv)) {
-            setSelectedWorkers(prev => [...prev, worker]);
-        }
-    }
-
-    function removeWorker(msnv) {
-        setSelectedWorkers(prev => prev.filter(w => w.msnv !== msnv));
     }
     
-    function addAllResults() {
-        setSelectedWorkers(prev => {
-            const existingIds = new Set(prev.map(w => w.msnv));
-            const newWorkersToAdd = filteredSearchResults.filter(
-                worker => !existingIds.has(worker.msnv)
-            );
-            return [...prev, ...newWorkersToAdd];
-        });
-    }
+    setReviewRows((old) => {
+      const arr = old.slice();
+      const r0 = arr[i] || {};
+      const r =
+        // CẬP NHẬT: Thêm "approver_note", "line", "category"
+        key === "compliance" || key === "shift" || key === "work_date" || key === "approver_note" || key === "line" || key === "category"
+          ? { ...r0, [key]: val }
+          : { ...r0, [key]: toNum(val, 0) };
+      
+      const s = deriveDayScoresHybrid({ 
+          section, defects: r.defects, category: r.category, output: r.output, 
+          workHours: r.work_hours, stopHours: r.stop_hours, shift: r.shift 
+      }, prodRules);
+      
+      arr[i] = { 
+          ...r, 
+          q_score: s.q_score, p_score: s.p_score, total_score: s.day_score,
+          prod_rate: s.prodRate,
+      };
+      return arr;
+    });
+  }
+  
+  function toggleAllReviewOnPage() {
+    setSelReview((prev) => {
+      const next = new Set(prev);
+      const start = (page - 1) * pageSize;
+      const allOnPage = pageRows.every((_, idx) => next.has(start + idx));
+      if (allOnPage) { pageRows.forEach((_, idx) => next.delete(start + idx)); } 
+      else { pageRows.forEach((_, idx) => next.add(start + idx)); }
+      return next;
+    });
+  }
+  function toggleOneReview(globalIndex) {
+    setSelReview((prev) => {
+      const next = new Set(prev);
+      if (next.has(globalIndex)) next.delete(globalIndex);
+      else next.add(globalIndex);
+      return next;
+    });
+  }
+  const globalIndex = (i) => (page - 1) * pageSize + i;
 
-    function proceedToTemplate() {
-        if (selectedWorkers.length === 0) return alert("Vui lòng chọn nhân viên.");
-        setStep(2);
-    }
+  async function saveBatch() {
+    const idxs = Array.from(selReview).sort((a, b) => a - b);
+    if (!idxs.length) return alert("Chưa chọn dòng để lưu.");
+    setSaving(true);
+    const list = idxs.map((i) => reviewRows[i]);
+    const now = new Date().toISOString();
+    
+    const payload = list.map((r) => {
+      const s = deriveDayScoresHybrid({ 
+          section, defects: r.defects, category: r.category, output: r.output, 
+          workHours: r.work_hours, stopHours: r.stop_hours, shift: r.shift 
+      }, prodRules);
+      const overflow = Math.max(0, s.rawTotal - 15);
+      return {
+        date: r.work_date, ca: r.shift, worker_id: r.msnv, worker_name: r.hoten,
+        approver_id: r.approver_id, approver_name: r.approver_name, line: r.line,
+        category: r.category, prod_rate: Number(r.prod_rate || 0),
+        work_hours: Number(r.work_hours || 0), stop_hours: Number(r.stop_hours || 0),
+        output: Number(r.output || 0), defects: Number(r.defects || 0),
+        p_score: r.p_score, q_score: r.q_score, day_score: r.total_score, overflow,
+        compliance_code: r.compliance, section: r.section, status: "approved", approved_at: now,
+        approver_note: r.approver_note || null,
+      };
+    });
+    
+    const { error } = await supabase
+    .from(tableName) 
+    .upsert(payload, { onConflict: "worker_id,date,section" });
+    setSaving(false);
+    if (error) return alert("Lưu lỗi: " + error.message);
+    alert(`Đã lưu ${payload.length} dòng (approved).`);
+  }
 
-    function buildReviewRows() {
-        setStep(3);
-    }
+  function resetToStep1() {
+    setStep(1);
+    setSelectedWorkers([]);
+    setSearchResults([]);
+    setReviewRows([]);
+    setSelReview(new Set());
+    setSearchInput("");
+    setApproverIdInput("");
+    setLineFilter(""); // Reset line filter
+  }
 
-    async function searchByApprover() {
-        const q = approverIdInput.trim();
-        if (!q) return alert("Nhập Tên hoặc MSNV người duyệt.");
-        setLoadingSearch(true);
-        let query;
-        if (isNaN(Number(q))) {
-            query = supabase.from("users")
-                .select("msnv, full_name, section, line, approver_msnv, approver_name")
-                .ilike("approver_name", `%${q}%`);
-        } else {
-            query = supabase.from("users")
-                .select("msnv, full_name, section, line, approver_msnv, approver_name")
-                .eq("approver_msnv", q);
-        }
-        if (!searchAllSections) {
-            query = query.eq("section", section); 
-        }
-        // ĐÃ XOÁ .limit(100)
-        const { data, error } = await query;
-        setLoadingSearch(false);
-        if (error) return alert("Lỗi tải nhân viên: " + error.message);
-        setSearchResults(data || []); 
-        setSearchInput("");
-        setLineFilter("");
-    }
-
-    async function searchGlobal() {
-        const q = searchInput.trim();
-        if (!q) return alert("Nhập Tên hoặc MSNV nhân viên.");
-        setLoadingSearch(true);
-        let query;
-        if (isNaN(Number(q))) {
-            query = supabase.from("users").select("msnv, full_name, section, line, approver_msnv, approver_name").ilike("full_name", `%${q}%`);
-        } else {
-            query = supabase.from("users").select("msnv, full_name, section, line, approver_msnv, approver_name").eq("msnv", q);
-        }
-        if (!searchAllSections) {
-            query = query.eq("section", section);
-        }
-        // ĐÃ XOÁ .limit(50)
-        const { data, error } = await query;
-        setLoadingSearch(false);
-        if (error) return alert("Lỗi tìm nhân viên: " + error.message);
-        setSearchResults(data || []);
-        setApproverIdInput("");
-        setLineFilter("");
-    }
-
-    async function saveEntry() {
-        setSaving(true);
-        const records = reviewRows.map(r => ({
-            ...r,
-            approver_id: r.approver_msnv,
-            compliance_code: r.compliance_code || "NONE",
-            date: new Date(r.date).toISOString().split('T')[0]
-        }));
-
-        const { error } = await supabase
-            .from("kpi_quick_entry_lps")
-            .insert(records);
-
-        setSaving(false);
-        if (error) {
-            alert("Lỗi lưu KPI: " + error.message);
-        } else {
-            alert(`Đã lưu thành công ${records.length} bản ghi.`);
-            setStep(1);
-            setSelectedWorkers([]);
-        }
-    }
-
-    function updateCompliance(msnv, value) {
-        setSelectedWorkers(prev => prev.map(w => w.msnv === msnv ? { ...w, compliance_code: value } : w));
-    }
-
-    return (
-        <div className="space-y-4">
-            <h2 className="text-xl font-bold">Nhập KPI Nhanh - {section}</h2>
+  return (
+    <div className="space-y-4">
+      {step === 1 && (
+        <>
+          <div className="flex justify-end">
+            <button 
+              className="btn btn-primary" 
+              onClick={proceedToTemplate} 
+              disabled={!selectedWorkers.length || prodRules.length === 0} 
+            >
+              Tiếp tục ({selectedWorkers.length}) ›
+            </button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ minHeight: '400px' }}>
+            <div className="border rounded p-3 bg-white space-y-2 flex flex-col">
+              {/* ----- THAY THẾ KHỐI HEADER ĐÃ CHỌN ĐỂ THÊM NÚT XOÁ TẤT CẢ ----- */}
+              <div className="flex justify-between items-center">
+                <h3 className="font-semibold text-lg">Đã chọn ({selectedWorkers.length})</h3>
+                {selectedWorkers.length > 0 && (
+                  <button 
+                    className="btn bg-red-100 text-red-700 hover:bg-red-200" 
+                    style={{padding: '4px 8px'}} 
+                    onClick={removeAllWorkers}
+                  >
+                    Xoá tất cả
+                  </button>
+                )}
+              </div>
+              {/* ----------------------------------------------------------------- */}
+              <div className="overflow-auto flex-1">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50"><tr><th className="p-2 text-left">MSNV</th><th className="p-2 text-left">Họ & tên</th><th className="p-2 text-center">Xoá</th></tr></thead>
+                  <tbody>
+                    {selectedWorkers.map((w) => (
+                      <tr key={w.msnv} className="border-t">
+                        <td className="p-2">{w.msnv}</td><td className="p-2">{w.full_name}</td>
+                        <td className="p-2 text-center"><button className="btn bg-red-100 text-red-700 hover:bg-red-200" style={{padding: '4px 8px'}} onClick={() => removeWorker(w.msnv)}>Xoá</button></td>
+                      </tr>
+                    ))}
+                    {!selectedWorkers.length && (<tr><td colSpan={3} className="p-4 text-center text-gray-500">Chưa chọn nhân viên nào.</td></tr>)}
+                  </tbody>
+                </table>
+              </div>
+            </div>
             
-            {step === 1 && (
-                <>
-                    <div className="flex justify-end">
-                        <button className="btn btn-primary" onClick={proceedToTemplate} disabled={selectedWorkers.length === 0}>
-                            Tiếp tục ({selectedWorkers.length} nhân viên)
-                        </button>
-                    </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4" style={{ minHeight: '400px' }}>
-                        {/* KHỐI ĐÃ CHỌN */}
-                        <div className="border rounded p-3 bg-white space-y-2 flex flex-col">
-                            <div className="flex justify-between items-center">
-                                <h3 className="font-semibold text-lg">Đã chọn ({selectedWorkers.length})</h3>
-                                {selectedWorkers.length > 0 && (
-                                    <button 
-                                        className="btn bg-red-100 text-red-700 hover:bg-red-200" 
-                                        style={{padding: '4px 8px'}} 
-                                        onClick={removeAllWorkers}
-                                    >
-                                        Xoá tất cả
-                                    </button>
-                                )}
-                            </div>
-                            <div className="overflow-auto flex-1">
-                                <table className="min-w-full text-sm">
-                                    <thead className="bg-gray-50">
-                                        <tr><th className="p-2 text-left">MSNV</th><th className="p-2 text-left">Họ & tên</th><th className="p-2 text-center">Line</th><th className="p-2 text-center">Xoá</th></tr>
-                                    </thead>
-                                    <tbody>
-                                        {selectedWorkers.map((w) => (
-                                            <tr key={w.msnv} className="border-t hover:bg-gray-50">
-                                                <td className="p-2">{w.msnv}</td>
-                                                <td className="p-2">{w.full_name}</td>
-                                                <td className="p-2 text-center">{w.line || "N/A"}</td>
-                                                <td className="p-2 text-center">
-                                                    <button className="text-red-500 hover:text-red-700" onClick={() => removeWorker(w.msnv)}>Xoá</button>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                        {!selectedWorkers.length && (<tr><td colSpan={4} className="p-4 text-center text-gray-500">Chưa chọn nhân viên nào.</td></tr>)}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                        
-                        {/* KHỐI KẾT QUẢ TÌM KIẾM */}
-                        <div className="md:col-span-1 border rounded p-3 bg-white space-y-2 flex flex-col">
-                            <h3 className="font-semibold text-lg">Tìm kiếm nhân viên</h3>
-                            
-                            {/* Form tìm kiếm theo Người duyệt (Cách 1) */}
-                            <div className="space-y-2 p-2 border rounded">
-                                <h4 className="font-medium">Cách 1: Tìm theo MSNV/Tên người duyệt</h4>
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        className="input flex-1"
-                                        placeholder="MSNV hoặc Tên người duyệt"
-                                        value={approverIdInput}
-                                        onChange={(e) => setApproverIdInput(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && searchByApprover()}
-                                    />
-                                    <button className="btn btn-primary" onClick={searchByApprover} disabled={loadingSearch}>
-                                        {loadingSearch ? "Đang tìm..." : "Tìm"}
-                                    </button>
-                                </div>
-                                <label className="flex items-center gap-2 text-sm">
-                                    <input type="checkbox" checked={searchAllSections} onChange={(e) => setSearchAllSections(e.target.checked)} />
-                                    Tìm kiếm toàn bộ Section
-                                </label>
-                            </div>
-
-                            {/* Form tìm kiếm toàn cục (Cách 2) */}
-                            <div className="space-y-2 p-2 border rounded">
-                                <h4 className="font-medium">Cách 2: Tìm theo MSNV/Tên nhân viên (Toàn cục)</h4>
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        className="input flex-1"
-                                        placeholder="MSNV hoặc Tên nhân viên"
-                                        value={searchInput}
-                                        onChange={(e) => setSearchInput(e.target.value)}
-                                        onKeyDown={(e) => e.key === 'Enter' && searchGlobal()}
-                                    />
-                                    <button className="btn btn-primary" onClick={searchGlobal} disabled={loadingSearch}>
-                                        {loadingSearch ? "Đang tìm..." : "Tìm"}
-                                    </button>
-                                </div>
-                            </div>
-
-                            {/* Filter theo Line */}
-                            {searchResults.length > 0 && (
-                                <div className="flex gap-2 items-center text-sm">
-                                    <label>Lọc theo Line:</label>
-                                    <select className="input" value={lineFilter} onChange={(e) => setLineFilter(e.target.value)}>
-                                        <option value="">Tất cả ({searchResults.length})</option>
-                                        {[...new Set(searchResults.map(w => w.line))].sort().filter(Boolean).map(line => (
-                                            <option key={line} value={line}>{line} ({searchResults.filter(w => w.line === line).length})</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
-
-                            <div className="flex justify-end">
-                                <button 
-                                    className="btn" 
-                                    onClick={addAllResults} 
-                                    disabled={!filteredSearchResults.length}
-                                >
-                                    + Thêm tất cả ({filteredSearchResults.length})
-                                </button>
-                            </div>
-
-                            <div className="overflow-auto flex-1">
-                                <table className="min-w-full text-sm">
-                                    <thead className="bg-gray-50">
-                                        <tr>
-                                            <th className="p-2 text-left">MSNV</th>
-                                            <th className="p-2 text-left">Họ & tên</th>
-                                            <th className="p-2 text-center">Line</th> 
-                                            <th className="p-2 text-center">Thêm</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {filteredSearchResults.map((w) => { 
-                                            const isSelected = selectedIds.has(w.msnv);
-                                            return (
-                                                <tr key={w.msnv} className={cx("border-t", isSelected ? "bg-gray-100 opacity-50" : "hover:bg-gray-50")}>
-                                                    <td className="p-2">{w.msnv}</td>
-                                                    <td className="p-2">{w.full_name}</td>
-                                                    <td className="p-2 text-center">{w.line || "N/A"}</td> 
-                                                    <td className="p-2 text-center">
-                                                        <button 
-                                                            className="btn" 
-                                                            style={{padding: '4px 8px'}} 
-                                                            onClick={() => addWorker(w)} 
-                                                            disabled={isSelected}
-                                                        >
-                                                            {isSelected ? "Đã chọn" : "+"}
-                                                        </button>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                        {!filteredSearchResults.length && (<tr><td colSpan={4} className="p-4 text-center text-gray-500">Không có kết quả.</td></tr>)} 
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </>
-            )}
-
-            {step === 2 && (
-                <div className="space-y-4">
-                    <h3 className="text-lg font-semibold">Bước 2: Nhập dữ liệu KPI mẫu</h3>
-                    <div className="space-y-3 p-4 border rounded bg-gray-50">
-                        <h4 className="font-medium">Áp dụng cho {selectedWorkers.length} nhân viên</h4>
-                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                            <div><label className="block text-sm font-medium">Line</label>
-                                <select className="input w-full" value={tplLine} onChange={(e) => setTplLine(e.target.value)}>
-                                    {currentMachines[section]?.map(m => (<option key={m} value={m}>{m}</option>))}
-                                </select>
-                            </div>
-                            <div><label className="block text-sm font-medium">Chỉ tiêu (Ví dụ: Lượt dán/giờ)</label>
-                                <select className="input w-full" value={tplCategory} onChange={(e) => setTplCategory(e.target.value)}>
-                                    <option value="Lượt dán/giờ">Lượt dán/giờ</option>
-                                    <option value="Sản lượng/giờ">Sản lượng/giờ</option>
-                                </select>
-                            </div>
-                            <div><label className="block text-sm font-medium">Giá trị ({tplCategory.split('/')[0]})</label>
-                                <input type="number" className="input w-full" value={tplTargetValue} onChange={(e) => setTplTargetValue(Number(e.target.value))} />
-                            </div>
-                            <div><label className="block text-sm font-medium">Defects (pcs)</label>
-                                <input type="number" className="input w-full" value={tplDefects} onChange={(e) => setTplDefects(Number(e.target.value))} />
-                            </div>
-                        </div>
-                    </div>
-                    <div className="flex justify-between">
-                        <button className="btn btn-secondary" onClick={() => setStep(1)}>Quay lại</button>
-                        <button className="btn btn-primary" onClick={buildReviewRows}>Xem trước và Xác nhận</button>
-                    </div>
+            {/* KHỐI KẾT QUẢ TÌM KIẾM */}
+            <div className="md:col-span-1 border rounded p-3 bg-white space-y-2 flex flex-col">
+              <h3 className="font-semibold text-lg">Kết quả tìm kiếm ({searchResults.length})</h3>
+              <div className="space-y-2 pb-2 border-b">
+                <label className="text-sm font-medium">Tìm theo Người duyệt (ID/Tên):</label>
+                <form onSubmit={(e) => { e.preventDefault(); searchByApprover(); }} className="flex gap-2">
+                  <input
+                    className="input flex-1"
+                    placeholder="Nhập ID/Tên người duyệt"
+                    value={approverIdInput}
+                    onChange={(e) => setApproverIdInput(e.target.value)}
+                    disabled={loadingSearch}
+                  />
+                  <button type="submit" className="btn btn-primary" disabled={loadingSearch}>
+                    {loadingSearch ? "..." : "Tìm"}
+                  </button>
+                </form>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="checkbox" 
+                    id="searchAllSections" 
+                    checked={searchAllSections} 
+                    onChange={e => setSearchAllSections(e.target.checked)} 
+                  />
+                  <label htmlFor="searchAllSections" className="text-sm">Tìm kiếm User ở tất cả các Section</label>
                 </div>
-            )}
+              </div>
+              <div className="space-y-2 pb-2 border-b">
+                <label className="text-sm font-medium">Tìm toàn cục (ID/Tên Nhân viên):</label>
+                <form onSubmit={(e) => { e.preventDefault(); searchGlobal(); }} className="flex gap-2">
+                  <input
+                    className="input flex-1"
+                    placeholder="Nhập ID/Tên Nhân viên"
+                    value={searchInput}
+                    onChange={(e) => setSearchInput(e.target.value)}
+                    disabled={loadingSearch}
+                  />
+                  <button type="submit" className="btn" disabled={loadingSearch}>
+                    {loadingSearch ? "..." : "Tìm"}
+                  </button>
+                </form>
+              </div>
+              
+              {/* ===== THÊM DROPDOWN LỌC THEO VỊ TRÍ LÀM VIỆC (LINE) MỚI ===== */}
+              {searchResults.length > 0 && (
+                  <div className="pb-2 border-b">
+                      <label className="text-sm font-medium">Lọc theo Vị trí làm việc (Line):</label>
+                      <select 
+                          className="input w-full mt-1" 
+                          value={lineFilter} 
+                          onChange={(e) => setLineFilter(e.target.value)}
+                      >
+                          <option value="">-- Tất cả Lines ({searchResults.length}) --</option>
+                          {availableLines.map(line => (
+                              <option key={line} value={line}>{line || "(Không có Line)"}</option>
+                          ))}
+                      </select>
+                      <p className="text-xs text-gray-500 mt-1">
+                          Hiển thị: {filteredSearchResults.length} nhân viên
+                      </p>
+                  </div>
+              )}
+              {/* ========================================================= */}
 
-            {step === 3 && (
-                <div className="space-y-4">
-                    <h3 className="text-lg font-semibold">Bước 3: Xác nhận & Lưu KPI</h3>
-                    <p className="text-sm text-red-500">LƯU Ý: Vui lòng kiểm tra kỹ trước khi lưu! Điểm sẽ được tính theo công thức của Section **{section}**.</p>
-                    
-                    <div className="overflow-auto max-h-[60vh] border rounded">
-                        <table className="min-w-full text-sm">
-                            <thead className="sticky top-0 bg-gray-200">
-                                <tr>
-                                    <th className="p-2 text-left">MSNV</th>
-                                    <th className="p-2 text-left">Họ & tên</th>
-                                    <th className="p-2 text-center">Line</th>
-                                    <th className="p-2 text-center">{tplCategory}</th>
-                                    <th className="p-2 text-center">Defects</th>
-                                    <th className="p-2 text-center">Q-Score</th>
-                                    <th className="p-2 text-center">P-Score</th>
-                                    <th className="p-2 text-center">KPI</th>
-                                    <th className="p-2 text-left">Code Vi phạm</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {pageRows.map((r) => (
-                                    <tr key={r.msnv} className="border-t">
-                                        <td className="p-2">{r.msnv}</td>
-                                        <td className="p-2">{r.full_name}</td>
-                                        <td className="p-2 text-center">{r.line}</td>
-                                        <td className="p-2 text-center">{r.target_value}</td>
-                                        <td className="p-2 text-center">{r.defects}</td>
-                                        <td className="p-2 text-center">{r.q_score.toFixed(1)}</td>
-                                        <td className="p-2 text-center">{r.p_score.toFixed(1)}</td>
-                                        <td className="p-2 text-center font-semibold">{r.day_score.toFixed(1)}</td>
-                                        <td className="p-2">
-                                            <select className="input text-center" value={r.compliance_code} onChange={(e) => updateCompliance(r.msnv, e.target.value)}>
-                                                {COMPLIANCE_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
-                                            </select>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                    
-                    {totalPages > 1 && (
-                        <div className="flex items-center justify-center gap-3">
-                            <button className="btn" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}>
-                                ‹ Trước
-                            </button>
-                            <span>
-                                Trang {page}/{totalPages}
-                            </span>
-                            <button className="btn" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
-                                Sau ›
-                            </button>
-                        </div>
-                    )}
+              <div className="flex justify-end">
+                  <button 
+                      className="btn" 
+                      onClick={addAllResults} 
+                      disabled={!filteredSearchResults.length}
+                  >
+                      + Thêm tất cả ({filteredSearchResults.length})
+                  </button>
+              </div>
 
-                    <div className="flex justify-between mt-4">
-                        <button className="btn btn-secondary" onClick={() => setStep(2)}>Quay lại</button>
-                        <button className="btn btn-success" onClick={saveEntry} disabled={saving}>
-                            {saving ? "Đang lưu..." : `Lưu ${reviewRows.length} Bản Ghi`}
-                        </button>
-                    </div>
-                </div>
-            )}
+              <div className="overflow-auto flex-1">
+                <table className="min-w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="p-2 text-left">MSNV</th>
+                      <th className="p-2 text-left">Họ & tên</th>
+                      <th className="p-2 text-center">Line</th> {/* THÊM CỘT LINE VÀO BẢNG KẾT QUẢ TÌM KIẾM */}
+                      <th className="p-2 text-center">Thêm</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredSearchResults.map((w) => { // Dùng filteredSearchResults
+                      const isSelected = selectedIds.has(w.msnv);
+                      return (
+                        <tr key={w.msnv} className={cx("border-t", isSelected ? "bg-gray-100 opacity-50" : "hover:bg-gray-50")}>
+                          <td className="p-2">{w.msnv}</td>
+                          <td className="p-2">{w.full_name}</td>
+                          <td className="p-2 text-center">{w.line || "N/A"}</td> {/* HIỂN THỊ LINE */}
+                          <td className="p-2 text-center">
+                            <button 
+                              className="btn" 
+                              style={{padding: '4px 8px'}} 
+                              onClick={() => addWorker(w)} 
+                              disabled={isSelected}
+                            >
+                              {isSelected ? "Đã chọn" : "+"}
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {!filteredSearchResults.length && (<tr><td colSpan={4} className="p-4 text-center text-gray-500">Không có kết quả.</td></tr>)} {/* Cập nhật colSpan = 4 */}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {step === 2 && (
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+            <div><label>Ngày</label><input type="date" className="input" value={tplDate} onChange={e => setTplDate(e.target.value)} max={today} /></div>
+            <div><label>Ca</label><select className="input" value={tplShift} onChange={(e) => setTplShift(e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></div>
+            <div><label>Máy làm việc</label><select className="input" value={tplLine} onChange={(e) => setTplLine(e.target.value)}>{currentMachines.map(m => (<option key={m} value={m}>{m}</option>))}</select></div>
+            <div><label>Loại năng suất</label>
+                <select className="input" value={tplCategory} onChange={(e) => setTplCategory(e.target.value)} disabled={categoryOptions.length === 0}>
+                    <option value="">-- Chọn loại NS --</option>
+                    {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+            </div>
+            <div><label>Giờ làm việc</label><input type="number" step="0.1" className="input" value={tplWorkHours} onChange={(e) => setTplWorkHours(e.target.value)} /></div>
+            <div><label>Giờ dừng máy</label><input type="number" step="0.1" className="input" value={tplStopHours} onChange={(e) => setTplStopHours(e.target.value)} /></div>
+            <div><label>Sản lượng</label><input type="number" step="1" className="input" value={tplOutput} onChange={(e) => setTplOutput(e.target.value)} /></div>
+            <div><label>Lỗi/Phế</label><input type="number" step="1" className="input" value={tplDefects} onChange={(e) => setTplDefects(e.target.value)} /></div>
+            <div><label>Tuân thủ</label><select className="input text-center" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>{COMPLIANCE_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>
+          </div>
+          
+          <div className="p-3 bg-yellow-50 rounded">
+            <h4 className="font-semibold">Điểm KPI Tạm tính (Cho template):</h4>
+            <p>NS/Giờ: {tplProdRate.toFixed(2)} | Giờ chính xác: {tplExactHours.toFixed(2)}</p>
+            <p>Sản lượng: {tplP} | Chất lượng: {tplQ} | **Tổng: {tplKPI}** (Tối đa 15)</p>
+          </div>
+
+          <div className="flex justify-end gap-3">
+            <button className="btn" onClick={() => setStep(1)}>‹ Quay lại</button>
+            <button className="btn btn-primary" onClick={buildReviewRows} disabled={!tplDate || !tplShift || !tplLine || !tplCategory}>
+              Áp dụng Template ({selectedWorkers.length}) ›
+            </button>
+          </div>
         </div>
-    );
+      )}
+
+      {step === 3 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <button className="btn btn-primary" onClick={saveBatch} disabled={saving || !selReview.size}>
+              {saving ? "Đang lưu..." : `Lưu đã chọn (${selReview.size})`}
+            </button>
+            <button className="btn" onClick={resetToStep1} disabled={saving}> ‹ Quay lại (Nhập mới) </button>
+            <div className="ml-auto flex items-center gap-3">
+              <button className="btn" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>‹ Trước</button>
+              <span>Trang {page}/{totalPages}</span>
+              <button className="btn" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>Sau ›</button>
+            </div>
+          </div>
+          <div className="overflow-auto border rounded">
+            {/* CẬP NHẬT: Tăng min-w để chứa cột Line/Ghi chú */}
+            <table className="min-w-[1450px] text-sm"> 
+              <thead className="bg-gray-50 text-center">
+                <tr>
+                  <th className="p-2"><input type="checkbox" onChange={toggleAllReviewOnPage} checked={pageRows.length > 0 && pageRows.every((_, idx) => selReview.has(globalIndex(idx)))} /></th>
+                  <th className="p-2">MSNV</th><th className="p-2">Họ tên</th>
+                  <th className="p-2">Ngày</th><th className="p-2">Ca</th>
+                  <th className="p-2">Máy làm việc</th>
+                  <th className="p-2">Loại NS</th>
+                  <th className="p-2">Giờ làm</th><th className="p-2">Giờ dừng</th>
+                  <th className="p-2">SL/Output</th><th className="p-2">Phế</th>
+                  <th className="p-2">NS/Giờ</th>
+                  <th className="p-2">Q</th><th className="p-2">P</th><th className="p-2">KPI</th>
+                  <th className="p-2">Tuân thủ</th> 
+                  <th className="p-2">Ghi chú</th> 
+                </tr>
+              </thead>
+              <tbody className="text-center">
+                {pageRows.map((r, idx) => {
+                  const gi = globalIndex(idx);
+                  const isSelected = selReview.has(gi);
+                  return (
+                    <tr key={r.msnv + r.work_date + r.shift} className={cx("border-t", isSelected ? "bg-blue-50" : "hover:bg-gray-50")}>
+                      <td className="p-2"><input type="checkbox" checked={isSelected} onChange={() => toggleOneReview(gi)} /></td>
+                      <td className="p-2">{r.msnv}</td>
+                      <td className="p-2 text-left">{r.hoten}</td>
+                      <td className="p-2"><input type="date" className="input text-center w-[120px]" value={r.work_date} onChange={e => updateRow(idx, "work_date", e.target.value)} max={today} /></td>
+                      <td className="p-2">
+                        <select className="input text-center w-[80px]" value={r.shift} onChange={e => updateRow(idx, "shift", e.target.value)}>
+                            <option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option>
+                            <option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option>
+                        </select>
+                      </td>
+                      <td className="p-2">
+                          <select className="input text-center w-[100px]" value={r.line} onChange={e => updateRow(idx, "line", e.target.value)}>
+                              {currentMachines.map(m => (<option key={m} value={m}>{m}</option>))}
+                          </select>
+                      </td>
+                      <td className="p-2">
+                          <select className="input text-center w-[120px]" value={r.category} onChange={e => updateRow(idx, "category", e.target.value)}>
+                            {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                          </select>
+                      </td>
+                      <td className="p-2"><input type="number" step="0.1" className="input text-center w-[60px]" value={r.work_hours} onChange={e => updateRow(idx, "work_hours", e.target.value)} /></td>
+                      <td className="p-2"><input type="number" step="0.1" className="input text-center w-[60px]" value={r.stop_hours} onChange={e => updateRow(idx, "stop_hours", e.target.value)} /></td>
+                      <td className="p-2"><input type="number" step="1" className="input text-center w-[60px]" value={r.output} onChange={e => updateRow(idx, "output", e.target.value)} /></td>
+                      <td className="p-2"><input type="number" step="1" className="input text-center w-[60px]" value={r.defects} onChange={e => updateRow(idx, "defects", e.target.value)} /></td>
+                      <td className="p-2 font-semibold">{r.prod_rate.toFixed(2)}</td>
+                      <td className="p-2 font-semibold text-green-700">{r.q_score}</td>
+                      <td className="p-2 font-semibold text-green-700">{r.p_score}</td>
+                      <td className="p-2 font-bold text-lg text-blue-700">{r.total_score}</td>
+                      <td className="p-2">
+                        <select className="input text-center w-[120px]" value={r.compliance} onChange={e => updateRow(idx, "compliance", e.target.value)}>
+                          {COMPLIANCE_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+                        </select>
+                      </td>
+                      <td className="p-2">
+                          <input type="text" className="input text-center w-[120px]" value={r.approver_note || ""} onChange={e => updateRow(idx, "approver_note", e.target.value)} placeholder="Ghi chú" />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
