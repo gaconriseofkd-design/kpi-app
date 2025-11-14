@@ -255,7 +255,7 @@ function ApproverModeLeanline({ section }) {
     if (!searchAllSections) {
       query = query.eq("section", section); 
     }
-    const { data, error } = await query.limit(100); 
+    const { data, error } = await query.limit(1000); 
     setLoadingSearch(false);
     if (error) return alert("Lỗi tải nhân viên: " + error.message);
     setSearchResults(data || []); 
@@ -745,7 +745,7 @@ function ApproverModeMolding({ section }) {
     if (!searchAllSections) {
       query = query.eq("section", section); // section ở đây sẽ là "MOLDING"
     }
-    const { data, error } = await query.limit(100); 
+    const { data, error } = await query.limit(1000); 
     setLoadingSearch(false);
     if (error) return alert("Lỗi tải nhân viên: " + error.message);
     setSearchResults(data || []);
