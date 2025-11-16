@@ -1,5 +1,5 @@
 // src/pages/AdminPage.jsx
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabaseClient";
 
@@ -7,7 +7,7 @@ import { supabase } from "../lib/supabaseClient";
 // VAI TRÒ HỢP LỆ (LOWERCASE)
 const ALLOWED_ROLES = ["worker", "approver", "admin"];
 // MẬT KHẨU XOÁ NGUY HIỂM
-const DANGER_PASSWORD = "Deplao.1305"; // <-- THÊM MẬT KHẨU
+const DANGER_PASSWORD = "Deplao.1305"; // <-- MẬT KHẨU XOÁ
 
 // HÀNG TRỐNG MẶC ĐỊNH - ĐÃ THÊM 'line'
 const emptyRow = { msnv: "", full_name: "", section: "", line: "", role: "worker", approver_msnv: "", approver_name: "" };
@@ -59,7 +59,14 @@ async function upsertInChunks(data, chunkSize = 100) {
 }
 
 function AdminMain() {
+  const MAX_HISTORY = 10; // Giới hạn 10 bước lịch sử
+  
   const [rows, setRows] = useState([]);
+  
+  // HISTORY STATES (Lịch sử Hoàn tác/Làm lại)
+  const [history, setHistory] = useState([[]]); 
+  const [historyIndex, setHistoryIndex] = useState(0);
+  
   const [loading, setLoading] = useState(false);
   const [qWorker, setQWorker] = useState("");
   const [qApprover, setQApprover] = useState("");
@@ -69,13 +76,66 @@ function AdminMain() {
   const pageSize = 15;
   const [page, setPage] = useState(1);
   
+  // === START HISTORY MANAGEMENT LOGIC ===
+  const pushRowsToHistory = useCallback((newRows) => {
+    // 1. Quản lý History Stack
+    setHistory(prevHistory => {
+        // Cắt bỏ phần lịch sử redo (nếu người dùng thay đổi state sau khi undo)
+        const historySlice = prevHistory.slice(0, historyIndex + 1);
+        
+        // Tránh push nếu state mới giống hệt state cuối cùng (kiểm tra tham chiếu)
+        if (historySlice.length > 0 && historySlice[historySlice.length - 1] === newRows) {
+            return prevHistory;
+        }
+
+        let updatedHistory = [...historySlice, newRows];
+
+        // Giới hạn MAX_HISTORY
+        if (updatedHistory.length > MAX_HISTORY) {
+            updatedHistory = updatedHistory.slice(1);
+        }
+        
+        // Cập nhật index
+        setHistoryIndex(updatedHistory.length - 1);
+        return updatedHistory;
+    });
+    
+    // 2. Cập nhật Rows (đồng bộ) và Page
+    setRows(newRows);
+    setPage(1);
+  }, [historyIndex, MAX_HISTORY]);
+
+  const undo = () => {
+    if (historyIndex > 0) {
+        const newIndex = historyIndex - 1;
+        setHistoryIndex(newIndex);
+        setRows(history[newIndex]);
+        setPage(1);
+    }
+  };
+
+  const redo = () => {
+    if (historyIndex < history.length - 1) {
+        const newIndex = historyIndex + 1;
+        setHistoryIndex(newIndex);
+        setRows(history[newIndex]);
+        setPage(1);
+    }
+  };
+  // === END HISTORY MANAGEMENT LOGIC ===
+
   const loadUsers = async () => {
     setLoading(true);
     try {
-      // Đảm bảo select tất cả các cột, bao gồm 'line'
       const { data, error } = await supabase.from("users").select("*").order("msnv", { ascending: true }); 
       if (error) throw error;
-      setRows(data || []);
+      const initialRows = data || [];
+      
+      // KHỞI TẠO LỊCH SỬ LẦN ĐẦU
+      setRows(initialRows);
+      setHistory([initialRows]);
+      setHistoryIndex(0);
+      
     } catch (err) {
       console.error(err);
       alert("Lỗi tải dữ liệu: " + (err.message || err));
@@ -88,67 +148,61 @@ function AdminMain() {
     loadUsers();
   }, []);
 
-  // ===== THÊM: RESET PAGE KHI CÓ THAY ĐỔI TÌM KIẾM =====
+  // RESET PAGE KHI CÓ THAY ĐỔI TÌM KIẾM
   useEffect(() => {
     setPage(1);
   }, [qWorker, qApprover]);
-  // =======================================================
+  
 
   const addNewRow = () => {
     if (rows.length >= 1000) return alert("Giới hạn 1000 dòng hiển thị. Vui lòng lưu bớt hoặc lọc.");
-    setRows(prev => [emptyRow, ...prev]);
+    const newRows = [emptyRow, ...rows];
+    pushRowsToHistory(newRows);
   };
   
   // SỬA LỖI: Củng cố logic tìm index và thêm kiểm tra null/undefined
   const findIndexInRows = (prevRows, originalObject) => {
     if (!originalObject) return -1;
-    // Tìm bằng MSNV nếu có, nếu không thì dùng object reference (cho dòng mới)
     return originalObject.msnv
       ? prevRows.findIndex(item => item.msnv === originalObject.msnv)
       : prevRows.findIndex(item => item === originalObject);
   }
   
   const removeRow = (i) => {
-    // Tìm index của row trong `rows` dựa trên `sortedRows` và `pageRows`
+    // Tìm index của row trong `rows` dựa trên `sortedRows`
     const globalIndexInSorted = (page - 1) * pageSize + i;
     const originalObject = sortedRows[globalIndexInSorted];
     
-    // FIX: Thêm kiểm tra
     if (!originalObject) return;
     
-    setRows(prev => {
-        const idxInRows = findIndexInRows(prev, originalObject);
-        if (idxInRows === -1) return prev;
-        
-        // Dùng slice để xóa (không nên dùng splice)
-        return [...prev.slice(0, idxInRows), ...prev.slice(idxInRows + 1)];
-    });
+    // TÌM VÀ XOÁ SYNCHRONOUSLY
+    const idxInRows = findIndexInRows(rows, originalObject);
+    if (idxInRows === -1) return;
+    
+    const newRows = [...rows.slice(0, idxInRows), ...rows.slice(idxInRows + 1)];
+    pushRowsToHistory(newRows);
   };
   
   const updateRow = (i, key, val) => {
     const globalIndexInSorted = (page - 1) * pageSize + i;
     const originalObject = sortedRows[globalIndexInSorted];
     
-    // FIX: Thêm kiểm tra
     if (!originalObject) return;
     
-    setRows(prev => {
-        const idxInRows = findIndexInRows(prev, originalObject);
-        if (idxInRows === -1) return prev;
-        
-        const arr = [...prev]; 
-        
-        // Logic chuẩn hóa riêng cho Section và Line
-        let normalizedVal = val;
-        if (key === "section") {
-            normalizedVal = normalizeSection(val);
-        } else if (key === "line") { // THÊM CHUẨN HÓA LINE
-            normalizedVal = (val || "").trim().toUpperCase();
-        }
-        
-        arr[idxInRows] = { ...arr[idxInRows], [key]: normalizedVal }; 
-        return arr;
-    });
+    // TÌM VÀ CẬP NHẬT SYNCHRONOUSLY
+    const idxInRows = findIndexInRows(rows, originalObject);
+    if (idxInRows === -1) return;
+    
+    const newRows = [...rows]; 
+    let normalizedVal = val;
+    if (key === "section") {
+        normalizedVal = normalizeSection(val);
+    } else if (key === "line") {
+        normalizedVal = (val || "").trim().toUpperCase();
+    }
+    
+    newRows[idxInRows] = { ...newRows[idxInRows], [key]: normalizedVal }; 
+    pushRowsToHistory(newRows);
   };
 
   const handleApproverMsnvChange = (e, i) => {
@@ -156,43 +210,57 @@ function AdminMain() {
     const globalIndexInSorted = (page - 1) * pageSize + i;
     const originalObject = sortedRows[globalIndexInSorted];
     
-    // FIX: Thêm kiểm tra
     if (!originalObject) return;
 
-    setRows(prev => {
-        const idxInRows = findIndexInRows(prev, originalObject);
-        if (idxInRows === -1) return prev;
-        
-        const arr = [...prev]; 
-        arr[idxInRows] = { ...arr[idxInRows], approver_msnv: v }; 
-        
-        // Tự động tìm tên người duyệt nếu MSNV có 5 số
-        if (v.length === 5 && !isNaN(Number(v))) {
-          setTimeout(async () => {
-            const { data } = await supabase.from("users").select("full_name").eq("msnv", v).single();
-            if (data && data.full_name) {
-              setRows(current => {
-                const arr2 = [...current];
-                // Phải tìm lại index vì state có thể đã thay đổi
-                const idxInRows2 = findIndexInRows(arr2, originalObject); 
-                if(idxInRows2 !== -1) { 
-                    arr2[idxInRows2] = { ...arr2[idxInRows2], approver_name: data.full_name };
-                }
-                return arr2;
-              });
-            }
-          }, 100);
-        } else if (v.length === 0) {
-           // Xóa tên người duyệt nếu MSNV bị xóa
-           const arr2 = [...arr];
-           if(arr2[idxInRows]) {
-               arr2[idxInRows] = { ...arr2[idxInRows], approver_name: "" };
-           }
-           return arr2;
-        }
+    const idxInRows = findIndexInRows(rows, originalObject);
+    if (idxInRows === -1) return;
+    
+    let newRows = [...rows]; 
+    newRows[idxInRows] = { ...newRows[idxInRows], approver_msnv: v }; 
 
-        return arr;
-    });
+    // Tự động tìm tên người duyệt (Async logic)
+    if (v.length === 5 && !isNaN(Number(v))) {
+      
+      // 1. Cập nhật MSNV (sync) và push history
+      pushRowsToHistory(newRows);
+      
+      // 2. Thực hiện tìm kiếm Tên (async)
+      setTimeout(async () => {
+        const { data } = await supabase.from("users").select("full_name").eq("msnv", v).single();
+        if (data && data.full_name) {
+          // Cập nhật Tên (sync) và push history mới
+          setRows(current => {
+            const arr2 = [...current];
+            const idxInRows2 = findIndexInRows(arr2, originalObject); 
+            if(idxInRows2 !== -1) { 
+                arr2[idxInRows2] = { ...arr2[idxInRows2], approver_name: data.full_name };
+            }
+            
+            // Push history for the NAME update (cần xử lý riêng vì nó xảy ra bất đồng bộ)
+            setHistory(prevHistory => {
+                const historySlice = prevHistory.slice(0, historyIndex + 1); 
+                let updatedHistory = [...historySlice, arr2];
+                if (updatedHistory.length > MAX_HISTORY) {
+                    updatedHistory = updatedHistory.slice(1);
+                }
+                setHistoryIndex(updatedHistory.length - 1);
+                return updatedHistory;
+            });
+            setPage(1);
+            return arr2;
+          });
+        }
+      }, 100);
+      return; 
+
+    } else if (v.length === 0) {
+       // Xóa tên người duyệt nếu MSNV bị xóa (sync)
+       newRows[idxInRows] = { ...newRows[idxInRows], approver_name: "" };
+       pushRowsToHistory(newRows);
+    } else {
+       // Trường hợp nhập MSNV < 5 số hoặc không phải số (sync)
+       pushRowsToHistory(newRows);
+    }
   };
 
   const filteredRows = useMemo(() => {
@@ -235,7 +303,7 @@ function AdminMain() {
     [sortedRows, page]
   );
   
-  const isNewRow = (r) => !r.msnv_original; // Giả định row mới không có trường này
+  const isNewRow = (r) => !r.msnv_original; 
 
   const requestSort = (key) => {
     let direction = "ascending";
@@ -250,12 +318,7 @@ function AdminMain() {
     return sortConfig.direction === "ascending" ? " ▲" : " ▼";
   };
   
-  // Lưu ý: Chỉ lấy các trường có thể chỉnh sửa/lưu
-  const saving = useMemo(() => {
-      // Giả định logic kiểm tra saving ở đây (ví dụ: dùng Set của các index đang lưu)
-      // Hiện tại không có state `saving` chi tiết cho từng dòng, nên ta sẽ giữ nguyên logic cũ.
-      return new Set(); 
-  }, []);
+  const saving = useMemo(() => { return new Set(); }, []);
 
   const saveRow = async (i) => {
     const globalIndexInSorted = (page - 1) * pageSize + i;
@@ -269,16 +332,13 @@ function AdminMain() {
       return alert("Vai trò không hợp lệ.");
     }
     
-    // Bắt đầu lưu
-    // setSaving(prev => new Set(prev).add(globalIndexInSorted)); // Nếu có state này
     setLoading(true);
     
-    // Payload chỉ chứa các trường cần thiết
     const payload = {
         msnv: r.msnv,
         full_name: r.full_name,
         section: r.section,
-        line: (r.line || "").trim().toUpperCase(), // Đảm bảo line được chuẩn hóa trước khi lưu
+        line: (r.line || "").trim().toUpperCase(), 
         role: (r.role || "").toLowerCase(),
         approver_msnv: r.approver_msnv || null,
         approver_name: r.approver_name || null,
@@ -288,17 +348,12 @@ function AdminMain() {
         const { error } = await supabase.from("users").upsert(payload, { onConflict: "msnv" });
         if (error) throw error;
         alert(`Đã lưu User ${r.msnv}.`);
-        loadUsers(); // Tải lại dữ liệu sau khi lưu
+        loadUsers(); // Tải lại dữ liệu sau khi lưu (reset history)
     } catch (err) {
         console.error(err);
         alert("Lỗi lưu dữ liệu: " + (err.message || err));
     } finally {
         setLoading(false);
-        // setSaving(prev => {
-        //     const next = new Set(prev);
-        //     next.delete(globalIndexInSorted);
-        //     return next;
-        // });
     }
   };
   
@@ -306,16 +361,10 @@ function AdminMain() {
     const globalIndexInSorted = (page - 1) * pageSize + i;
     const r = sortedRows[globalIndexInSorted];
     if (!r || !r.msnv) {
-        // Nếu là dòng mới chưa có MSNV, ta chỉ cần xóa nó khỏi state
-        if (!r) return; // Không tìm thấy dòng
+        if (!r) return; 
         
-        // Dùng logic removeRow để xóa dòng mới trong state
-        const originalObject = sortedRows[globalIndexInSorted];
-        setRows(prev => {
-            const idxInRows = findIndexInRows(prev, originalObject);
-            if (idxInRows === -1) return prev;
-            return [...prev.slice(0, idxInRows), ...prev.slice(idxInRows + 1)];
-        });
+        // Dùng logic removeRow để xóa dòng mới trong state (local delete)
+        removeRow(i); 
         return;
     }
 
@@ -326,7 +375,7 @@ function AdminMain() {
         const { error } = await supabase.from("users").delete().eq("msnv", r.msnv);
         if (error) throw error;
         alert(`Đã xoá User ${r.msnv}.`);
-        loadUsers(); // Tải lại dữ liệu sau khi xóa
+        loadUsers(); // Tải lại dữ liệu sau khi xóa (reset history)
     } catch (err) {
         console.error(err);
         alert("Lỗi xoá dữ liệu: " + (err.message || err));
@@ -348,14 +397,13 @@ function AdminMain() {
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
         
-        // Đọc header và dữ liệu
         const data = XLSX.utils.sheet_to_json(ws);
         
         if (!data || data.length === 0) return alert("File Excel không có dữ liệu.");
 
         const mappedData = data.map(row => {
           let obj = {};
-          let isValidRow = false; // Chỉ cần 1 trong các trường chính có dữ liệu
+          let isValidRow = false; 
           Object.keys(row).forEach(key => {
             const field = mapHeaderToField(key);
             if (field) {
@@ -364,10 +412,10 @@ function AdminMain() {
             }
           });
           
-          if (isValidRow) { // Chuẩn hóa Section và Role sau khi nhập
+          if (isValidRow) { 
             obj.section = normalizeSection(obj.section);
             obj.role = (ALLOWED_ROLES.includes((obj.role || "").toLowerCase()) ? obj.role.toLowerCase() : "worker");
-            obj.line = (obj.line || "").trim().toUpperCase(); // Chuẩn hóa line
+            obj.line = (obj.line || "").trim().toUpperCase(); 
             return obj;
           }
           return null;
@@ -382,23 +430,21 @@ function AdminMain() {
                 .catch(err => alert("Lỗi tải lên: " + err.message))
                 .finally(() => {
                     setLoading(false);
-                    loadUsers(); // Tải lại sau khi upsert
+                    loadUsers(); // Tải lại sau khi upsert (reset history)
                 });
         }
       } catch (e) {
         alert("Lỗi xử lý file Excel: " + e.message);
       } finally {
-        e.target.value = null; // Reset input file
+        e.target.value = null; 
       }
     };
     reader.readAsBinaryString(file);
   };
   
-  // ----- THÊM HÀM TẢI XUỐNG USER -----
   const downloadAllUsers = async () => {
     setLoading(true);
     try {
-        // Tải toàn bộ user từ DB
         const { data, error } = await supabase.from("users").select("*");
         if (error) throw error;
 
@@ -409,12 +455,10 @@ function AdminMain() {
             return;
         }
 
-        // Chuẩn bị data cho Excel
         const ws = XLSX.utils.json_to_sheet(users);
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "DanhSachUsers");
 
-        // Export file
         XLSX.writeFile(wb, "DanhSachNhanVien_KPI_Admin.xlsx");
         alert(`Đã tải về ${users.length} User.`);
 
@@ -425,9 +469,7 @@ function AdminMain() {
         setLoading(false);
     }
   };
-  // ------------------------------------
   
-  // ----- CẬP NHẬT HÀM XOÁ TẤT CẢ VỚI MẬT KHẨU -----
   const deleteAllUsers = async () => {
     const password = prompt("Nhập mật khẩu để xác nhận xóa TOÀN BỘ User:");
     if (password !== DANGER_PASSWORD) {
@@ -444,6 +486,7 @@ function AdminMain() {
         if (error) throw error;
         setRows([]);
         alert("Đã xóa tất cả dữ liệu user.");
+        loadUsers(); // Tải lại sau khi xóa (reset history)
     } catch (err) {
         console.error(err);
         alert("Lỗi xóa dữ liệu: " + (err.message || err));
@@ -451,14 +494,13 @@ function AdminMain() {
         setLoading(false);
     }
   };
-  // ------------------------------------------------
 
   return (
     <div className="p-4 space-y-4">
       <h2 className="text-xl font-semibold">Quản lý User</h2>
       
       <div className="flex flex-wrap items-center gap-3">
-        <button className="btn btn-primary" onClick={addNewRow}>+ Thêm User mới</button>
+        <button className="btn btn-primary" onClick={addNewRow} disabled={loading}>+ Thêm User mới</button>
         
         <input 
             type="file" 
@@ -475,7 +517,6 @@ function AdminMain() {
             Tải lên từ Excel (Upsert)
         </button>
         
-        {/* ----- THÊM NÚT TẢI XUỐNG DANH SÁCH USER ----- */}
         <button 
             className="btn bg-indigo-500 text-white hover:bg-indigo-600" 
             onClick={downloadAllUsers} 
@@ -483,7 +524,6 @@ function AdminMain() {
         >
             Tải danh sách User ({rows.length})
         </button>
-        {/* ------------------------------------------------- */}
         
         <button className="btn bg-red-500 text-white hover:bg-red-600 ml-auto" onClick={deleteAllUsers} disabled={loading}>
             Xóa TOÀN BỘ User (DANGER)
@@ -491,8 +531,19 @@ function AdminMain() {
         
         {loading && <span className="text-gray-500">Đang tải/xử lý...</span>}
       </div>
-
+      
       <div className="flex flex-wrap items-center gap-4 p-3 bg-gray-50 rounded">
+        {/* ===== THÊM NÚT UNDO/REDO ===== */}
+        <div className="flex items-center gap-2">
+            <button className="btn" onClick={undo} disabled={historyIndex <= 0}>
+                ↩ Hoàn tác
+            </button>
+            <button className="btn" onClick={redo} disabled={historyIndex >= history.length - 1}>
+                Làm lại ↪
+            </button>
+        </div>
+        {/* ================================= */}
+        
         <div className="flex items-center gap-2">
             <label className="font-medium">Lọc theo MSNV/Tên:</label>
             <input 
@@ -528,9 +579,7 @@ function AdminMain() {
               <th className="p-2 cursor-pointer text-left" onClick={() => requestSort("full_name")}>Họ & tên {getClassNamesFor("full_name")}</th>
               <th className="p-2 cursor-pointer text-left" onClick={() => requestSort("section")}>Section {getClassNamesFor("section")}</th>
               
-              {/* ===== CỘT HEADER VỊ TRÍ LÀM VIỆC (LINE) ===== */}
               <th className="p-2 cursor-pointer text-left" onClick={() => requestSort("line")}>Vị trí LV (Line) {getClassNamesFor("line")}</th> 
-              {/* ================================= */}
               
               <th className="p-2 cursor-pointer text-left" onClick={() => requestSort("role")}>Role {getClassNamesFor("role")}</th>
               <th className="p-2 cursor-pointer text-left" onClick={() => requestSort("approver_msnv")}>Approver MSNV {getClassNamesFor("approver_msnv")}</th>
@@ -573,22 +622,20 @@ function AdminMain() {
                     />
                   </td>
                   
-                  {/* ===== CỘT INPUT VỊ TRÍ LÀM VIỆC (LINE) MỚI ===== */}
                   <td className="p-2">
                     <input 
                       value={r.line || ""} 
                       onChange={e => updateRow(i, "line", e.target.value)} 
-                      onBlur={e => updateRow(i, "line", (e.target.value || "").trim().toUpperCase())} // Chuẩn hóa line sang chữ hoa
+                      onBlur={e => updateRow(i, "line", (e.target.value || "").trim().toUpperCase())} 
                       placeholder="Line/Máy" 
                       className="input" 
                     />
                   </td>
-                  {/* =================================================== */}
                   
                   <td className="p-2">
                     <select value={r.role} onChange={e => {
                         const v = e.target.value;
-                        updateRow(i, "role", v); // Dùng lại updateRow
+                        updateRow(i, "role", v); 
                     }} className="input">
                         {ALLOWED_ROLES.map(x => <option key={x} value={x}>{x}</option>)}
                     </select>
@@ -604,7 +651,7 @@ function AdminMain() {
                   <td className="p-2">
                     <input 
                         value={r.approver_name || ""} 
-                        onChange={e => updateRow(i, "approver_name", e.target.value)} // Dùng lại updateRow
+                        onChange={e => updateRow(i, "approver_name", e.target.value)} 
                         placeholder="Approver Tên" 
                         className="input" 
                     />
@@ -620,7 +667,7 @@ function AdminMain() {
                     <button 
                       className="btn bg-red-500 text-white hover:bg-red-600" 
                       onClick={() => deleteRow(i)} 
-                      disabled={loading} // Bỏ điều kiện isNewRow(r) để xóa dòng mới chưa lưu được
+                      disabled={loading} 
                     >
                       Xoá
                     </button>
