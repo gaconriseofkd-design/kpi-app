@@ -6,6 +6,8 @@ import { supabase } from "../lib/supabaseClient";
 
 // VAI TRÒ HỢP LỆ (LOWERCASE)
 const ALLOWED_ROLES = ["worker", "approver", "admin"];
+// MẬT KHẨU XOÁ NGUY HIỂM
+const DANGER_PASSWORD = "Deplao.1305"; // <-- THÊM MẬT KHẨU
 
 // HÀNG TRỐNG MẶC ĐỊNH - ĐÃ THÊM 'line'
 const emptyRow = { msnv: "", full_name: "", section: "", line: "", role: "worker", approver_msnv: "", approver_name: "" };
@@ -392,7 +394,47 @@ function AdminMain() {
     reader.readAsBinaryString(file);
   };
   
+  // ----- THÊM HÀM TẢI XUỐNG USER -----
+  const downloadAllUsers = async () => {
+    setLoading(true);
+    try {
+        // Tải toàn bộ user từ DB
+        const { data, error } = await supabase.from("users").select("*");
+        if (error) throw error;
+
+        const users = data || [];
+
+        if (users.length === 0) {
+            alert("Không có dữ liệu User để tải về.");
+            return;
+        }
+
+        // Chuẩn bị data cho Excel
+        const ws = XLSX.utils.json_to_sheet(users);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "DanhSachUsers");
+
+        // Export file
+        XLSX.writeFile(wb, "DanhSachNhanVien_KPI_Admin.xlsx");
+        alert(`Đã tải về ${users.length} User.`);
+
+    } catch (err) {
+        console.error(err);
+        alert("Lỗi khi tải dữ liệu: " + (err.message || err));
+    } finally {
+        setLoading(false);
+    }
+  };
+  // ------------------------------------
+  
+  // ----- CẬP NHẬT HÀM XOÁ TẤT CẢ VỚI MẬT KHẨU -----
   const deleteAllUsers = async () => {
+    const password = prompt("Nhập mật khẩu để xác nhận xóa TOÀN BỘ User:");
+    if (password !== DANGER_PASSWORD) {
+        alert("Mật khẩu không đúng. Thao tác hủy.");
+        return;
+    }
+    
     if (!window.confirm("CẢNH BÁO: Thao tác này sẽ xoá TOÀN BỘ User khỏi hệ thống (trừ MSNV = 0). Bạn có CHẮC CHẮN không?")) return;
     if (!window.confirm("Xác nhận lần 2: TẤT CẢ dữ liệu User sẽ bị xoá vĩnh viễn.")) return;
 
@@ -409,6 +451,7 @@ function AdminMain() {
         setLoading(false);
     }
   };
+  // ------------------------------------------------
 
   return (
     <div className="p-4 space-y-4">
@@ -427,9 +470,20 @@ function AdminMain() {
         <button 
             className="btn bg-green-500 text-white hover:bg-green-600" 
             onClick={() => fileRef.current.click()}
+            disabled={loading}
         >
             Tải lên từ Excel (Upsert)
         </button>
+        
+        {/* ----- THÊM NÚT TẢI XUỐNG DANH SÁCH USER ----- */}
+        <button 
+            className="btn bg-indigo-500 text-white hover:bg-indigo-600" 
+            onClick={downloadAllUsers} 
+            disabled={loading}
+        >
+            Tải danh sách User ({rows.length})
+        </button>
+        {/* ------------------------------------------------- */}
         
         <button className="btn bg-red-500 text-white hover:bg-red-600 ml-auto" onClick={deleteAllUsers} disabled={loading}>
             Xóa TOÀN BỘ User (DANGER)
