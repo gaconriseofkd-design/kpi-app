@@ -1,3 +1,4 @@
+// src/pages/AdminPage.jsx
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabaseClient";
@@ -85,6 +86,12 @@ function AdminMain() {
     loadUsers();
   }, []);
 
+  // ===== THÊM: RESET PAGE KHI CÓ THAY ĐỔI TÌM KIẾM =====
+  useEffect(() => {
+    setPage(1);
+  }, [qWorker, qApprover]);
+  // =======================================================
+
   const addNewRow = () => {
     if (rows.length >= 1000) return alert("Giới hạn 1000 dòng hiển thị. Vui lòng lưu bớt hoặc lọc.");
     setRows(prev => [emptyRow, ...prev]);
@@ -100,7 +107,7 @@ function AdminMain() {
   }
   
   const removeRow = (i) => {
-    // Tìm index của row trong `rows` dựa vào `sortedRows` và `pageRows`
+    // Tìm index của row trong `rows` dựa trên `sortedRows` và `pageRows`
     const globalIndexInSorted = (page - 1) * pageSize + i;
     const originalObject = sortedRows[globalIndexInSorted];
     
@@ -188,7 +195,7 @@ function AdminMain() {
 
   const filteredRows = useMemo(() => {
     return rows.filter(r => {
-      const msnvMatch = !qWorker || (r.msnv || "").toLowerCase().includes(qWorker.toLowerCase());
+      const msnvMatch = !qWorker || (r.msnv || "").toLowerCase().includes(qWorker.toLowerCase()) || (r.full_name || "").toLowerCase().includes(qWorker.toLowerCase());
       const approverMatch = !qApprover || (r.approver_msnv || "").toLowerCase().includes(qApprover.toLowerCase()) || (r.approver_name || "").toLowerCase().includes(qApprover.toLowerCase());
       return msnvMatch && approverMatch;
     });
