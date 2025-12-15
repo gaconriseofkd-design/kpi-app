@@ -323,7 +323,7 @@ function ApproverModeLeanline({ section }) {
       return {
       section, work_date: tplDate, shift: tplShift, msnv: w.msnv, hoten: w.full_name,
       approver_id: w.approver_msnv || approverIdInput, approver_name: w.approver_name,
-      line: w.line || tplLine, // LẤY LINE CỦA WORKER HOẶC TEMPLATE NẾU KHÔNG CÓ
+      line: tplLine, // LẤY LINE CỦA WORKER theo TEMPLATE 
       work_hours: toNum(tplWorkHours), downtime: toNum(tplStopHours),
       oe: toNum(tplOE), defects: toNum(tplDefects), q_score: scores.qScore,
       p_score: scores.pScore, total_score: scores.kpi, compliance: tplCompliance, status: "approved",
