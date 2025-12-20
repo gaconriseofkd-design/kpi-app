@@ -12,6 +12,10 @@ const COMPLIANCE_OPTIONS = [
   { value: "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất", label: "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất" },
   { value: "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất", label: "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất" },
   { value: "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất", label: "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất" },
+  { value: "Lỗi chặt", label: "Lỗi chặt" },
+  { value: "Lỗi in", label: "Lỗi in" },
+  { value: "Lỗi đóng gói", label: "Lỗi đóng gói" },
+  { value: "Lỗi MQAA", label: "Lỗi MQAA" },
   { value: "Vi phạm nội quy bộ phận/công ty", label: "Vi phạm nội quy bộ phận/công ty" },
 ];
 const HYBRID_SECTIONS = ["LAMINATION", "PREFITTING", "BÀO", "TÁCH"];
