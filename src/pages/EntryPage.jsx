@@ -5,6 +5,27 @@ import { useKpiSection } from "../context/KpiSectionContext";
 
 /* ================= Helpers & Scoring ================= */
 
+// Danh sách lỗi Tuân thủ cho LEANLINE_MOLDED
+const MOLDED_COMPLIANCE_OPTIONS = [
+  "Đóng gói sai thiếu ( theo đôi)",
+  "Đóng dư, ghi số thiếu sai/ không ghi số thiếu",
+  "Dán nhầm tem size run",
+  "Không in logo",
+  "Chặt sai dao",
+  "In sai logo/ in sai phân đoạn",
+  "Chặt in đóng gói sai yêu cầu đối với chỉ lệnh",
+  "Lỗi in khác",
+  "Lỗi đóng gói khác"
+];
+
+// Danh sách lỗi nghiêm trọng (Group A)
+const SEVERE_ERRORS = [
+  "Không in logo",
+  "Chặt sai dao",
+  "In sai logo/ in sai phân đoạn",
+  "Chặt in đóng gói sai yêu cầu đối với chỉ lệnh"
+];
+
 // Rule mapping helper cho LEANLINE_MOLDED
 const getMoldedCategoryFromLine = (line) => {
     if (line === 'M4' || line === 'M5') return 'M4 & M5 %OE';
@@ -12,7 +33,7 @@ const getMoldedCategoryFromLine = (line) => {
     return ''; 
 };
 
-// Machine Map (Mới)
+// Machine Map
 const MACHINE_MAP = {
     "LAMINATION": ["Máy dán 1", "Máy dán 2", "Máy dán 3", "Máy dán 4", "Máy dán 5", "Máy dán 6", "Máy dán 7"],
     "PREFITTING": ["Máy cắt 1", "Máy cắt 2", "Máy cắt 3", "Máy cắt 4", "Máy cắt 5", "Máy cắt 6"],
@@ -28,7 +49,7 @@ const isHybridSection = (sectionKey) => HYBRID_SECTIONS.includes(sectionKey);
 const getTableName = (sectionKey) => 
   isHybridSection(sectionKey) ? "kpi_lps_entries" : "kpi_entries";
 
-/** Quy đổi giờ làm việc thực tế từ giờ nhập + ca làm việc (Logic Molding/Hybrid) */
+/** Quy đổi giờ làm việc thực tế từ giờ nhập + ca làm việc */
 function calcWorkingReal(shift, inputHours) {
   const h = Number(inputHours || 0);
   if (h < 8) return h;
@@ -48,7 +69,6 @@ function calcWorkingReal(shift, inputHours) {
   return base + adj;
 }
 
-
 function scoreByQuality(defects) {
   const d = Number(defects || 0);
   if (d === 0) return 10;
@@ -58,21 +78,17 @@ function scoreByQuality(defects) {
   return 0;
 }
 
-// FIX: Hàm tính điểm Sản lượng Leanline (Dùng Rule DB dựa trên Line)
 function scoreByProductivityLeanline(oe, allRules, section, line) {
   const val = Number(oe ?? 0);
   let rules = [];
   let category = '';
 
   if (section === "LEANLINE_MOLDED") {
-    // 1. Map line to category 
     category = getMoldedCategoryFromLine(line);
-    // 2. Lọc Rule theo Category
     rules = (allRules || [])
       .filter(r => r.active !== false && r.category === category)
       .sort((a, b) => Number(b.threshold) - Number(a.threshold));
   } else {
-    // 3. Default Leanline DC (no category filter)
     rules = (allRules || [])
       .filter(r => r.active !== false && !r.category)
       .sort((a, b) => Number(b.threshold) - Number(a.threshold));
@@ -97,9 +113,36 @@ function scoreByProductivityHybrid(prodRate, category, allRules) {
   return 0;
 }
 
-function deriveDayScores({ section, oe, defects, category, output, workHours, stopHours, ca, line }, prodRules) {
+// CẬP NHẬT: Thêm logic tính điểm Tuân thủ mới
+function deriveDayScores({ section, oe, defects, category, output, workHours, stopHours, ca, line, compliance, compliancePairs }, prodRules) {
   const isHybrid = isHybridSection(section);
-  const q = scoreByQuality(defects);
+  
+  // 1. Tính điểm chất lượng gốc từ Phế
+  let q = scoreByQuality(defects);
+
+  // 2. Logic Trừ điểm Tuân thủ (Chỉ áp dụng cho LEANLINE_MOLDED)
+  if (section === "LEANLINE_MOLDED" && compliance && compliance !== "NONE") {
+      const pairs = Number(compliancePairs || 0);
+      if (pairs > 0) {
+          if (SEVERE_ERRORS.includes(compliance)) {
+              // Nhóm lỗi nghiêm trọng: 1 đôi -> 4 điểm, >=2 đôi -> 0 điểm
+              if (pairs === 1) {
+                  q = 4;
+              } else {
+                  q = 0;
+              }
+          } else {
+              // Nhóm lỗi thường: Làm tròn lên chẵn, trừ điểm tương ứng
+              // Ví dụ: 3 đôi -> tính là 4 đôi -> trừ 4 điểm
+              const effectivePairs = Math.ceil(pairs / 2) * 2;
+              q = q - effectivePairs;
+          }
+      }
+  }
+  
+  // Đảm bảo không âm
+  if (q < 0) q = 0;
+
   let p = 0;
   let prodRate = 0;
   let workingReal = 0;
@@ -109,12 +152,9 @@ function deriveDayScores({ section, oe, defects, category, output, workHours, st
     const exactHours = Math.max(0, workingReal - Number(stopHours || 0));
     
     prodRate = exactHours > 0 ? Number(output || 0) / exactHours : 0;
-    
     p = scoreByProductivityHybrid(prodRate, category, prodRules);
-
   } else {
     prodRate = Number(oe || 0);
-    // Cập nhật: Truyền section và line vào hàm tính điểm Leanline
     p = scoreByProductivityLeanline(prodRate, prodRules, section, line); 
     workingReal = Number(workHours || 0);
   }
@@ -146,6 +186,7 @@ const DEFAULT_FORM = {
   output: 0, 
   category: "", 
   compliance: "NONE",
+  compliancePairs: 0, // <-- THÊM TRƯỜNG NÀY
 };
 
 export default function EntryPage() {
@@ -159,10 +200,8 @@ export default function EntryPage() {
   const [loading, setLoading] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState([]);
 
-  // Lấy ngày hôm nay để chặn nhập tương lai
   const today = new Date().toISOString().slice(0, 10);
 
-  // Lấy danh sách máy cho section hiện tại
   const currentMachines = useMemo(() => {
     return MACHINE_MAP[section] || MACHINE_MAP.LEANLINE_DEFAULT;
   }, [section]);
@@ -174,7 +213,7 @@ export default function EntryPage() {
     const defaultLine = currentMachines[0] || DEFAULT_FORM.line;
     setForm(f => ({ 
         ...DEFAULT_FORM, 
-        date: f.date, // Giữ lại ngày đã chọn trước đó nếu có
+        date: f.date, 
         line: defaultLine,
         category: isHybridSection(section) ? f.category : "", 
         output: isHybridSection(section) ? f.output : 0, 
@@ -204,9 +243,9 @@ export default function EntryPage() {
     return () => {
       cancelled = true;
     };
-  }, [section]); // Dependency array đã có 'section'
+  }, [section]); 
 
-  // ====== auto fill họ tên + approver từ bảng users (Giữ nguyên) ======
+  // ====== auto fill họ tên + approver ======
   const userCache = useRef(new Map());
   useEffect(() => {
     const id = (form.workerId || "").trim();
@@ -236,16 +275,26 @@ export default function EntryPage() {
 
   // ====== tính điểm động ======
   const scores = useMemo(
-    // Cập nhật: Truyền form.line vào dependency list
-    () => deriveDayScores({ section, oe: form.oe, defects: form.defects, category: form.category, output: form.output, workHours: form.workHours, stopHours: form.stopHours, ca: form.ca, line: form.line }, prodRules),
-    [section, form.oe, form.defects, form.category, form.output, form.workHours, form.stopHours, form.ca, form.line, prodRules]
+    () => deriveDayScores({ 
+        section, 
+        oe: form.oe, 
+        defects: form.defects, 
+        category: form.category, 
+        output: form.output, 
+        workHours: form.workHours, 
+        stopHours: form.stopHours, 
+        ca: form.ca, 
+        line: form.line,
+        compliance: form.compliance,         // Truyền lỗi
+        compliancePairs: form.compliancePairs // Truyền số đôi lỗi
+    }, prodRules),
+    [section, form.oe, form.defects, form.category, form.output, form.workHours, form.stopHours, form.ca, form.line, form.compliance, form.compliancePairs, prodRules]
   );
 
   function handleChange(key, val) {
     setForm((f) => ({ ...f, [key]: val }));
   }
 
-  // ====== kiểm tra trùng (worker_id, date, section) ======
   async function findExisting(workerId, date, sectionKey) {
     const table = getTableName(sectionKey);
     const { data, error } = await supabase
@@ -260,11 +309,7 @@ export default function EntryPage() {
   }
 
   async function handleSubmit() {
-    // THÊM KIỂM TRA NGÀY HIỆN TẠI
-    if (form.date > today) {
-      return alert("Không thể nhập KPI cho ngày trong tương lai.");
-    }
-
+    if (form.date > today) return alert("Không thể nhập KPI cho ngày trong tương lai.");
     if (!form.workerId) return alert("Nhập MSNV.");
     if (!form.approverId) return alert("Không tìm thấy Người duyệt cho MSNV này.");
     if (!form.date) return alert("Chọn ngày.");
@@ -274,7 +319,7 @@ export default function EntryPage() {
     const isUpdate = await findExisting(form.workerId, form.date, section);
     const now = new Date().toISOString();
     
-    // 1. Khối payload CHUNG (Các cột có mặt trong tất cả 3 bảng)
+    // Payload chung
     const basePayload = {
       date: form.date,
       worker_id: form.workerId,
@@ -296,11 +341,9 @@ export default function EntryPage() {
       overflow: scores.overflow,
     };
     
-    // 2. Khối payload TÙY CHỌN (Gửi các cột chỉ khi bảng đích có nó)
     let sectionPayload = {};
     
     if (isHybrid) {
-      // Hybrid/LPS: Gửi output, category, working_real, violations
       sectionPayload = {
         output: Number(form.output || 0),
         category: form.category,
@@ -308,18 +351,12 @@ export default function EntryPage() {
         violations: violationsValue,
       };
     } else {
-      // Leanline: Chỉ gửi %OE (và violations cho Leanline Molded nếu có cột đó, nhưng tạm thời chỉ gửi OE cho kpi_entries)
       sectionPayload = {
         oe: Number(form.oe || 0),
-        // KHÔNG GỬI violations, output, category, working_real
       };
     }
     
-    // Gộp tất cả payload
-    const payload = {
-      ...basePayload,
-      ...sectionPayload
-    };
+    const payload = { ...basePayload, ...sectionPayload };
 
     try {
       setLoading(true);
@@ -362,6 +399,7 @@ export default function EntryPage() {
         oe: isHybrid ? 100 : DEFAULT_FORM.oe,
         output: isHybrid ? 0 : DEFAULT_FORM.output,
         compliance: "NONE",
+        compliancePairs: 0,
       }));
     } catch (e) {
       console.error(e);
@@ -371,7 +409,6 @@ export default function EntryPage() {
     }
   }
 
-  // ... (Giao diện JSX giữ nguyên)
   return (
     <div className="p-4 space-y-4">
       <h2 className="text-xl font-bold">Nhập KPI - {section}</h2>
@@ -383,7 +420,7 @@ export default function EntryPage() {
             className="input"
             value={form.date}
             onChange={(e) => handleChange("date", e.target.value)}
-            max={today} // THÊM THUỘC TÍNH MAX
+            max={today}
           />
         </label>
 
@@ -397,17 +434,9 @@ export default function EntryPage() {
           />
         </div>
 
-        <label>Họ & tên:
-          <input className="input" value={form.workerName} disabled />
-        </label>
-
-        <label>Người duyệt (MSNV):
-          <input className="input" value={form.approverId} disabled />
-        </label>
-
-        <label>Người duyệt (Họ tên):
-          <input className="input" value={form.approverName} disabled />
-        </label>
+        <label>Họ & tên: <input className="input" value={form.workerName} disabled /></label>
+        <label>Người duyệt (MSNV): <input className="input" value={form.approverId} disabled /></label>
+        <label>Người duyệt (Họ tên): <input className="input" value={form.approverName} disabled /></label>
 
         <label>Máy làm việc:
           <select 
@@ -415,18 +444,12 @@ export default function EntryPage() {
             value={form.line}
             onChange={(e) => handleChange("line", e.target.value)}
           >
-            {currentMachines.map(m => (
-              <option key={m} value={m}>{m}</option>
-            ))}
+            {currentMachines.map(m => <option key={m} value={m}>{m}</option>)}
           </select>
         </label>
 
         <label>Ca làm việc:
-          <select
-            className="input"
-            value={form.ca}
-            onChange={(e) => handleChange("ca", e.target.value)}
-          >
+          <select className="input" value={form.ca} onChange={(e) => handleChange("ca", e.target.value)}>
             <option value="Ca 1">Ca 1</option>
             <option value="Ca 2">Ca 2</option>
             <option value="Ca 3">Ca 3</option>
@@ -435,81 +458,73 @@ export default function EntryPage() {
         </label>
         
         <label>Giờ làm việc:
-          <input
-            type="number"
-            className="input"
-            value={form.workHours}
-            onChange={(e) => handleChange("workHours", Number(e.target.value))}
-          />
+          <input type="number" className="input" value={form.workHours} onChange={(e) => handleChange("workHours", Number(e.target.value))} />
         </label>
 
         <label>Giờ dừng máy:
-          <input
-            type="number"
-            className="input"
-            value={form.stopHours}
-            onChange={(e) => handleChange("stopHours", Number(e.target.value))}
-          />
+          <input type="number" className="input" value={form.stopHours} onChange={(e) => handleChange("stopHours", Number(e.target.value))} />
         </label>
         
         <label>Số đôi phế:
-          <input
-            type="number"
-            className="input"
-            value={form.defects}
-            onChange={(e) => handleChange("defects", Number(e.target.value))}
-            step="0.5" // <-- THÊM BƯỚC NÀY
-          />
+          <input type="number" className="input" value={form.defects} onChange={(e) => handleChange("defects", Number(e.target.value))} step="0.5" />
         </label>
         
-        {/* INPUT TÙY CHỌN: HYBRID vs LEANLINE */}
         {isHybrid ? (
             <>
             <label>Loại năng suất (Category):
-                <select
-                    className="input"
-                    value={form.category}
-                    onChange={(e) => handleChange("category", e.target.value)}
-                >
+                <select className="input" value={form.category} onChange={(e) => handleChange("category", e.target.value)}>
                     <option value="">-- Chọn loại --</option>
                     {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
             </label>
             <label>Sản lượng (Output):
-                <input
-                    type="number"
-                    className="input"
-                    value={form.output}
-                    onChange={(e) => handleChange("output", Number(e.target.value))}
-                />
+                <input type="number" className="input" value={form.output} onChange={(e) => handleChange("output", Number(e.target.value))} />
             </label>
             </>
         ) : (
             <label>%OE:
-                <input
-                    type="number"
-                    className="input"
-                    value={form.oe}
-                    onChange={(e) => handleChange("oe", Number(e.target.value))}
-                    step="0.01"
-                />
+                <input type="number" className="input" value={form.oe} onChange={(e) => handleChange("oe", Number(e.target.value))} step="0.01" />
             </label>
         )}
 
-        <label>Vi phạm:
+        <label>Lỗi Tuân thủ:
           <select
             className="input"
             value={form.compliance}
             onChange={(e) => handleChange("compliance", e.target.value)}
           >
             <option value="NONE">Không vi phạm</option>
-            <option value="LATE">Ký mẫu đầu chuyền trước khi sử dụng</option>
-            <option value="PPE">Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất</option>
-            <option value="MAT">Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất</option>
-            <option value="SPEC">Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất</option>
-            <option value="RULE">Vi phạm nội quy bộ phận/công ty</option>
+            {/* Hiển thị list lỗi tương ứng theo Section */}
+            {section === "LEANLINE_MOLDED" 
+              ? MOLDED_COMPLIANCE_OPTIONS.map(opt => (
+                  <option key={opt} value={opt}>{opt}</option>
+                ))
+              : [
+                  "Ký mẫu đầu chuyền trước khi sử dụng",
+                  "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất",
+                  "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất",
+                  "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất",
+                  "Vi phạm nội quy bộ phận/công ty"
+                ].map(opt => <option key={opt} value={opt}>{opt}</option>)
+            }
           </select>
         </label>
+
+        {/* Ô NHẬP SỐ ĐÔI VI PHẠM (CHỈ HIỆN KHI CÓ LỖI VÀ LÀ LEANLINE_MOLDED) */}
+        {section === "LEANLINE_MOLDED" && form.compliance !== "NONE" && (
+            <label className="text-red-600 font-semibold border-l-4 border-red-500 pl-2 ml-2 bg-red-50 rounded-r">
+                Số đôi vi phạm:
+                <input
+                    type="number"
+                    className="input border-red-400 bg-white ml-2 w-32"
+                    value={form.compliancePairs}
+                    onChange={(e) => handleChange("compliancePairs", Number(e.target.value))}
+                    min="1"
+                    step="1"
+                    placeholder="Nhập số..."
+                />
+            </label>
+        )}
       </div>
 
       <div className="mt-3 p-4 rounded bg-gray-50">
@@ -531,11 +546,7 @@ export default function EntryPage() {
         <p>Điểm dư: <b>{scores.overflow}</b></p>
       </div>
 
-      <button
-        onClick={handleSubmit}
-        className="btn btn-primary mt-4"
-        disabled={loading}
-      >
+      <button onClick={handleSubmit} className="btn btn-primary mt-4" disabled={loading}>
         {loading ? "Đang lưu..." : "Gửi KPI"}
       </button>
     </div>
