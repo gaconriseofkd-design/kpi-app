@@ -523,7 +523,7 @@ function ReportContent() {
         const excelDate = dateToExcelSerial(r.date);
   
         return {
-          "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "")),
+          "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section)),
           "MSNV": r.worker_id || "",
           "HỌ VÀ TÊN": r.worker_name || "",
           "CA LÀM VIỆC": r.ca || "",
@@ -542,55 +542,62 @@ function ReportContent() {
           "Điểm KPI ngày": day,
           "Điểm dư": overflow,
           "MSNV người duyệt": r.approver_id || "",
-          "Họ và Tên Người duyệt": r.approver_name || "",
-          "Máy làm việc": r.line || "",
-          "THỜI GIAN DỪNG MÁY": Number(r.stop_hours ?? 0),
-          "Ghi chú duyệt": r.approver_note || "", 
-          "Trạng thái": r.status || "pending", 
+          "Người duyệt": r.approver_name || "",
+          "Ghi chú duyệt": r.approver_note || "",
+          "Trạng thái": r.status || "pending",
         };
       });
-
     } else {
+      // Leanline DC / Leanline Molded
       data = allData.map((r) => { 
         const p = Number(r.p_score || 0);
         const q = Number(r.q_score || 0);
         const day = Number(r.day_score || 0);
         const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
-        const totalMonth = day + overflow;
+        const total = day + overflow;
         const excelDate = dateToExcelSerial(r.date);
-  
-        return {
-          "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "")),
+        
+        // --- BASE OBJECT ---
+        const rowObj = {
+          "VỊ TRÍ LÀM VIỆC": titleCase(viSection(r.section || "LEANLINE")),
           "MSNV": r.worker_id || "",
           "HỌ VÀ TÊN": r.worker_name || "",
           "CA LÀM VIỆC": r.ca || "",
-          "NGÀY LÀM VIỆC": excelDate ? { v: excelDate, t: 'n', z: 'mm/dd/yyyy' } : null, 
+          "NGÀY LÀM VIỆC": excelDate ? { v: excelDate, t: 'n', z: 'mm/dd/yyyy' } : null,
+          "Line": r.line || "",
           "THỜI GIAN LÀM VIỆC": Number(r.work_hours ?? 0),
+          "THỜI GIAN DỪNG": Number(r.stop_hours ?? 0),
+          "%OE/NS": Number(r.oe ?? 0),
           "Số đôi phế": Number(r.defects ?? 0),
           "Điểm chất lượng": q,
-          "%OE": Number(r.oe ?? 0),
-          "Điểm sản lượng": p,
+          "Điểm Sản lượng": p,
           "Tuân thủ": complianceLabel(r.compliance_code),
-          "Vi phạm": r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0),
-          "Điểm KPI ngày": day,
-          "Điểm dư": overflow,
-          "Điểm KPI tổng tháng": totalMonth,
-          "THỜI GIAN DOWNTIME": Number(r.stop_hours ?? 0),
-          "MSNV người duyệt": r.approver_id || "",
-          "Họ và Tên Người duyệt": r.approver_name || "",
-          "Line làm việc": r.line || "",
-          "Ghi chú duyệt": r.approver_note || "", 
-          "Trạng thái": r.status || "pending", 
         };
+
+        // --- CẬP NHẬT: THÊM CỘT SỐ ĐÔI LỖI CHO LEANLINE_MOLDED ---
+        if (section === "LEANLINE_MOLDED") {
+            rowObj["Số đôi lỗi"] = Number(r.compliance_pairs || 0);
+        }
+
+        // --- CÁC CỘT TIẾP THEO ---
+        rowObj["Vi phạm"] = r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0);
+        rowObj["Điểm KPI ngày"] = day;
+        rowObj["Điểm dư"] = overflow;
+        rowObj["Điểm tổng"] = total;
+        rowObj["MSNV người duyệt"] = r.approver_id || "";
+        rowObj["Người duyệt"] = r.approver_name || "";
+        rowObj["Ghi chú duyệt"] = r.approver_note || "";
+        rowObj["Trạng thái"] = r.status || "pending";
+        
+        return rowObj;
       });
     }
-  
+
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, viSection(section));
-    XLSX.writeFile(wb, `kpi_report_${section}_${dateFrom}_to_${dateTo}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "KPI Report");
+    XLSX.writeFile(wb, `BaoCao_${section}_${dateFrom}_${dateTo}.xlsx`);
   }
-
   // ----- (MỚI) HÀM XUẤT FORM NGANG (HYBRID) -----
   const handleExportHorizontal = async () => {
     // 1. Kiểm tra dữ liệu
@@ -1239,8 +1246,9 @@ function ReportContent() {
             </table>
           )}
 
+          {/* TABLE CHO LEANLINE (DC / MOLDED) - ĐÃ CẬP NHẬT CỘT */}
           {!isMolding && !isHybrid && (
-            <table className="min-w-[1100px] text-sm">
+            <table className="min-w-[1200px] text-sm">
               <thead className="bg-gray-100 text-xs uppercase">
                 <tr>
                   <th className="p-2 text-center">Ngày</th>
@@ -1253,6 +1261,13 @@ function ReportContent() {
                   <th className="p-2 text-center">P</th>
                   <th className="p-2 text-center">Q</th>
                   <th className="p-2 text-center">KPI</th>
+                  <th className="p-2 text-center">Tuân thủ</th>
+                  
+                  {/* --- CỘT MỚI: SỐ ĐÔI LỖI (CHỈ HIỆN KHI LÀ MOLDED) --- */}
+                  {section === "LEANLINE_MOLDED" && (
+                    <th className="p-2 text-center text-red-600">Số đôi lỗi</th>
+                  )}
+                  
                   <th className="p-2 text-center">Duyệt</th>
                 </tr>
               </thead>
@@ -1269,11 +1284,22 @@ function ReportContent() {
                     <td className="p-2 text-center">{fmt(r.p_score, 2)}</td>
                     <td className="p-2 text-center">{fmt(r.q_score, 2)}</td>
                     <td className="p-2 text-center font-semibold">{fmt(r.day_score, 2)}</td>
+                    <td className="p-2 text-center text-xs text-gray-600 max-w-[150px] truncate" title={r.compliance_code}>
+                        {r.compliance_code === "NONE" ? "" : r.compliance_code}
+                    </td>
+
+                    {/* --- DỮ LIỆU CỘT MỚI --- */}
+                    {section === "LEANLINE_MOLDED" && (
+                        <td className="p-2 text-center font-bold text-red-600">
+                            {r.compliance_pairs ? r.compliance_pairs : ""}
+                        </td>
+                    )}
+
                     <td className="p-2 text-center">{r.status}</td>
                   </tr>
                 ))}
                 {!pageRows.length && (
-                  <tr><td colSpan={11} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>
+                  <tr><td colSpan={section === "LEANLINE_MOLDED" ? 13 : 12} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>
                 )}
               </tbody>
             </table>
@@ -1283,7 +1309,6 @@ function ReportContent() {
     </div>
   );
 }
-
 function SummaryCard({ title, value }) {
   return (
     <div className="p-3 rounded border bg-white">
