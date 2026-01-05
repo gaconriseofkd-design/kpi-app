@@ -574,9 +574,9 @@ function ReportContent() {
           "Tuân thủ": complianceLabel(r.compliance_code),
         };
 
-        // --- CẬP NHẬT: THÊM CỘT SỐ ĐÔI LỖI CHO LEANLINE_MOLDED ---
+        // --- CẬP NHẬT: THÊM CỘT Số đôi lỗi Tuân thủ CHO LEANLINE_MOLDED ---
         if (section === "LEANLINE_MOLDED") {
-            rowObj["Số đôi lỗi"] = Number(r.compliance_pairs || 0);
+            rowObj["Số đôi lỗi Tuân thủ"] = Number(r.compliance_pairs || 0);
         }
 
         // --- CÁC CỘT TIẾP THEO ---
@@ -1263,9 +1263,9 @@ function ReportContent() {
                   <th className="p-2 text-center">KPI</th>
                   <th className="p-2 text-center">Tuân thủ</th>
                   
-                  {/* --- CỘT MỚI: SỐ ĐÔI LỖI (CHỈ HIỆN KHI LÀ MOLDED) --- */}
+                  {/* --- CỘT MỚI: Số đôi lỗi Tuân thủ (CHỈ HIỆN KHI LÀ MOLDED) --- */}
                   {section === "LEANLINE_MOLDED" && (
-                    <th className="p-2 text-center text-red-600">Số đôi lỗi</th>
+                    <th className="p-2 text-center text-red-600">Số đôi lỗi Tuân thủ</th>
                   )}
                   
                   <th className="p-2 text-center">Duyệt</th>
