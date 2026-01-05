@@ -704,10 +704,6 @@ function ApproverModeLeanline({ section }) {
   );
 }
 
-function ApproverModeMolding({ section }) {
-    // Placeholder - Sử dụng code cũ nếu có
-    return <div>Chức năng Molding (Cũ)</div>;
-}
 /* ===== (Hết Leanline) ===== */
 
 
