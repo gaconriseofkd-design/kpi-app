@@ -20,8 +20,8 @@ const COMPLIANCE_OPTIONS = [
 ];
 
 const MOLDED_COMPLIANCE_OPTIONS = [
-  "Đóng gói thiếu ( theo đôi)",
-  "Đóng gói dư, ghi số thiếu sai/ không ghi số thiếu",
+  "Đóng gói sai thiếu ( theo đôi)",
+  "Đóng dư, ghi số thiếu sai/ không ghi số thiếu",
   "Dán nhầm tem size run",
   "Không in logo",
   "Chặt sai dao",
@@ -45,16 +45,7 @@ const toNum = (v, d = 0) => {
   const n = Number(v);
   return Number.isFinite(n) ? n : d;
 };
-function calcWorkingReal(shift, inputHours) {
-  const h = toNum(inputHours);
-  if (h < 8) return h;
-  const BASE = { "Ca 1": 7.17, "Ca 2": 7.17, "Ca 3": 6.92, "Ca HC": 6.67 };
-  const base = BASE[shift] ?? 7.17;
-  if (h < 9) return base;
-  const extra = h - 8;
-  const adj = extra >= 2 ? extra - 0.5 : extra;
-  return base + adj;
-}
+
 const getMoldedCategoryFromLine = (line) => {
     if (line === 'M4' || line === 'M5') return 'M4 & M5 %OE';
     if (line === 'M1' || line === 'M2' || line === 'M3') return 'M1 M2 M3 %OE';
@@ -171,7 +162,6 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
    APPROVER MODE — LEANLINE
    ====================================================================== */
 function ApproverModeLeanline({ section }) {
-    
   const [step, setStep] = useState(1);
   const [prodRules, setProdRules] = useState([]); 
   const [approverIdInput, setApproverIdInput] = useState("");
@@ -206,6 +196,13 @@ function ApproverModeLeanline({ section }) {
   
   // Filter theo line
   const [lineFilter, setLineFilter] = useState(""); 
+
+  // --- FIX: Định nghĩa biến availableLines ---
+  const availableLines = useMemo(() => {
+    const lines = new Set(searchResults.map(w => w.line).filter(Boolean));
+    return Array.from(lines).sort();
+  }, [searchResults]);
+  // ------------------------------------------
   
   const filteredSearchResults = useMemo(() => {
       if (!lineFilter) return searchResults;
@@ -357,7 +354,7 @@ function ApproverModeLeanline({ section }) {
       let r = { ...r0 };
       if (["compliance", "line", "shift", "work_date", "approver_note"].includes(key)) {
           r[key] = val;
-          // Nếu đổi lỗi thành NONE, reset số đôi về 0 (tuỳ chọn)
+          // Nếu đổi lỗi thành NONE, reset số đôi về 0
           if (key === "compliance" && val === "NONE") r.compliance_pairs = 0;
       } else {
           r[key] = toNum(val, 0);
@@ -374,7 +371,7 @@ function ApproverModeLeanline({ section }) {
     setSelReview((prev) => {
       const next = new Set(prev);
       const start = (page - 1) * pageSize;
-      const allOnPage = pageRows.every((_, idx) => next.has(start + idx));
+      const allOnPage = pageRows.length > 0 && pageRows.every((_, idx) => next.has(start + idx));
       if (allOnPage) { pageRows.forEach((_, idx) => next.delete(start + idx)); } 
       else { pageRows.forEach((_, idx) => next.add(start + idx)); }
       return next;
@@ -389,7 +386,7 @@ function ApproverModeLeanline({ section }) {
     const now = new Date().toISOString();
     
     const payload = list.map((r) => {
-      // Tính lại lần cuối trước khi lưu để đảm bảo chính xác
+      // Tính lại lần cuối
       const rawScores = calculateScores(r.oe, r.defects, prodRules, section, r.line, r.compliance, r.compliance_pairs);
       const overflow = Math.max(0, rawScores.rawTotal - 15);
       return {
@@ -405,11 +402,10 @@ function ApproverModeLeanline({ section }) {
         oe: r.oe,
         defects: r.defects,
         
-        // Thêm trường compliance_pairs vào DB nếu cần (hoặc chỉ dùng để tính toán)
-        // Hiện tại DB kpi_entries chưa có cột compliance_pairs, ta chỉ lưu compliance_code
+        // Thêm trường compliance_pairs vào DB (Nếu đã chạy lệnh SQL)
         compliance_code: r.compliance,
-        // Nếu bạn muốn lưu số đôi, bạn cần thêm cột vào DB. Ở đây tôi giả định chỉ dùng tính điểm.
         compliance_pairs: (section === "LEANLINE_MOLDED") ? toNum(r.compliance_pairs) : 0,
+        
         section,
         status: "approved",
         created_at: now,
@@ -417,7 +413,7 @@ function ApproverModeLeanline({ section }) {
         approver_note: r.approver_note || null,
         p_score: rawScores.pScore,
         q_score: rawScores.qScore,
-        day_score: rawScores.kpi,
+        day_score: rawScores.day_score,
         overflow
       };
     });
@@ -430,7 +426,6 @@ function ApproverModeLeanline({ section }) {
     if (error) return alert("Lỗi lưu: " + error.message);
     alert(`Đã lưu ${payload.length} dòng.`);
     
-    // Xoá những dòng đã lưu khỏi list view
     const savedIdxSet = new Set(idxs);
     setReviewRows(prev => prev.filter((_, i) => !savedIdxSet.has(i)));
     setSelReview(new Set());
@@ -485,6 +480,7 @@ function ApproverModeLeanline({ section }) {
                                 onChange={(e) => setLineFilter(e.target.value)}
                             >
                                 <option value="">Tất cả Line</option>
+                                {/* Dùng biến availableLines đã định nghĩa */}
                                 {availableLines && availableLines.filter(l => l).map(l => (
                                     <option key={l} value={l}>{l}</option>
                                 ))}
@@ -706,6 +702,11 @@ function ApproverModeLeanline({ section }) {
       )}
     </>
   );
+}
+
+function ApproverModeMolding({ section }) {
+    // Placeholder - Sử dụng code cũ nếu có
+    return <div>Chức năng Molding (Cũ)</div>;
 }
 /* ===== (Hết Leanline) ===== */
 
