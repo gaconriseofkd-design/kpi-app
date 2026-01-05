@@ -3,13 +3,12 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabaseClient";
 
-
 // VAI TRÒ HỢP LỆ (LOWERCASE)
 const ALLOWED_ROLES = ["worker", "approver", "admin"];
 // MẬT KHẨU XOÁ NGUY HIỂM
 const DANGER_PASSWORD = "Deplao.1305"; // <-- MẬT KHẨU XOÁ
 
-// HÀNG TRỐNG MẶC ĐỊNH - ĐÃ THÊM 'line'
+// HÀNG TRỐNG MẶC ĐỊNH
 const emptyRow = { msnv: "", full_name: "", section: "", line: "", role: "worker", approver_msnv: "", approver_name: "" };
 
 // HÀM HELPER CHUNG
@@ -17,7 +16,7 @@ function normalizeHeader(h) {
   return h.toLowerCase().trim().replace(/ /g, "_").replace(/[^a-z0-9_]/g, "");
 }
 
-// HÀM MAPPING HEADER EXCEL SANG TÊN TRƯỜNG DB - ĐÃ THÊM 'line'
+// HÀM MAPPING HEADER EXCEL SANG TÊN TRƯỜNG DB
 function mapHeaderToField(h) {
   const n = normalizeHeader(h);
   if (["msnv"].includes(n)) return "msnv";
@@ -25,9 +24,7 @@ function mapHeaderToField(h) {
     return "full_name";
   if (["section", "khoi", "bo_phan"].includes(n)) return "section";
   
-  // ===== ĐÃ THÊM 'line' (Vị trí làm việc) =====
   if (["line", "may_lam_viec", "vi_tri_lam_viec", "vi_tri", "machine", "vtlamviec"].includes(n)) return "line";
-  // ==============================================
 
   if (["role", "vai_tro"].includes(n)) return "role";
   if ([
@@ -46,7 +43,6 @@ function mapHeaderToField(h) {
 function normalizeSection(s) {
   if (!s) return "";
   const upper = s.toUpperCase().trim();
-  // Có thể thêm logic chuẩn hóa section ở đây nếu cần thiết
   return upper;
 }
 
@@ -59,11 +55,11 @@ async function upsertInChunks(data, chunkSize = 100) {
 }
 
 function AdminMain() {
-  const MAX_HISTORY = 10; // Giới hạn 10 bước lịch sử
+  const MAX_HISTORY = 10; 
   
   const [rows, setRows] = useState([]);
   
-  // HISTORY STATES (Lịch sử Hoàn tác/Làm lại)
+  // HISTORY STATES
   const [history, setHistory] = useState([[]]); 
   const [historyIndex, setHistoryIndex] = useState(0);
   
@@ -75,32 +71,25 @@ function AdminMain() {
   
   const pageSize = 15;
   const [page, setPage] = useState(1);
+
+  // --- STATE MỚI CHO CHỨC NĂNG XÓA THEO SECTION ---
+  const [sectionToDelete, setSectionToDelete] = useState("");
+  // ------------------------------------------------
   
   // === START HISTORY MANAGEMENT LOGIC ===
   const pushRowsToHistory = useCallback((newRows) => {
-    // 1. Quản lý History Stack
     setHistory(prevHistory => {
-        // Cắt bỏ phần lịch sử redo (nếu người dùng thay đổi state sau khi undo)
         const historySlice = prevHistory.slice(0, historyIndex + 1);
-        
-        // Tránh push nếu state mới giống hệt state cuối cùng (kiểm tra tham chiếu)
         if (historySlice.length > 0 && historySlice[historySlice.length - 1] === newRows) {
             return prevHistory;
         }
-
         let updatedHistory = [...historySlice, newRows];
-
-        // Giới hạn MAX_HISTORY
         if (updatedHistory.length > MAX_HISTORY) {
             updatedHistory = updatedHistory.slice(1);
         }
-        
-        // Cập nhật index
         setHistoryIndex(updatedHistory.length - 1);
         return updatedHistory;
     });
-    
-    // 2. Cập nhật Rows (đồng bộ) và Page
     setRows(newRows);
     setPage(1);
   }, [historyIndex, MAX_HISTORY]);
@@ -131,7 +120,6 @@ function AdminMain() {
       if (error) throw error;
       const initialRows = data || [];
       
-      // KHỞI TẠO LỊCH SỬ LẦN ĐẦU
       setRows(initialRows);
       setHistory([initialRows]);
       setHistoryIndex(0);
@@ -148,7 +136,6 @@ function AdminMain() {
     loadUsers();
   }, []);
 
-  // RESET PAGE KHI CÓ THAY ĐỔI TÌM KIẾM
   useEffect(() => {
     setPage(1);
   }, [qWorker, qApprover]);
@@ -160,7 +147,6 @@ function AdminMain() {
     pushRowsToHistory(newRows);
   };
   
-  // SỬA LỖI: Củng cố logic tìm index và thêm kiểm tra null/undefined
   const findIndexInRows = (prevRows, originalObject) => {
     if (!originalObject) return -1;
     return originalObject.msnv
@@ -169,13 +155,11 @@ function AdminMain() {
   }
   
   const removeRow = (i) => {
-    // Tìm index của row trong `rows` dựa trên `sortedRows`
     const globalIndexInSorted = (page - 1) * pageSize + i;
     const originalObject = sortedRows[globalIndexInSorted];
     
     if (!originalObject) return;
     
-    // TÌM VÀ XOÁ SYNCHRONOUSLY
     const idxInRows = findIndexInRows(rows, originalObject);
     if (idxInRows === -1) return;
     
@@ -189,7 +173,6 @@ function AdminMain() {
     
     if (!originalObject) return;
     
-    // TÌM VÀ CẬP NHẬT SYNCHRONOUSLY
     const idxInRows = findIndexInRows(rows, originalObject);
     if (idxInRows === -1) return;
     
@@ -218,25 +201,17 @@ function AdminMain() {
     let newRows = [...rows]; 
     newRows[idxInRows] = { ...newRows[idxInRows], approver_msnv: v }; 
 
-    // Tự động tìm tên người duyệt (Async logic)
     if (v.length === 5 && !isNaN(Number(v))) {
-      
-      // 1. Cập nhật MSNV (sync) và push history
       pushRowsToHistory(newRows);
-      
-      // 2. Thực hiện tìm kiếm Tên (async)
       setTimeout(async () => {
         const { data } = await supabase.from("users").select("full_name").eq("msnv", v).single();
         if (data && data.full_name) {
-          // Cập nhật Tên (sync) và push history mới
           setRows(current => {
             const arr2 = [...current];
             const idxInRows2 = findIndexInRows(arr2, originalObject); 
             if(idxInRows2 !== -1) { 
                 arr2[idxInRows2] = { ...arr2[idxInRows2], approver_name: data.full_name };
             }
-            
-            // Push history for the NAME update (cần xử lý riêng vì nó xảy ra bất đồng bộ)
             setHistory(prevHistory => {
                 const historySlice = prevHistory.slice(0, historyIndex + 1); 
                 let updatedHistory = [...historySlice, arr2];
@@ -254,11 +229,9 @@ function AdminMain() {
       return; 
 
     } else if (v.length === 0) {
-       // Xóa tên người duyệt nếu MSNV bị xóa (sync)
        newRows[idxInRows] = { ...newRows[idxInRows], approver_name: "" };
        pushRowsToHistory(newRows);
     } else {
-       // Trường hợp nhập MSNV < 5 số hoặc không phải số (sync)
        pushRowsToHistory(newRows);
     }
   };
@@ -278,7 +251,6 @@ function AdminMain() {
         const aVal = a[sortConfig.key] || "";
         const bVal = b[sortConfig.key] || "";
         
-        // Xử lý sắp xếp số nếu key là số
         const isNumeric = sortConfig.key === "msnv" || sortConfig.key === "approver_msnv";
         if (isNumeric) {
             const aNum = Number(aVal);
@@ -288,7 +260,6 @@ function AdminMain() {
             return 0;
         }
         
-        // Sắp xếp chuỗi
         if (aVal < bVal) return sortConfig.direction === "ascending" ? -1 : 1;
         if (aVal > bVal) return sortConfig.direction === "ascending" ? 1 : -1;
         return 0;
@@ -348,7 +319,7 @@ function AdminMain() {
         const { error } = await supabase.from("users").upsert(payload, { onConflict: "msnv" });
         if (error) throw error;
         alert(`Đã lưu User ${r.msnv}.`);
-        loadUsers(); // Tải lại dữ liệu sau khi lưu (reset history)
+        loadUsers(); 
     } catch (err) {
         console.error(err);
         alert("Lỗi lưu dữ liệu: " + (err.message || err));
@@ -362,8 +333,6 @@ function AdminMain() {
     const r = sortedRows[globalIndexInSorted];
     if (!r || !r.msnv) {
         if (!r) return; 
-        
-        // Dùng logic removeRow để xóa dòng mới trong state (local delete)
         removeRow(i); 
         return;
     }
@@ -375,7 +344,7 @@ function AdminMain() {
         const { error } = await supabase.from("users").delete().eq("msnv", r.msnv);
         if (error) throw error;
         alert(`Đã xoá User ${r.msnv}.`);
-        loadUsers(); // Tải lại dữ liệu sau khi xóa (reset history)
+        loadUsers(); 
     } catch (err) {
         console.error(err);
         alert("Lỗi xoá dữ liệu: " + (err.message || err));
@@ -384,7 +353,6 @@ function AdminMain() {
     }
   };
   
-  // Hàm xử lý file Excel
   const handleFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -430,7 +398,7 @@ function AdminMain() {
                 .catch(err => alert("Lỗi tải lên: " + err.message))
                 .finally(() => {
                     setLoading(false);
-                    loadUsers(); // Tải lại sau khi upsert (reset history)
+                    loadUsers(); 
                 });
         }
       } catch (e) {
@@ -486,7 +454,7 @@ function AdminMain() {
         if (error) throw error;
         setRows([]);
         alert("Đã xóa tất cả dữ liệu user.");
-        loadUsers(); // Tải lại sau khi xóa (reset history)
+        loadUsers(); 
     } catch (err) {
         console.error(err);
         alert("Lỗi xóa dữ liệu: " + (err.message || err));
@@ -494,6 +462,38 @@ function AdminMain() {
         setLoading(false);
     }
   };
+
+  // --- HÀM MỚI: XÓA THEO SECTION ---
+  const handleDeleteBySection = async () => {
+    if (!sectionToDelete) {
+      return alert("Vui lòng chọn Section cần xóa!");
+    }
+
+    const confirmMsg = `CẢNH BÁO: Bạn có chắc chắn muốn xóa TOÀN BỘ nhân viên thuộc section "${sectionToDelete}" không?\n\nHành động này không thể hoàn tác!`;
+    if (!window.confirm(confirmMsg)) return;
+    
+    if (!window.confirm(`Xác nhận lần cuối: Xóa sạch danh sách của "${sectionToDelete}"?`)) return;
+
+    try {
+      setLoading(true);
+      
+      const { error, count } = await supabase
+        .from('users')
+        .delete({ count: 'exact' }) 
+        .eq('section', sectionToDelete);
+
+      if (error) throw error;
+
+      alert(`Đã xóa thành công ${count} nhân viên thuộc section ${sectionToDelete}.`);
+      loadUsers();
+      
+    } catch (err) {
+      alert("Lỗi khi xóa: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+  // ----------------------------------
 
   return (
     <div className="p-4 space-y-4">
@@ -532,8 +532,42 @@ function AdminMain() {
         {loading && <span className="text-gray-500">Đang tải/xử lý...</span>}
       </div>
       
+      {/* --- GIAO DIỆN XÓA THEO SECTION --- */}
+      <div className="bg-red-50 border border-red-200 p-4 rounded-lg mt-2 shadow-sm">
+        <h3 className="text-red-700 font-bold text-sm mb-2 flex items-center gap-2">
+          ⚠️ Xóa danh sách theo Section (Dọn dẹp trước khi import mới)
+        </h3>
+        
+        <div className="flex flex-wrap items-center gap-3">
+          <select 
+            className="input border-red-300" 
+            value={sectionToDelete} 
+            onChange={(e) => setSectionToDelete(e.target.value)}
+          >
+            <option value="">-- Chọn Section cần xóa --</option>
+            <option value="LEANLINE_DC">LEANLINE DC</option>
+            <option value="LEANLINE_MOLDED">LEANLINE MOLDED</option>
+            <option value="MOLDING">MOLDING</option>
+            <option value="LAMINATION">LAMINATION</option>
+            <option value="PREFITTING">PREFITTING</option>
+            <option value="BÀO">BÀO</option>
+            <option value="TÁCH">TÁCH</option>
+            <option value="BAO">BAO (Không dấu)</option>
+            <option value="TACH">TACH (Không dấu)</option>
+          </select>
+
+          <button 
+            onClick={handleDeleteBySection} 
+            disabled={loading || !sectionToDelete}
+            className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded text-sm disabled:opacity-50"
+          >
+            {loading ? "Đang xử lý..." : `Xóa User ${sectionToDelete || ""}`}
+          </button>
+        </div>
+      </div>
+      {/* ---------------------------------- */}
+
       <div className="flex flex-wrap items-center gap-4 p-3 bg-gray-50 rounded">
-        {/* ===== THÊM NÚT UNDO/REDO ===== */}
         <div className="flex items-center gap-2">
             <button className="btn" onClick={undo} disabled={historyIndex <= 0}>
                 ↩ Hoàn tác
@@ -542,7 +576,6 @@ function AdminMain() {
                 Làm lại ↪
             </button>
         </div>
-        {/* ================================= */}
         
         <div className="flex items-center gap-2">
             <label className="font-medium">Lọc theo MSNV/Tên:</label>
