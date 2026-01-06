@@ -413,7 +413,7 @@ function ApproverModeLeanline({ section }) {
         approver_note: r.approver_note || null,
         p_score: rawScores.pScore,
         q_score: rawScores.qScore,
-        day_score: rawScores.day_score,
+        day_score: rawScores.kpi,
         overflow
       };
     });
