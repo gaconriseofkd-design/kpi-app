@@ -28,7 +28,8 @@ const MOLDED_COMPLIANCE_OPTIONS = [
   "In sai logo/ in sai phân đoạn",
   "Chặt in đóng gói sai yêu cầu đối với chỉ lệnh",
   "Lỗi in khác",
-  "Lỗi đóng gói khác"
+  "Lỗi đóng gói khác",
+  "Phàn nàn Khách hàng"
 ];
 
 const SEVERE_ERRORS = [
@@ -82,29 +83,36 @@ const getLeanlineMachines = (section) => LEANLINE_MACHINES[section] || LEANLINE_
  * Helper tính toán cho Leanline (hỗ trợ cả Molded Compliance)
  */
 function calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compliance, compliancePairs) {
-    let q = scoreByQuality(defects);
-    
-    // Logic tính điểm Tuân thủ mới cho LEANLINE_MOLDED
-    if (sec === "LEANLINE_MOLDED" && compliance && compliance !== "NONE") {
-        const pairs = Number(compliancePairs || 0);
-        if (pairs > 0) {
-            if (SEVERE_ERRORS.includes(compliance)) {
-                // Nhóm A: Nghiêm trọng (1 đôi -> 4đ, >=2 đôi -> 0đ)
-                if (pairs === 1) q = 4;
-                else q = 0;
-            } else {
-                // Nhóm B: Lỗi thường (làm tròn chẵn, trừ điểm)
-                const effPairs = Math.ceil(pairs / 2) * 2;
-                q = q - effPairs;
-            }
-        }
-    }
-    // Đảm bảo không âm
-    if (q < 0) q = 0;
+  let q = scoreByQuality(defects);
+  
+  // Logic tính điểm Tuân thủ mới cho LEANLINE_MOLDED
+  if (sec === "LEANLINE_MOLDED" && compliance && compliance !== "NONE") {
+      
+      // --- ĐOẠN MỚI: Xử lý riêng cho Phàn nàn Khách hàng ---
+      if (compliance === "Phàn nàn Khách hàng") {
+          q = q - 8; // Trừ thẳng 8 điểm
+      } 
+      // -----------------------------------------------------
+      else {
+          // Logic cũ (tính theo số đôi)
+          const pairs = Number(compliancePairs || 0);
+          if (pairs > 0) {
+              if (SEVERE_ERRORS.includes(compliance)) {
+                  if (pairs === 1) q = 4;
+                  else q = 0;
+              } else {
+                  const effPairs = Math.ceil(pairs / 2) * 2;
+                  q = q - effPairs;
+              }
+          }
+      }
+  }
+  // Đảm bảo không âm
+  if (q < 0) q = 0;
 
-    const p = scoreByProductivityLeanlineQuick(oe, rules, sec, line);
-    const total = q + p;
-    return { qScore: q, pScore: p, kpi: Math.min(15, total), rawTotal: total };
+  const p = scoreByProductivityLeanlineQuick(oe, rules, sec, line);
+  const total = q + p;
+  return { qScore: q, pScore: p, kpi: Math.min(15, total), rawTotal: total };
 }
 
 /* ===== Main ===== */
@@ -579,7 +587,7 @@ function ApproverModeLeanline({ section }) {
                     </select>
                 </div>
                 {/* INPUT SỐ ĐÔI VI PHẠM TRONG TEMPLATE */}
-                {section === "LEANLINE_MOLDED" && tplCompliance !== "NONE" && (
+                {section === "LEANLINE_MOLDED" && tplCompliance !== "NONE" && tplCompliance !== "Phàn nàn Khách hàng" && (
                     <div className="w-24">
                         <label className="text-red-600 font-bold">Số đôi</label>
                         <input 
@@ -676,18 +684,19 @@ function ApproverModeLeanline({ section }) {
                      </td>
                      
                      {/* INPUT SỐ ĐÔI TRONG BẢNG */}
-                     {section === "LEANLINE_MOLDED" && (
-                         <td className="p-2">
-                             {r.compliance !== "NONE" ? (
-                                 <input 
-                                    type="number" 
-                                    className="input w-16 p-1 border-red-300 text-red-600 bg-red-50 font-bold" 
-                                    value={r.compliance_pairs} 
-                                    onChange={e => updateRow(i, 'compliance_pairs', e.target.value)} 
-                                 />
-                             ) : <span className="text-gray-300 block text-center">-</span>}
-                         </td>
-                     )}
+                    {section === "LEANLINE_MOLDED" && (
+                        <td className="p-2">
+                            {/* Thêm điều kiện r.compliance !== "Phàn nàn Khách hàng" */}
+                            {r.compliance !== "NONE" && r.compliance !== "Phàn nàn Khách hàng" ? (
+                                <input 
+                                  type="number" 
+                                  className="input w-16 p-1 border-red-300 text-red-600 bg-red-50 font-bold" 
+                                  value={r.compliance_pairs} 
+                                  onChange={e => updateRow(i, 'compliance_pairs', e.target.value)} 
+                                />
+                            ) : <span className="text-gray-300 block text-center">-</span>}
+                        </td>
+                    )}
 
                      <td className="p-2 text-center text-gray-600">{r.p_score}</td>
                      <td className="p-2 text-center text-gray-600">{r.q_score}</td>
