@@ -717,9 +717,6 @@ function ApproverModeLeanline({ section }) {
   );
 }
 
-function ApproverModeMolding({ section }) {
-    return <div>Chức năng Molding (Cũ)</div>;
-}
 
 /* ===== (Hết Leanline) ===== */
 
