@@ -29,8 +29,7 @@ const MOLDED_COMPLIANCE_OPTIONS = [
   "Chặt in đóng gói sai yêu cầu đối với chỉ lệnh",
   "Lỗi in khác",
   "Lỗi đóng gói khác",
-  "Phàn nàn Khách hàng",
-  "Lỗi Tuân Thủ khác..."
+  "Phàn nàn Khách hàng"
 ];
 
 const SEVERE_ERRORS = [
@@ -81,53 +80,40 @@ const LEANLINE_MACHINES = {
 const getLeanlineMachines = (section) => LEANLINE_MACHINES[section] || LEANLINE_MACHINES.DEFAULT;
 
 /**
- * Helper tính toán cho Leanline (hỗ trợ cả Molded Compliance)
+ * Helper tính toán cho Leanline (hỗ trợ cả Molded Compliance & Phàn nàn KH)
  */
 function calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compliance, compliancePairs) {
-  let q = scoreByQuality(defects);
-  let deductionFromTotal = 0; // Biến chứa điểm trừ thẳng vào tổng
-  
-  // Logic tính điểm Tuân thủ mới cho LEANLINE_MOLDED
-  if (sec === "LEANLINE_MOLDED" && compliance && compliance !== "NONE") {
-      
-      if (compliance === "Phàn nàn Khách hàng") {
-          q = q - 8; // Trừ vào Q
-      } 
-      else if (compliance === "Lỗi Tuân Thủ khác...") {
-          deductionFromTotal = 2; // Đánh dấu trừ 2 điểm vào tổng
-      }
-      else {
-          // Logic cũ (tính theo số đôi) trừ vào Q
-          const pairs = Number(compliancePairs || 0);
-          if (pairs > 0) {
-              if (SEVERE_ERRORS.includes(compliance)) {
-                  if (pairs === 1) q = 4;
-                  else q = 0;
-              } else {
-                  const effPairs = Math.ceil(pairs / 2) * 2;
-                  q = q - effPairs;
-              }
-          }
-      }
-  }
-  
-  // Đảm bảo Q không âm
-  if (q < 0) q = 0;
+    let q = scoreByQuality(defects);
+    
+    // Logic tính điểm Tuân thủ mới cho LEANLINE_MOLDED
+    if (sec === "LEANLINE_MOLDED" && compliance && compliance !== "NONE") {
+        
+        // 1. Nếu là Phàn nàn Khách hàng -> Trừ thẳng 8 điểm
+        if (compliance === "Phàn nàn Khách hàng") {
+            q = q - 8;
+        } 
+        // 2. Các lỗi khác -> Tính theo số đôi
+        else {
+            const pairs = Number(compliancePairs || 0);
+            if (pairs > 0) {
+                if (SEVERE_ERRORS.includes(compliance)) {
+                    // Nhóm A: Nghiêm trọng (1 đôi -> 4đ, >=2 đôi -> 0đ)
+                    if (pairs === 1) q = 4;
+                    else q = 0;
+                } else {
+                    // Nhóm B: Lỗi thường (làm tròn chẵn, trừ điểm)
+                    const effPairs = Math.ceil(pairs / 2) * 2;
+                    q = q - effPairs;
+                }
+            }
+        }
+    }
+    // Đảm bảo không âm
+    if (q < 0) q = 0;
 
-  const p = scoreByProductivityLeanlineQuick(oe, rules, sec, line);
-  
-  // Tổng điểm = (P + Q) - Điểm trừ trực tiếp
-  let total = p + q - deductionFromTotal;
-  
-  // Đảm bảo Tổng không âm
-  if (total < 0) total = 0;
-
-  return { 
-      qScore: q, 
-      pScore: p, 
-      kpi: Math.min(15, total), // Max 15
-      rawTotal: total 
-  };
+    const p = scoreByProductivityLeanlineQuick(oe, rules, sec, line);
+    const total = q + p;
+    return { qScore: q, pScore: p, kpi: Math.min(15, total), rawTotal: total };
 }
 
 /* ===== Main ===== */
@@ -220,12 +206,10 @@ function ApproverModeLeanline({ section }) {
   // Filter theo line
   const [lineFilter, setLineFilter] = useState(""); 
 
-  // --- FIX: Định nghĩa biến availableLines ---
   const availableLines = useMemo(() => {
     const lines = new Set(searchResults.map(w => w.line).filter(Boolean));
     return Array.from(lines).sort();
   }, [searchResults]);
-  // ------------------------------------------
   
   const filteredSearchResults = useMemo(() => {
       if (!lineFilter) return searchResults;
@@ -377,8 +361,10 @@ function ApproverModeLeanline({ section }) {
       let r = { ...r0 };
       if (["compliance", "line", "shift", "work_date", "approver_note"].includes(key)) {
           r[key] = val;
-          // Nếu đổi lỗi thành NONE, reset số đôi về 0
-          if (key === "compliance" && val === "NONE") r.compliance_pairs = 0;
+          // Nếu đổi lỗi thành NONE hoặc Phàn nàn KH -> Reset số đôi về 0
+          if (key === "compliance" && (val === "NONE" || val === "Phàn nàn Khách hàng")) {
+              r.compliance_pairs = 0;
+          }
       } else {
           r[key] = toNum(val, 0);
       }
@@ -425,9 +411,9 @@ function ApproverModeLeanline({ section }) {
         oe: r.oe,
         defects: r.defects,
         
-        // Thêm trường compliance_pairs vào DB (Nếu đã chạy lệnh SQL)
         compliance_code: r.compliance,
-        compliance_pairs: (section === "LEANLINE_MOLDED") ? toNum(r.compliance_pairs) : 0,
+        // Chỉ lưu compliance_pairs nếu không phải Phàn nàn KH và có giá trị
+        compliance_pairs: (section === "LEANLINE_MOLDED" && r.compliance !== "Phàn nàn Khách hàng") ? toNum(r.compliance_pairs) : 0,
         
         section,
         status: "approved",
@@ -436,7 +422,7 @@ function ApproverModeLeanline({ section }) {
         approver_note: r.approver_note || null,
         p_score: rawScores.pScore,
         q_score: rawScores.qScore,
-        day_score: rawScores.kpi,
+        day_score: rawScores.day_score,
         overflow
       };
     });
@@ -496,14 +482,12 @@ function ApproverModeLeanline({ section }) {
                     <div className="w-1/2 p-4 border rounded bg-gray-50 flex flex-col h-[500px]">
                         <div className="flex justify-between items-center mb-2">
                             <h3 className="font-bold text-gray-700">Kết quả tìm kiếm ({filteredSearchResults.length})</h3>
-                            {/* Filter Line */}
                             <select 
                                 className="input text-sm py-1 px-2 w-32" 
                                 value={lineFilter} 
                                 onChange={(e) => setLineFilter(e.target.value)}
                             >
                                 <option value="">Tất cả Line</option>
-                                {/* Dùng biến availableLines đã định nghĩa */}
                                 {availableLines && availableLines.filter(l => l).map(l => (
                                     <option key={l} value={l}>{l}</option>
                                 ))}
@@ -602,11 +586,7 @@ function ApproverModeLeanline({ section }) {
                     </select>
                 </div>
                 {/* INPUT SỐ ĐÔI VI PHẠM TRONG TEMPLATE */}
-                {section === "LEANLINE_MOLDED" 
-                    && tplCompliance !== "NONE" 
-                    && tplCompliance !== "Phàn nàn Khách hàng" 
-                    && tplCompliance !== "Lỗi Tuân Thủ khác..." // <--- THÊM ĐIỀU KIỆN NÀY
-                    && (
+                {section === "LEANLINE_MOLDED" && tplCompliance !== "NONE" && tplCompliance !== "Phàn nàn Khách hàng" && (
                     <div className="w-24">
                         <label className="text-red-600 font-bold">Số đôi</label>
                         <input 
@@ -703,21 +683,18 @@ function ApproverModeLeanline({ section }) {
                      </td>
                      
                      {/* INPUT SỐ ĐÔI TRONG BẢNG */}
-                      {section === "LEANLINE_MOLDED" && (
-                          <td className="p-2">
-                              {r.compliance !== "NONE" 
-                              && r.compliance !== "Phàn nàn Khách hàng" 
-                              && r.compliance !== "Lỗi Tuân Thủ khác..." // <--- THÊM ĐIỀU KIỆN NÀY
-                              ? (
-                                  <input 
+                     {section === "LEANLINE_MOLDED" && (
+                         <td className="p-2">
+                             {r.compliance !== "NONE" && r.compliance !== "Phàn nàn Khách hàng" ? (
+                                 <input 
                                     type="number" 
                                     className="input w-16 p-1 border-red-300 text-red-600 bg-red-50 font-bold" 
                                     value={r.compliance_pairs} 
                                     onChange={e => updateRow(i, 'compliance_pairs', e.target.value)} 
-                                  />
-                              ) : <span className="text-gray-300 block text-center">-</span>}
-                          </td>
-                      )}
+                                 />
+                             ) : <span className="text-gray-300 block text-center">-</span>}
+                         </td>
+                     )}
 
                      <td className="p-2 text-center text-gray-600">{r.p_score}</td>
                      <td className="p-2 text-center text-gray-600">{r.q_score}</td>
