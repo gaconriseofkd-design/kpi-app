@@ -29,7 +29,8 @@ const MOLDED_COMPLIANCE_OPTIONS = [
   "Chặt in đóng gói sai yêu cầu đối với chỉ lệnh",
   "Lỗi in khác",
   "Lỗi đóng gói khác",
-  "Phàn nàn Khách hàng"
+  "Phàn nàn Khách hàng",
+  "Vi phạm Tuân thủ khác..." // <--- Lỗi thứ 11
 ];
 
 const SEVERE_ERRORS = [
@@ -80,7 +81,7 @@ const LEANLINE_MACHINES = {
 const getLeanlineMachines = (section) => LEANLINE_MACHINES[section] || LEANLINE_MACHINES.DEFAULT;
 
 /**
- * Helper tính toán cho Leanline (hỗ trợ cả Molded Compliance & Phàn nàn KH)
+ * Helper tính toán cho Leanline (Cập nhật logic Phàn nàn KH & Vi phạm khác)
  */
 function calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compliance, compliancePairs) {
     let q = scoreByQuality(defects);
@@ -88,11 +89,15 @@ function calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compliance,
     // Logic tính điểm Tuân thủ mới cho LEANLINE_MOLDED
     if (sec === "LEANLINE_MOLDED" && compliance && compliance !== "NONE") {
         
-        // 1. Nếu là Phàn nàn Khách hàng -> Trừ thẳng 8 điểm
+        // 1. Phàn nàn Khách hàng -> Trừ 8 điểm
         if (compliance === "Phàn nàn Khách hàng") {
             q = q - 8;
         } 
-        // 2. Các lỗi khác -> Tính theo số đôi
+        // 2. Vi phạm Tuân thủ khác -> Trừ 2 điểm
+        else if (compliance === "Vi phạm Tuân thủ khác...") {
+            q = q - 2;
+        }
+        // 3. Các lỗi còn lại -> Tính theo số đôi
         else {
             const pairs = Number(compliancePairs || 0);
             if (pairs > 0) {
@@ -334,7 +339,7 @@ function ApproverModeLeanline({ section }) {
           oe: toNum(tplOE), defects: toNum(tplDefects), 
           
           compliance: tplCompliance,
-          compliance_pairs: toNum(tplCompliancePairs), // Lưu số đôi
+          compliance_pairs: toNum(tplCompliancePairs), 
           
           q_score: scores.qScore,
           p_score: scores.pScore, total_score: scores.kpi, 
@@ -361,8 +366,8 @@ function ApproverModeLeanline({ section }) {
       let r = { ...r0 };
       if (["compliance", "line", "shift", "work_date", "approver_note"].includes(key)) {
           r[key] = val;
-          // Nếu đổi lỗi thành NONE hoặc Phàn nàn KH -> Reset số đôi về 0
-          if (key === "compliance" && (val === "NONE" || val === "Phàn nàn Khách hàng")) {
+          // Nếu lỗi là NONE, Phàn nàn KH hoặc Vi phạm khác -> Reset số đôi về 0
+          if (key === "compliance" && (val === "NONE" || val === "Phàn nàn Khách hàng" || val === "Vi phạm Tuân thủ khác...")) {
               r.compliance_pairs = 0;
           }
       } else {
@@ -412,8 +417,8 @@ function ApproverModeLeanline({ section }) {
         defects: r.defects,
         
         compliance_code: r.compliance,
-        // Chỉ lưu compliance_pairs nếu không phải Phàn nàn KH và có giá trị
-        compliance_pairs: (section === "LEANLINE_MOLDED" && r.compliance !== "Phàn nàn Khách hàng") ? toNum(r.compliance_pairs) : 0,
+        // Chỉ lưu compliance_pairs nếu KHÔNG phải các lỗi đặc biệt
+        compliance_pairs: (section === "LEANLINE_MOLDED" && r.compliance !== "Phàn nàn Khách hàng" && r.compliance !== "Vi phạm Tuân thủ khác...") ? toNum(r.compliance_pairs) : 0,
         
         section,
         status: "approved",
@@ -586,7 +591,7 @@ function ApproverModeLeanline({ section }) {
                     </select>
                 </div>
                 {/* INPUT SỐ ĐÔI VI PHẠM TRONG TEMPLATE */}
-                {section === "LEANLINE_MOLDED" && tplCompliance !== "NONE" && tplCompliance !== "Phàn nàn Khách hàng" && (
+                {section === "LEANLINE_MOLDED" && tplCompliance !== "NONE" && tplCompliance !== "Phàn nàn Khách hàng" && tplCompliance !== "Vi phạm Tuân thủ khác..." && (
                     <div className="w-24">
                         <label className="text-red-600 font-bold">Số đôi</label>
                         <input 
@@ -685,7 +690,8 @@ function ApproverModeLeanline({ section }) {
                      {/* INPUT SỐ ĐÔI TRONG BẢNG */}
                      {section === "LEANLINE_MOLDED" && (
                          <td className="p-2">
-                             {r.compliance !== "NONE" && r.compliance !== "Phàn nàn Khách hàng" ? (
+                             {/* Ẩn nếu là Phàn nàn KH hoặc Vi phạm khác */}
+                             {r.compliance !== "NONE" && r.compliance !== "Phàn nàn Khách hàng" && r.compliance !== "Vi phạm Tuân thủ khác..." ? (
                                  <input 
                                     type="number" 
                                     className="input w-16 p-1 border-red-300 text-red-600 bg-red-50 font-bold" 
@@ -709,6 +715,10 @@ function ApproverModeLeanline({ section }) {
       )}
     </>
   );
+}
+
+function ApproverModeMolding({ section }) {
+    return <div>Chức năng Molding (Cũ)</div>;
 }
 
 /* ===== (Hết Leanline) ===== */
