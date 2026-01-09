@@ -118,7 +118,9 @@ function calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compliance,
 
     const p = scoreByProductivityLeanlineQuick(oe, rules, sec, line);
     const total = q + p;
-    return { qScore: q, pScore: p, kpi: Math.min(15, total), rawTotal: total };
+    
+    // !!! QUAN TRỌNG: Trả về key là "day_score" để đồng nhất với database !!!
+    return { qScore: q, pScore: p, day_score: Math.min(15, total), rawTotal: total };
 }
 
 /* ===== Main ===== */
@@ -231,7 +233,7 @@ function ApproverModeLeanline({ section }) {
   
   const tplQ = previewScores.qScore;
   const tplP = previewScores.pScore;
-  const tplKPI = previewScores.kpi;
+  const tplKPI = previewScores.day_score; // Đồng bộ dùng day_score
   
   const totalPages = Math.max(1, Math.ceil(reviewRows.length / pageSize));
   const pageRows = useMemo(
@@ -338,7 +340,9 @@ function ApproverModeLeanline({ section }) {
           compliance_pairs: toNum(tplCompliancePairs), 
           
           q_score: scores.qScore,
-          p_score: scores.pScore, total_score: scores.kpi, 
+          p_score: scores.pScore, 
+          total_score: scores.day_score, // Đồng bộ dùng day_score
+          
           status: "approved",
           approver_note: "",
       }
@@ -369,7 +373,8 @@ function ApproverModeLeanline({ section }) {
       }
 
       const scores = calculateScores(r.oe, r.defects, prodRules, section, r.line, r.compliance, r.compliance_pairs);
-      arr[i] = { ...r, q_score: scores.qScore, p_score: scores.pScore, total_score: scores.kpi };
+      // Đồng bộ tên biến day_score
+      arr[i] = { ...r, q_score: scores.qScore, p_score: scores.pScore, total_score: scores.day_score };
       return arr;
     });
   }
@@ -393,7 +398,6 @@ function ApproverModeLeanline({ section }) {
     const now = new Date().toISOString();
     
     const payload = list.map((r) => {
-      // Calculate final scores
       const rawScores = calculateScores(r.oe, r.defects, prodRules, section, r.line, r.compliance, r.compliance_pairs);
       const overflow = Math.max(0, rawScores.rawTotal - 15);
       return {
@@ -419,8 +423,10 @@ function ApproverModeLeanline({ section }) {
         approver_note: r.approver_note || null,
         p_score: rawScores.pScore,
         q_score: rawScores.qScore,
-        // FIX LỖI NULL: Dùng rawScores.kpi thay vì rawScores.day_score
-        day_score: rawScores.kpi,
+        
+        // CHỖ QUAN TRỌNG NHẤT: Lấy đúng key day_score
+        day_score: rawScores.day_score ?? 0, 
+        
         overflow
       };
     });
@@ -709,9 +715,6 @@ function ApproverModeLeanline({ section }) {
     </>
   );
 }
-
-
-/* ===== (Hết Leanline) ===== */
 
 
 
