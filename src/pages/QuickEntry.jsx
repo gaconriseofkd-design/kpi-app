@@ -30,7 +30,7 @@ const MOLDED_COMPLIANCE_OPTIONS = [
   "Lỗi in khác",
   "Lỗi đóng gói khác",
   "Phàn nàn Khách hàng",
-  "Vi phạm Tuân thủ khác..." // <--- Lỗi thứ 11
+  "Vi phạm Tuân thủ khác..."
 ];
 
 const SEVERE_ERRORS = [
@@ -81,7 +81,7 @@ const LEANLINE_MACHINES = {
 const getLeanlineMachines = (section) => LEANLINE_MACHINES[section] || LEANLINE_MACHINES.DEFAULT;
 
 /**
- * Helper tính toán cho Leanline (Cập nhật logic Phàn nàn KH & Vi phạm khác)
+ * Helper tính toán cho Leanline
  */
 function calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compliance, compliancePairs) {
     let q = scoreByQuality(defects);
@@ -198,7 +198,6 @@ function ApproverModeLeanline({ section }) {
   const [tplDefects, setTplDefects] = useState(0);
   const [tplCompliance, setTplCompliance] = useState("NONE");
   
-  // STATE MỚI: Số đôi vi phạm
   const [tplCompliancePairs, setTplCompliancePairs] = useState(0); 
 
   const currentMachines = useMemo(() => getLeanlineMachines(section), [section]);
@@ -208,7 +207,6 @@ function ApproverModeLeanline({ section }) {
   const [page, setPage] = useState(1);
   const selectedIds = useMemo(() => new Set(selectedWorkers.map(w => w.msnv)), [selectedWorkers]);
   
-  // Filter theo line
   const [lineFilter, setLineFilter] = useState(""); 
 
   const availableLines = useMemo(() => {
@@ -221,7 +219,7 @@ function ApproverModeLeanline({ section }) {
       return searchResults.filter(w => w.line === lineFilter);
   }, [searchResults, lineFilter]);
 
-  // Hàm tính điểm (Wrapper)
+  // Wrapper
   const calculateScores = (oe, defects, rules, sec, line, compl, pairs) => {
     return calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compl, pairs);
   };
@@ -310,13 +308,11 @@ function ApproverModeLeanline({ section }) {
   function removeWorker(msnv) {
     setSelectedWorkers(prev => prev.filter(w => w.msnv !== msnv));
   }
-  
   function removeAllWorkers() {
     if (window.confirm(`Bạn có chắc muốn xoá ${selectedWorkers.length} nhân viên đã chọn?`)) {
       setSelectedWorkers([]);
     }
   }
-  
   function proceedToTemplate() {
     const requiredRulesLoaded = section === "LEANLINE_MOLDED" || prodRules.length > 0;
     if (!requiredRulesLoaded) return alert("Không thể tải Rule tính điểm sản lượng. Vui lòng thử lại.");
@@ -362,11 +358,9 @@ function ApproverModeLeanline({ section }) {
       const arr = old.slice();
       const r0 = arr[i] || {};
       
-      // Cập nhật giá trị
       let r = { ...r0 };
       if (["compliance", "line", "shift", "work_date", "approver_note"].includes(key)) {
           r[key] = val;
-          // Nếu lỗi là NONE, Phàn nàn KH hoặc Vi phạm khác -> Reset số đôi về 0
           if (key === "compliance" && (val === "NONE" || val === "Phàn nàn Khách hàng" || val === "Vi phạm Tuân thủ khác...")) {
               r.compliance_pairs = 0;
           }
@@ -374,7 +368,6 @@ function ApproverModeLeanline({ section }) {
           r[key] = toNum(val, 0);
       }
 
-      // Tính lại điểm
       const scores = calculateScores(r.oe, r.defects, prodRules, section, r.line, r.compliance, r.compliance_pairs);
       arr[i] = { ...r, q_score: scores.qScore, p_score: scores.pScore, total_score: scores.kpi };
       return arr;
@@ -400,7 +393,7 @@ function ApproverModeLeanline({ section }) {
     const now = new Date().toISOString();
     
     const payload = list.map((r) => {
-      // Tính lại lần cuối
+      // Calculate final scores
       const rawScores = calculateScores(r.oe, r.defects, prodRules, section, r.line, r.compliance, r.compliance_pairs);
       const overflow = Math.max(0, rawScores.rawTotal - 15);
       return {
@@ -417,7 +410,6 @@ function ApproverModeLeanline({ section }) {
         defects: r.defects,
         
         compliance_code: r.compliance,
-        // Chỉ lưu compliance_pairs nếu KHÔNG phải các lỗi đặc biệt
         compliance_pairs: (section === "LEANLINE_MOLDED" && r.compliance !== "Phàn nàn Khách hàng" && r.compliance !== "Vi phạm Tuân thủ khác...") ? toNum(r.compliance_pairs) : 0,
         
         section,
@@ -427,7 +419,8 @@ function ApproverModeLeanline({ section }) {
         approver_note: r.approver_note || null,
         p_score: rawScores.pScore,
         q_score: rawScores.qScore,
-        day_score: rawScores.day_score,
+        // FIX LỖI NULL: Dùng rawScores.kpi thay vì rawScores.day_score
+        day_score: rawScores.kpi,
         overflow
       };
     });
