@@ -75,8 +75,8 @@ function scoreByProductivityLeanlineQuick(oe, allRules, section, line) {
 }
 const LEANLINE_MACHINES = {
     "LEANLINE_MOLDED": ["M1", "M2", "M3", "M4", "M5"],
-    "LEANLINE_DC": ["LEAN-D1", "LEAN-D2", "LEAN-D3", "LEAN-D4", "LEAN-H1", "LEAN-H2"],
-    "DEFAULT": ["LEAN-D1", "LEAN-D2", "LEAN-D3", "LEAN-D4", "LEAN-H1", "LEAN-H2"],
+    "LEANLINE_DC": ["D1A", "D1B", "D2A", "D2B", "D3A", "D3B","D4A","D4B", "H1", "H2"],
+    "DEFAULT": ["D1A", "D1B", "D2A", "D2B", "D3A", "D3B","D4A","D4B", "H1", "H2"],
 }
 const getLeanlineMachines = (section) => LEANLINE_MACHINES[section] || LEANLINE_MACHINES.DEFAULT;
 
@@ -316,9 +316,18 @@ function ApproverModeLeanline({ section }) {
     }
   }
   function proceedToTemplate() {
-    const requiredRulesLoaded = section === "LEANLINE_MOLDED" || prodRules.length > 0;
+      const requiredRulesLoaded = section === "LEANLINE_MOLDED" || prodRules.length > 0;
     if (!requiredRulesLoaded) return alert("Không thể tải Rule tính điểm sản lượng. Vui lòng thử lại.");
     if (!selectedWorkers.length) return alert("Chưa chọn nhân viên nào.");
+    
+    // THÊM LOGIC NÀY: Nếu có đang chọn lọc theo Line, gán nó làm máy mặc định cho trang sau
+    if (lineFilter) {
+      setTplLine(lineFilter);
+    } else {
+      // Nếu không chọn line nào ở bộ lọc, mặc định là D1A
+      setTplLine("D1A");
+    }
+
     setStep(2);
   }
 
