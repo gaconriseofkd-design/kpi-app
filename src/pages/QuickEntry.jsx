@@ -53,7 +53,17 @@ const getMoldedCategoryFromLine = (line) => {
     if (line === 'M1' || line === 'M2' || line === 'M3') return 'M1 M2 M3 %OE';
     return ''; 
 };
-
+const extractStandardLine = (rawLine) => {
+  if (!rawLine) return "D1A"; // Mặc định nếu không có dữ liệu
+  const standardLines = ["D1A", "D1B", "D2A", "D2B", "D3A", "D3B", "H1A", "H1B", "H2A", "H2B"];
+  
+  // Tìm mã chuẩn xuất hiện trong chuỗi bất kỳ
+  const found = standardLines.find(std => 
+    rawLine.toUpperCase().includes(std.toUpperCase())
+  );
+  
+  return found || "D1A"; // Nếu không tìm thấy mã nào khớp, mặc định về D1A
+};
 function scoreByProductivityLeanlineQuick(oe, allRules, section, line) {
   const val = Number(oe ?? 0);
   let rules = [];
@@ -315,17 +325,20 @@ function ApproverModeLeanline({ section }) {
       setSelectedWorkers([]);
     }
   }
+  
   function proceedToTemplate() {
-      const requiredRulesLoaded = section === "LEANLINE_MOLDED" || prodRules.length > 0;
+    const requiredRulesLoaded = section === "LEANLINE_MOLDED" || prodRules.length > 0;
     if (!requiredRulesLoaded) return alert("Không thể tải Rule tính điểm sản lượng. Vui lòng thử lại.");
     if (!selectedWorkers.length) return alert("Chưa chọn nhân viên nào.");
-    
-    // THÊM LOGIC NÀY: Nếu có đang chọn lọc theo Line, gán nó làm máy mặc định cho trang sau
+
+    // LOGIC MỚI:
     if (lineFilter) {
-      setTplLine(lineFilter);
+        // Ví dụ: lineFilter đang là "Line D3A", hàm này sẽ trả về "D3A"
+        const standardLine = extractStandardLine(lineFilter);
+        setTplLine(standardLine);
     } else {
-      // Nếu không chọn line nào ở bộ lọc, mặc định là D1A
-      setTplLine("D1A");
+        // Nếu không chọn line cụ thể ở bộ lọc, mặc định là D1A
+        setTplLine("D1A");
     }
 
     setStep(2);
