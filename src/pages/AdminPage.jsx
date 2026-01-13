@@ -72,9 +72,8 @@ function AdminMain() {
   const pageSize = 15;
   const [page, setPage] = useState(1);
 
-  // --- STATE MỚI CHO CHỨC NĂNG XÓA THEO SECTION ---
+  // --- STATE CHO CHỨC NĂNG XÓA THEO SECTION ---
   const [sectionToDelete, setSectionToDelete] = useState("");
-  // ------------------------------------------------
   
   // === START HISTORY MANAGEMENT LOGIC ===
   const pushRowsToHistory = useCallback((newRows) => {
@@ -463,7 +462,6 @@ function AdminMain() {
     }
   };
 
-  // --- HÀM MỚI: XÓA THEO SECTION ---
   const handleDeleteBySection = async () => {
     if (!sectionToDelete) {
       return alert("Vui lòng chọn Section cần xóa!");
@@ -493,7 +491,13 @@ function AdminMain() {
       setLoading(false);
     }
   };
-  // ----------------------------------
+
+  // --- LOGIC LẤY DANH SÁCH SECTION ĐỘNG ---
+  const dynamicSections = useMemo(() => {
+    // Lấy tất cả giá trị cột section từ biến 'rows', loại bỏ giá trị trống và trùng lặp
+    const sections = rows.map(u => u.section).filter(Boolean);
+    return Array.from(new Set(sections)).sort();
+  }, [rows]);
 
   return (
     <div className="p-4 space-y-4">
@@ -532,7 +536,7 @@ function AdminMain() {
         {loading && <span className="text-gray-500">Đang tải/xử lý...</span>}
       </div>
       
-      {/* --- GIAO DIỆN XÓA THEO SECTION --- */}
+      {/* --- GIAO DIỆN XÓA THEO SECTION (ĐÃ CẬP NHẬT ĐỘNG) --- */}
       <div className="bg-red-50 border border-red-200 p-4 rounded-lg mt-2 shadow-sm">
         <h3 className="text-red-700 font-bold text-sm mb-2 flex items-center gap-2">
           ⚠️ Xóa danh sách theo Section (Dọn dẹp trước khi import mới)
@@ -545,15 +549,9 @@ function AdminMain() {
             onChange={(e) => setSectionToDelete(e.target.value)}
           >
             <option value="">-- Chọn Section cần xóa --</option>
-            <option value="LEANLINE_DC">LEANLINE DC</option>
-            <option value="LEANLINE_MOLDED">LEANLINE MOLDED</option>
-            <option value="MOLDING">MOLDING</option>
-            <option value="LAMINATION">LAMINATION</option>
-            <option value="PREFITTING">PREFITTING</option>
-            <option value="BÀO">BÀO</option>
-            <option value="TÁCH">TÁCH</option>
-            <option value="BAO">BAO (Không dấu)</option>
-            <option value="TACH">TACH (Không dấu)</option>
+            {dynamicSections.map((sec) => (
+                <option key={sec} value={sec}>{sec}</option>
+            ))}
           </select>
 
           <button 
@@ -565,7 +563,6 @@ function AdminMain() {
           </button>
         </div>
       </div>
-      {/* ---------------------------------- */}
 
       <div className="flex flex-wrap items-center gap-4 p-3 bg-gray-50 rounded">
         <div className="flex items-center gap-2">
