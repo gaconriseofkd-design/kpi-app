@@ -188,158 +188,222 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
 
    APPROVER MODE — LEANLINE (FIXED: PHÂN CHIA LINE THEO SECTION)
    ====================================================================== */
+/* ======================================================================
+   APPROVER MODE — LEANLINE (FIXED: PHÂN TÁCH LINE THEO SECTION & TỰ ĐỘNG GÁN)
+   ====================================================================== */
 function ApproverModeLeanline({ section }) {
-  const [step, setStep] = useState(1);
-  const [prodRules, setProdRules] = useState([]); 
-  const [approverIdInput, setApproverIdInput] = useState("");
-  const [searchInput, setSearchInput] = useState("");
-  const [loadingSearch, setLoadingSearch] = useState(false);
-  const [searchResults, setSearchResults] = useState([]);
-  const [selectedWorkers, setSelectedWorkers] = useState([]);
-  const [searchAllSections, setSearchAllSections] = useState(false);
+    const [step, setStep] = useState(1);
+    const [prodRules, setProdRules] = useState([]); 
+    const [approverIdInput, setApproverIdInput] = useState("");
+    const [searchInput, setSearchInput] = useState("");
+    const [loadingSearch, setLoadingSearch] = useState(false);
+    const [searchResults, setSearchResults] = useState([]);
+    const [selectedWorkers, setSelectedWorkers] = useState([]);
+    const [searchAllSections, setSearchAllSections] = useState(false);
+    
+    const [reviewRows, setReviewRows] = useState([]);
+    const [selReview, setSelReview] = useState(() => new Set());
+    
+    // States Template
+    const today = new Date().toISOString().slice(0, 10);
+    const [tplDate, setTplDate] = useState(today);
+    const [tplShift, setTplShift] = useState("Ca 1");
+    const [tplWorkHours, setTplWorkHours] = useState(8);
+    const [tplStopHours, setTplStopHours] = useState(0);
+    const [tplOE, setTplOE] = useState(100); 
+    const [tplDefects, setTplDefects] = useState(0);
+    const [tplCompliance, setTplCompliance] = useState("NONE");
+    const [tplCompliancePairs, setTplCompliancePairs] = useState(0); 
   
-  const [reviewRows, setReviewRows] = useState([]);
-  const [selReview, setSelReview] = useState(() => new Set());
+    // 1. TỰ ĐỘNG LẤY DANH SÁCH LINE CHUẨN DỰA TRÊN SECTION
+    const currentMachines = useMemo(() => {
+      if (section === "LEANLINE_MOLDED") {
+        return ["M1", "M2", "M3", "M4", "M5", "H1"];
+      }
+      // Cho LEANLINE_DC
+      return ["D1A", "D1B", "D2A", "D2B", "D3A", "D3B", "D4A", "D4B", "H1", "H2"];
+    }, [section]);
   
-  // States Template
-  const today = new Date().toISOString().slice(0, 10);
-  const [tplDate, setTplDate] = useState(today);
-  const [tplShift, setTplShift] = useState("Ca 1");
-  const [tplWorkHours, setTplWorkHours] = useState(8);
-  const [tplStopHours, setTplStopHours] = useState(0);
-  const [tplOE, setTplOE] = useState(100); 
-  const [tplDefects, setTplDefects] = useState(0);
-  const [tplCompliance, setTplCompliance] = useState("NONE");
-  const [tplCompliancePairs, setTplCompliancePairs] = useState(0); 
-
-  // 1. ĐỊNH NGHĨA DANH SÁCH LINE THEO SECTION
-  const currentMachines = useMemo(() => {
-    if (section === "LEANLINE_MOLDED") {
-      return ["M1", "M2", "M3", "M4", "M5", "H1"];
-    }
-    // Mặc định cho LEANLINE_DC
-    return ["D1A", "D1B", "D2A", "D2B", "D3A", "D3B", "H1", "H2"];
-  }, [section]);
-
-  // Khởi tạo tplLine dựa trên danh sách máy của section đó
-  const [tplLine, setTplLine] = useState(currentMachines[0]); 
-
-  // Cập nhật lại tplLine khi đổi Section
-  useEffect(() => {
-    setTplLine(currentMachines[0]);
-  }, [currentMachines]);
-
-  const [saving, setSaving] = useState(false);
-  const pageSize = 50;
-  const [page, setPage] = useState(1);
-  const selectedIds = useMemo(() => new Set(selectedWorkers.map(w => w.msnv)), [selectedWorkers]);
+    // Khởi tạo tplLine (mặc định lấy máy đầu tiên của section đó)
+    const [tplLine, setTplLine] = useState(currentMachines[0]); 
   
-  const [lineFilter, setLineFilter] = useState(""); 
-
-  // 2. HÀM TÁCH LINE CHUẨN (Hỗ trợ cả M và D/H)
-  const extractStandardLine = (rawLine) => {
-    if (!rawLine) return currentMachines[0];
-    const upperRaw = rawLine.toUpperCase();
+    // Cập nhật lại tplLine khi người dùng chuyển đổi Section bên ngoài
+    useEffect(() => {
+      setTplLine(currentMachines[0]);
+    }, [currentMachines]);
+  
+    const [saving, setSaving] = useState(false);
+    const pageSize = 50;
+    const [page, setPage] = useState(1);
+    const selectedIds = useMemo(() => new Set(selectedWorkers.map(w => w.msnv)), [selectedWorkers]);
+    
+    const [lineFilter, setLineFilter] = useState(""); 
+  
+    // 2. HÀM TÁCH LINE CHUẨN THÔNG MINH (Dùng danh sách máy của section hiện tại)
+    const extractStandardLine = (rawLine) => {
+      if (!rawLine) return currentMachines[0];
+      const upperRaw = rawLine.toUpperCase();
+      // Tìm xem trong chuỗi "Lean-D3A" có chứa mã chuẩn "D3A" nào của section hiện tại không
+      const found = currentMachines.find(std => upperRaw.includes(std.toUpperCase()));
+      return found || currentMachines[0];
+    };
+  
+    const availableLines = useMemo(() => {
+      const lines = new Set(searchResults.map(w => w.line).filter(Boolean));
+      return Array.from(lines).sort();
+    }, [searchResults]);
+    
+    const filteredSearchResults = useMemo(() => {
+        if (!lineFilter) return searchResults;
+        return searchResults.filter(w => w.line === lineFilter);
+    }, [searchResults, lineFilter]);
+  
+    const calculateScores = (oe, defects, rules, sec, line, compl, pairs) => {
+      return calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compl, pairs);
+    };
+  
+    const previewScores = useMemo(() => 
+      calculateScores(tplOE, tplDefects, prodRules, section, tplLine, tplCompliance, tplCompliancePairs), 
+      [tplOE, tplDefects, prodRules, section, tplLine, tplCompliance, tplCompliancePairs]
+    );
+    
+    const tplQ = previewScores.qScore;
+    const tplP = previewScores.pScore;
+    const tplKPI = previewScores.day_score; 
+    
+    const totalPages = Math.max(1, Math.ceil(reviewRows.length / pageSize));
+    const pageRows = useMemo(
+      () => reviewRows.slice((page - 1) * pageSize, page * pageSize),
+      [reviewRows, page]
+    );
+  
+    useEffect(() => {
+      let cancelled = false;
+      (async () => {
+        const { data, error } = await supabase
+          .from("kpi_rule_productivity")
+          .select("*").eq("active", true).eq("section", section)
+          .order("threshold", { ascending: false });
+        if (!cancelled) {
+          if (error) console.error("Load rules error:", error);
+          setProdRules(data || []);
+        }
+      })();
+      return () => { cancelled = true; };
+    }, [section]);
+  
+    useEffect(() => setPage(1), [reviewRows.length]);
+  
+    async function searchByApprover() {
+      const q = approverIdInput.trim();
+      if (!q) return alert("Nhập Tên hoặc MSNV người duyệt.");
+      setLoadingSearch(true);
+      let query;
+      if (isNaN(Number(q))) {
+        query = supabase.from("users")
+          .select("msnv, full_name, section, line, approver_msnv, approver_name")
+          .ilike("approver_name", `%${q}%`);
+      } else {
+        query = supabase.from("users")
+          .select("msnv, full_name, section, line, approver_msnv, approver_name")
+          .eq("approver_msnv", q);
+      }
+      if (!searchAllSections) {
+        query = query.eq("section", section); 
+      }
+      const { data, error } = await query.limit(1000); 
+      setLoadingSearch(false);
+      if (error) return alert("Lỗi tải nhân viên: " + error.message);
+      setSearchResults(data || []); 
+      setSearchInput("");
+      setLineFilter(""); 
+    }
+  
+    async function searchGlobal() {
+      const q = searchInput.trim();
+      if (!q) return alert("Nhập Tên hoặc MSNV nhân viên.");
+      setLoadingSearch(true);
+      let query;
+      if (isNaN(Number(q))) {
+        query = supabase.from("users").select("msnv, full_name, section, line, approver_msnv, approver_name").ilike("full_name", `%${q}%`); 
+      } else {
+        query = supabase.from("users").select("msnv, full_name, section, line, approver_msnv, approver_name").eq("msnv", q);
+      }
+      if (!searchAllSections) {
+        query = query.eq("section", section);
+      }
+      const { data, error } = await query.limit(50);
+      setLoadingSearch(false);
+      if (error) return alert("Lỗi tìm nhân viên: " + error.message);
+      setSearchResults(data || []);
+      setApproverIdInput("");
+      setLineFilter("");
+    }
+  
+    function addWorker(worker) {
+      setSelectedWorkers(prev => {
+        if (prev.find(w => w.msnv === worker.msnv)) return prev; 
+        return [worker, ...prev]; 
+      });
+    }
+  
+    function removeWorker(msnv) {
+      setSelectedWorkers(prev => prev.filter(w => w.msnv !== msnv));
+    }
+  
+    function removeAllWorkers() {
+      if (window.confirm(`Bạn có chắc muốn xoá ${selectedWorkers.length} nhân viên đã chọn?`)) {
+        setSelectedWorkers([]);
+      }
+    }
+    
+    // 3. CHỈNH SỬA LOGIC TIẾP TỤC: Gán line máy chuẩn xác
+    function proceedToTemplate() {
+      const requiredRulesLoaded = section === "LEANLINE_MOLDED" || prodRules.length > 0;
+      if (!requiredRulesLoaded) return alert("Không thể tải Rule tính điểm sản lượng.");
+      if (!selectedWorkers.length) return alert("Chưa chọn nhân viên nào.");
+  
+      if (lineFilter) {
+          // Tách mã chuẩn dựa trên danh sách máy của section HIỆN TẠI
+          const standardLine = extractStandardLine(lineFilter);
+          setTplLine(standardLine);
+      } else {
+          // Nếu không chọn line, lấy máy mặc định đầu tiên của section đó
+          setTplLine(currentMachines[0]);
+      }
+  
+      setStep(2);
+    }
+  
+    function buildReviewRows() {
+      if (tplDate > today) return alert("Không thể chọn ngày trong tương lai.");
+      if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
+      if (!selectedWorkers.length) return alert("Chưa chọn nhân viên.");
+      
+      const rows = selectedWorkers.map((w) => {
+        const scores = calculateScores(tplOE, tplDefects, prodRules, section, tplLine, tplCompliance, tplCompliancePairs);
+        return {
+            section, work_date: tplDate, shift: tplShift, msnv: w.msnv, hoten: w.full_name,
+            approver_id: w.approver_msnv || approverIdInput, approver_name: w.approver_name,
+            line: tplLine,
+            work_hours: toNum(tplWorkHours), downtime: toNum(tplStopHours),
+            oe: toNum(tplOE), defects: toNum(tplDefects), 
+            compliance: tplCompliance,
+            compliance_pairs: toNum(tplCompliancePairs), 
+            q_score: scores.qScore,
+            p_score: scores.pScore, 
+            total_score: scores.day_score,
+            status: "approved",
+            approver_note: "",
+        }
+      });
+      setReviewRows(rows);
+      setSelReview(new Set(rows.map((_, i) => i)));
+      setStep(3);
+      setPage(1);
+    }
+  
     
-    // Tìm mã chuẩn trong chuỗi database (ví dụ: "Line M1" -> tìm thấy "M1")
-    const found = currentMachines.find(std => upperRaw.includes(std.toUpperCase()));
-    
-    return found || currentMachines[0];
-  };
-
-  const availableLines = useMemo(() => {
-    const lines = new Set(searchResults.map(w => w.line).filter(Boolean));
-    return Array.from(lines).sort();
-  }, [searchResults]);
-  
-  const filteredSearchResults = useMemo(() => {
-      if (!lineFilter) return searchResults;
-      return searchResults.filter(w => w.line === lineFilter);
-  }, [searchResults, lineFilter]);
-
-  const calculateScores = (oe, defects, rules, sec, line, compl, pairs) => {
-    return calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compl, pairs);
-  };
-
-  const previewScores = useMemo(() => 
-    calculateScores(tplOE, tplDefects, prodRules, section, tplLine, tplCompliance, tplCompliancePairs), 
-    [tplOE, tplDefects, prodRules, section, tplLine, tplCompliance, tplCompliancePairs]
-  );
-  
-  const tplQ = previewScores.qScore;
-  const tplP = previewScores.pScore;
-  const tplKPI = previewScores.day_score; 
-  
-  const totalPages = Math.max(1, Math.ceil(reviewRows.length / pageSize));
-  const pageRows = useMemo(
-    () => reviewRows.slice((page - 1) * pageSize, page * pageSize),
-    [reviewRows, page]
-  );
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const { data, error } = await supabase
-        .from("kpi_rule_productivity")
-        .select("*").eq("active", true).eq("section", section)
-        .order("threshold", { ascending: false });
-      if (!cancelled) {
-        if (error) console.error("Load rules error:", error);
-        setProdRules(data || []);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [section]);
-
-  useEffect(() => setPage(1), [reviewRows.length]);
-
-  // ... (Giữ nguyên các hàm searchByApprover, searchGlobal, addWorker, removeWorker)
-
-  // 3. CẬP NHẬT LOGIC CHUYỂN BƯỚC (Gán Line chuẩn theo Section)
-  function proceedToTemplate() {
-    const requiredRulesLoaded = section === "LEANLINE_MOLDED" || prodRules.length > 0;
-    if (!requiredRulesLoaded) return alert("Không thể tải Rule tính điểm sản lượng.");
-    if (!selectedWorkers.length) return alert("Chưa chọn nhân viên nào.");
-
-    if (lineFilter) {
-        // Tự động trích xuất Line dựa trên danh sách máy của Section hiện tại
-        const standardLine = extractStandardLine(lineFilter);
-        setTplLine(standardLine);
-    } else {
-        setTplLine(currentMachines[0]);
-    }
-
-    setStep(2);
-  }
-
-  function buildReviewRows() {
-    if (tplDate > today) return alert("Không thể chọn ngày trong tương lai.");
-    if (!selectedWorkers.length) return alert("Chưa chọn nhân viên.");
-    
-    const rows = selectedWorkers.map((w) => {
-      const scores = calculateScores(tplOE, tplDefects, prodRules, section, tplLine, tplCompliance, tplCompliancePairs);
-      return {
-          section, work_date: tplDate, shift: tplShift, msnv: w.msnv, hoten: w.full_name,
-          approver_id: w.approver_msnv || approverIdInput, approver_name: w.approver_name,
-          line: tplLine,
-          work_hours: toNum(tplWorkHours), downtime: toNum(tplStopHours),
-          oe: toNum(tplOE), defects: toNum(tplDefects), 
-          compliance: tplCompliance,
-          compliance_pairs: toNum(tplCompliancePairs), 
-          q_score: scores.qScore,
-          p_score: scores.pScore, 
-          total_score: scores.day_score,
-          status: "approved",
-          approver_note: "",
-      }
-    });
-    setReviewRows(rows);
-    setSelReview(new Set(rows.map((_, i) => i)));
-    setStep(3);
-    setPage(1);
-  }
-
-  // ... (Phần return giao diện bên dưới giữ nguyên)
 
   function updateRow(i, key, val) {
     if (key === "work_date" && val > today) {
