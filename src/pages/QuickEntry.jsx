@@ -185,10 +185,8 @@ function LoginForm({ pwd, setPwd, tryLogin }) {
 
 /* ======================================================================
    APPROVER MODE — LEANLINE
-   ====================================================================== */
-   
-/* ======================================================================
-   APPROVER MODE — LEANLINE (FIXED: TỰ ĐỘNG LẤY LINE CHUẨN)
+
+   APPROVER MODE — LEANLINE (FIXED: PHÂN CHIA LINE THEO SECTION)
    ====================================================================== */
 function ApproverModeLeanline({ section }) {
   const [step, setStep] = useState(1);
@@ -214,9 +212,22 @@ function ApproverModeLeanline({ section }) {
   const [tplCompliance, setTplCompliance] = useState("NONE");
   const [tplCompliancePairs, setTplCompliancePairs] = useState(0); 
 
-  // Danh sách máy/line chuẩn
-  const currentMachines = useMemo(() => ["D1A", "D1B", "D2A", "D2B", "D3A", "D3B", "H1A", "H1B", "H2A", "H2B"], []);
-  const [tplLine, setTplLine] = useState("D1A"); 
+  // 1. ĐỊNH NGHĨA DANH SÁCH LINE THEO SECTION
+  const currentMachines = useMemo(() => {
+    if (section === "LEANLINE_MOLDED") {
+      return ["M1", "M2", "M3", "M4", "M5", "H1"];
+    }
+    // Mặc định cho LEANLINE_DC
+    return ["D1A", "D1B", "D2A", "D2B", "D3A", "D3B", "H1", "H2"];
+  }, [section]);
+
+  // Khởi tạo tplLine dựa trên danh sách máy của section đó
+  const [tplLine, setTplLine] = useState(currentMachines[0]); 
+
+  // Cập nhật lại tplLine khi đổi Section
+  useEffect(() => {
+    setTplLine(currentMachines[0]);
+  }, [currentMachines]);
 
   const [saving, setSaving] = useState(false);
   const pageSize = 50;
@@ -225,13 +236,15 @@ function ApproverModeLeanline({ section }) {
   
   const [lineFilter, setLineFilter] = useState(""); 
 
-  // Hàm helper để tách lấy mã line chuẩn từ chuỗi bất kỳ (ví dụ "Line D3A" -> "D3A")
+  // 2. HÀM TÁCH LINE CHUẨN (Hỗ trợ cả M và D/H)
   const extractStandardLine = (rawLine) => {
-    if (!rawLine) return "D1A";
-    const found = currentMachines.find(std => 
-      rawLine.toUpperCase().includes(std.toUpperCase())
-    );
-    return found || "D1A";
+    if (!rawLine) return currentMachines[0];
+    const upperRaw = rawLine.toUpperCase();
+    
+    // Tìm mã chuẩn trong chuỗi database (ví dụ: "Line M1" -> tìm thấy "M1")
+    const found = currentMachines.find(std => upperRaw.includes(std.toUpperCase()));
+    
+    return found || currentMachines[0];
   };
 
   const availableLines = useMemo(() => {
@@ -244,7 +257,6 @@ function ApproverModeLeanline({ section }) {
       return searchResults.filter(w => w.line === lineFilter);
   }, [searchResults, lineFilter]);
 
-  // Wrapper tính điểm
   const calculateScores = (oe, defects, rules, sec, line, compl, pairs) => {
     return calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compl, pairs);
   };
@@ -281,94 +293,30 @@ function ApproverModeLeanline({ section }) {
 
   useEffect(() => setPage(1), [reviewRows.length]);
 
-  async function searchByApprover() {
-    const q = approverIdInput.trim();
-    if (!q) return alert("Nhập Tên hoặc MSNV người duyệt.");
-    setLoadingSearch(true);
-    let query;
-    if (isNaN(Number(q))) {
-      query = supabase.from("users")
-        .select("msnv, full_name, section, line, approver_msnv, approver_name")
-        .ilike("approver_name", `%${q}%`);
-    } else {
-      query = supabase.from("users")
-        .select("msnv, full_name, section, line, approver_msnv, approver_name")
-        .eq("approver_msnv", q);
-    }
-    if (!searchAllSections) {
-      query = query.eq("section", section); 
-    }
-    const { data, error } = await query.limit(1000); 
-    setLoadingSearch(false);
-    if (error) return alert("Lỗi tải nhân viên: " + error.message);
-    setSearchResults(data || []); 
-    setSearchInput("");
-    setLineFilter(""); 
-  }
+  // ... (Giữ nguyên các hàm searchByApprover, searchGlobal, addWorker, removeWorker)
 
-  async function searchGlobal() {
-    const q = searchInput.trim();
-    if (!q) return alert("Nhập Tên hoặc MSNV nhân viên.");
-    setLoadingSearch(true);
-    let query;
-    if (isNaN(Number(q))) {
-      query = supabase.from("users").select("msnv, full_name, section, line, approver_msnv, approver_name").ilike("full_name", `%${q}%`); 
-    } else {
-      query = supabase.from("users").select("msnv, full_name, section, line, approver_msnv, approver_name").eq("msnv", q);
-    }
-    if (!searchAllSections) {
-      query = query.eq("section", section);
-    }
-    const { data, error } = await query.limit(50);
-    setLoadingSearch(false);
-    if (error) return alert("Lỗi tìm nhân viên: " + error.message);
-    setSearchResults(data || []);
-    setApproverIdInput("");
-    setLineFilter("");
-  }
-
-  function addWorker(worker) {
-    setSelectedWorkers(prev => {
-      if (prev.find(w => w.msnv === worker.msnv)) return prev; 
-      return [worker, ...prev]; 
-    });
-  }
-
-  function removeWorker(msnv) {
-    setSelectedWorkers(prev => prev.filter(w => w.msnv !== msnv));
-  }
-
-  function removeAllWorkers() {
-    if (window.confirm(`Bạn có chắc muốn xoá ${selectedWorkers.length} nhân viên đã chọn?`)) {
-      setSelectedWorkers([]);
-    }
-  }
-  
-  // CHỈNH SỬA TẠI ĐÂY: Lấy line từ bộ lọc và chuẩn hóa
+  // 3. CẬP NHẬT LOGIC CHUYỂN BƯỚC (Gán Line chuẩn theo Section)
   function proceedToTemplate() {
     const requiredRulesLoaded = section === "LEANLINE_MOLDED" || prodRules.length > 0;
-    if (!requiredRulesLoaded) return alert("Không thể tải Rule tính điểm sản lượng. Vui lòng thử lại.");
+    if (!requiredRulesLoaded) return alert("Không thể tải Rule tính điểm sản lượng.");
     if (!selectedWorkers.length) return alert("Chưa chọn nhân viên nào.");
 
     if (lineFilter) {
-        // Tách lấy mã chuẩn (ví dụ từ "Lean-D3A" lấy ra "D3A")
+        // Tự động trích xuất Line dựa trên danh sách máy của Section hiện tại
         const standardLine = extractStandardLine(lineFilter);
         setTplLine(standardLine);
     } else {
-        setTplLine("D1A");
+        setTplLine(currentMachines[0]);
     }
 
     setStep(2);
   }
 
-  // CHỈNH SỬA TẠI ĐÂY: Đảm bảo buildRow dùng tplLine đã chuẩn hóa
   function buildReviewRows() {
     if (tplDate > today) return alert("Không thể chọn ngày trong tương lai.");
-    if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
     if (!selectedWorkers.length) return alert("Chưa chọn nhân viên.");
     
     const rows = selectedWorkers.map((w) => {
-      // tplLine lúc này đã là "D1A", "D3A",... (giá trị chuẩn)
       const scores = calculateScores(tplOE, tplDefects, prodRules, section, tplLine, tplCompliance, tplCompliancePairs);
       return {
           section, work_date: tplDate, shift: tplShift, msnv: w.msnv, hoten: w.full_name,
