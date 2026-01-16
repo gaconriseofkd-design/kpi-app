@@ -49,8 +49,9 @@ const toNum = (v, d = 0) => {
 };
 
 const getMoldedCategoryFromLine = (line) => {
-    if (line === 'M4' || line === 'M5') return 'M4 & M5 %OE';
-    if (line === 'M1' || line === 'M2' || line === 'M3') return 'M1 M2 M3 %OE';
+  if (line === 'M4' || line === 'M5' || line === 'H1') return 'M4 & M5 %OE';
+    
+  if (line === 'M1' || line === 'M2' || line === 'M3') return 'M1 M2 M3 %OE';
     return ''; 
 };
 // 1. Hàm helper để tách lấy mã line chuẩn (Đặt bên ngoài Component)
