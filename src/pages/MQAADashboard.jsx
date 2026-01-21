@@ -45,6 +45,7 @@ export default function MQAADashboard() {
 
         const worksheet = XLSX.utils.json_to_sheet(logs.map(log => ({
             "Ngày": log.date,
+            "Bộ phận": log.section,
             "Ca": log.shift,
             "Line": log.line,
             "Leader": log.leader_name,
@@ -102,6 +103,7 @@ export default function MQAADashboard() {
                         <thead>
                             <tr className="bg-gray-50 border-b border-gray-200">
                                 <th className="p-4 font-semibold text-gray-600">Ngày</th>
+                                <th className="p-4 font-semibold text-gray-600">Bộ phận</th>
                                 <th className="p-4 font-semibold text-gray-600">Ca</th>
                                 <th className="p-4 font-semibold text-gray-600">Line</th>
                                 <th className="p-4 font-semibold text-gray-600">Leader</th>
@@ -115,16 +117,17 @@ export default function MQAADashboard() {
                         <tbody>
                             {loading ? (
                                 <tr>
-                                    <td colSpan="11" className="p-10 text-center text-gray-400">Đang tải dữ liệu...</td>
+                                    <td colSpan="12" className="p-10 text-center text-gray-400">Đang tải dữ liệu...</td>
                                 </tr>
                             ) : logs.length === 0 ? (
                                 <tr>
-                                    <td colSpan="11" className="p-10 text-center text-gray-400">Không tìm thấy bản ghi nào.</td>
+                                    <td colSpan="12" className="p-10 text-center text-gray-400">Không tìm thấy bản ghi nào.</td>
                                 </tr>
                             ) : (
                                 logs.map((log) => (
                                     <tr key={log.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
                                         <td className="p-4">{log.date}</td>
+                                        <td className="p-4 font-medium text-blue-600">{log.section}</td>
                                         <td className="p-4 text-indigo-700 font-bold">{log.shift}</td>
                                         <td className="p-4 font-medium">{log.line}</td>
                                         <td className="p-4 text-gray-600">{log.leader_name}</td>

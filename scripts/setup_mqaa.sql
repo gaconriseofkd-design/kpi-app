@@ -2,6 +2,7 @@
 create table if not exists mqaa_logs (
   id uuid primary key default uuid_generate_v4(),
   date date not null default current_date,
+  section text, -- Thêm cột Bộ phận (Leanline_DC, Leanline_Molded, Lamination, Prefitting, Molding, Hàng bù)
   shift text, -- Thêm cột Ca (Ca 1, Ca 2, Ca 3, Ca HC)
   line text not null,
   worker_id text, -- Chuyển thành nullable

@@ -11,26 +11,28 @@ $ZALO_GROUP_NAME = "MQAA" # Nhập tên chính xác của nhóm Zalo
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# Các nhãn tiếng Việt (Dùng Unicode Escape để tránh lỗi font)
-$L_HEADER = [System.Text.Encoding]::Unicode.GetString((0x42, 0x00, 0x11, 0x1E, 0x4F, 0x00, 0x20, 0x00, 0x43, 0x00, 0xC1, 0x00, 0x4F, 0x00, 0x20, 0x00, 0x56, 0x00, 0x49, 0x00, 0x20, 0x00, 0x50, 0x00, 0x48, 0x00, 0x10, 0x1E, 0x4D, 0x00, 0x20, 0x00, 0x4D, 0x00, 0x51, 0x00, 0x41, 0x00, 0x41, 0x00)) # *BÁO CÁO VI PHẠM MQAA*
-$L_DATE = [System.Text.Encoding]::Unicode.GetString((0x4E, 0x00, 0x67, 0x00, 0xE0, 0x00, 0x79, 0x00, 0x3A, 0x00)) # Ngày:
-$L_SHIFT = [System.Text.Encoding]::Unicode.GetString((0x43, 0x00, 0x61, 0x00, 0x3A, 0x00)) # Ca:
-$L_LINE = [System.Text.Encoding]::Unicode.GetString((0x4C, 0x00, 0x69, 0x00, 0x6E, 0x00, 0x65, 0x00, 0x3A, 0x00)) # Line:
-$L_LEADER = [System.Text.Encoding]::Unicode.GetString((0x4C, 0x00, 0x65, 0x00, 0x61, 0x00, 0x64, 0x00, 0x65, 0x00, 0x72, 0x00, 0x3A, 0x00)) # Leader:
-$L_WORKER = [System.Text.Encoding]::Unicode.GetString((0x4E, 0x00, 0x67, 0x00, 0x1B, 0x01, 0x1D, 0x1E, 0x69, 0x00, 0x20, 0x00, 0x76, 0x00, 0x69, 0x00, 0x20, 0x00, 0x70, 0x00, 0x68, 0x00, 0x10, 0x1E, 0x6D, 0x00, 0x3A, 0x00)) # Người vi phạm:
-$L_ISSUE_TYPE = [System.Text.Encoding]::Unicode.GetString((0x4C, 0x00, 0x6F, 0x00, 0x10, 0x1E, 0x69, 0x00, 0x20, 0x00, 0x76, 0x00, 0x69, 0x00, 0x20, 0x00, 0x70, 0x00, 0x68, 0x00, 0x10, 0x1E, 0x6D, 0x00, 0x3A, 0x00)) # Loại vi phạm:
-$L_DESCRIPTION = [System.Text.Encoding]::Unicode.GetString((0x4D, 0x00, 0xF4, 0x00, 0x20, 0x00, 0x74, 0x00, 0x1EA3, 0x00, 0x3A, 0x00)) # Mô tả:
+# Các nhãn tiếng Việt (Dùng [char] để tránh lỗi encoding và overflow)
+$L_HEADER = "*B" + [char]0x00C1 + "O C" + [char]0x00C1 + "O VI PH" + [char]0x1EA0 + "M MQAA*" # *BÁO CÁO VI PHẠM MQAA*
+$L_DATE = "Ng" + [char]0x00E0 + "y:"                                        # Ngày:
+$L_SECTION = "B" + [char]0x1ED9 + " ph" + [char]0x1EAD + "n:"             # Bộ phận:
+$L_SHIFT = "Ca:"                                                          # Ca:
+$L_LINE = "Line:"                                                         # Line:
+$L_LEADER = "Leader:"                                                     # Leader:
+$L_WORKER = "Ng" + [char]0x01B0 + [char]0x1EDD + "i vi ph" + [char]0x1EA1 + "m:" # Người vi phạm:
+$L_ISSUE_TYPE = "Lo" + [char]0x1EA1 + "i vi ph" + [char]0x1EA1 + "m:"       # Loại vi phạm:
+$L_DESCRIPTION = "M" + [char]0x00F4 + " t" + [char]0x1EA3 + ":"             # Mô tả:
 $L_SEP = "-----------------------"
 
-# Emojis
-$E_ANNOUNCE = [System.Text.Encoding]::Unicode.GetString((0x40, 0xD8, 0x22, 0xDC)) # 📢
-$E_CALENDAR = [System.Text.Encoding]::Unicode.GetString((0x4D, 0xD8, 0x13, 0xDDD)) # 🗓
-$E_CLOCK = [System.Text.Encoding]::Unicode.GetString((0x42, 0xD8, 0x30, 0x23)) # ⏰
-$E_LOCATION = [System.Text.Encoding]::Unicode.GetString((0x4D, 0xD8, 0xCD, 0xDCD)) # 📍
-$E_OFFICER = [System.Text.Encoding]::Unicode.GetString((0x4E, 0xD8, 0x6E, 0xDC6E)) # 👮
-$E_USER = [System.Text.Encoding]::Unicode.GetString((0x44, 0xD8, 0x10, 0xDC)) # 👤 
-$E_WARNING = [System.Text.Encoding]::Unicode.GetString((0x40, 0xD8, 0x20, 0x26)) # ⚠️
-$E_NOTE = [System.Text.Encoding]::Unicode.GetString((0x4D, 0xD8, 0x1D, 0xDDC)) # 📝
+# Emojis (Surrogate pairs for wide characters)
+$E_ANNOUNCE = [char]0xD83D + [char]0xDCE2                                  # 📢
+$E_CALENDAR = [char]0xD83D + [char]0xDDD3                                  # 🗓
+$E_SECTION = [char]0xD83D + [char]0xDCC1                                   # 📂
+$E_CLOCK = [char]0x23F0                                                   # ⏰
+$E_LOCATION = [char]0xD83D + [char]0xDCCD                                  # 📍
+$E_OFFICER = [char]0xD83D + [char]0xDC6E                                  # 👮
+$E_USER = [char]0xD83D + [char]0xDC64                                     # 👤
+$E_WARNING = [char]0x26A0 + [char]0xFE0F                                  # ⚠️
+$E_NOTE = [char]0xD83D + [char]0xDCDD                                     # 📝
 
 function Send-ZaloMessage {
     param([string]$text)
@@ -199,6 +201,7 @@ public static extern bool IsIconic(IntPtr hWnd);
         $msg = $E_ANNOUNCE + " " + $L_HEADER + "`n" +
         $L_SEP + "`n" +
         $E_CALENDAR + " " + $L_DATE + " " + $log.date + "`n" +
+        $E_SECTION + " " + $L_SECTION + " " + $log.section + "`n" +
         $E_CLOCK + " " + $L_SHIFT + " " + $log.shift + "`n" +
         $E_LOCATION + " " + $L_LINE + " " + $log.line + "`n" +
         $E_OFFICER + " " + $L_LEADER + " " + $log.leader_name + "`n"

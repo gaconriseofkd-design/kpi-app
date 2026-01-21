@@ -15,11 +15,12 @@ export default function MQAAEntry() {
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().slice(0, 10),
+    section: "Leanline_DC", // Thêm Bộ phận
     line: "",
     shift: getDefaultShift(),
     leader_name: "",
-    worker_id: "", // MSNV
-    worker_name: "", // Họ tên
+    worker_id: "",
+    worker_name: "",
     issue_type: "Tuân thủ",
     description: "",
     images: [],
@@ -217,6 +218,7 @@ export default function MQAAEntry() {
       const { error: insertError } = await supabase.from("mqaa_logs").insert([
         {
           date: formData.date,
+          section: formData.section,
           shift: formData.shift,
           line: formData.line,
           leader_name: formData.leader_name,
@@ -334,6 +336,7 @@ export default function MQAAEntry() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* Row 1: Date & Section */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1">
             <label className="text-sm font-semibold text-gray-700">Ngày vi phạm</label>
@@ -347,6 +350,27 @@ export default function MQAAEntry() {
             />
           </div>
           <div className="space-y-1">
+            <label className="text-sm font-semibold text-gray-700">Bộ phận (Section)</label>
+            <select
+              name="section"
+              value={formData.section}
+              onChange={handleInputChange}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+              required
+            >
+              <option value="Leanline_DC">Leanline_DC</option>
+              <option value="Leanline_Molded">Leanline_Molded</option>
+              <option value="Lamination">Lamination</option>
+              <option value="Prefitting">Prefitting</option>
+              <option value="Molding">Molding</option>
+              <option value="Hàng bù">Hàng bù</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Row 2: Line & Shift */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
             <label className="text-sm font-semibold text-gray-700">Line/Vị trí</label>
             <input
               type="text"
@@ -358,9 +382,6 @@ export default function MQAAEntry() {
               required
             />
           </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1">
             <label className="text-sm font-semibold text-gray-700">Ca làm việc</label>
             <select
@@ -376,20 +397,23 @@ export default function MQAAEntry() {
               <option value="Ca HC">Ca HC (Hành chính)</option>
             </select>
           </div>
-          <div className="space-y-1">
-            <label className="text-sm font-semibold text-gray-700">Tên Leader phụ trách</label>
-            <input
-              type="text"
-              name="leader_name"
-              value={formData.leader_name}
-              onChange={handleInputChange}
-              placeholder="Nhập tên Leader"
-              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-              required
-            />
-          </div>
         </div>
 
+        {/* Row 3: Leader */}
+        <div className="space-y-1">
+          <label className="text-sm font-semibold text-gray-700">Tên Leader phụ trách</label>
+          <input
+            type="text"
+            name="leader_name"
+            value={formData.leader_name}
+            onChange={handleInputChange}
+            placeholder="Nhập tên Leader"
+            className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+            required
+          />
+        </div>
+
+        {/* Row 4: MSNV & Name (Optional) */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1">
             <label className="text-sm font-semibold text-gray-700 text-gray-500">MSNV Vi phạm (Nếu có)</label>
@@ -415,6 +439,7 @@ export default function MQAAEntry() {
           </div>
         </div>
 
+        {/* Row 5: Issue Type */}
         <div className="space-y-1">
           <label className="text-sm font-semibold text-gray-700">Loại vấn đề</label>
           <select
@@ -429,6 +454,7 @@ export default function MQAAEntry() {
           </select>
         </div>
 
+        {/* Row 6: Description */}
         <div className="space-y-1">
           <label className="text-sm font-semibold text-gray-700">Mô tả chi tiết</label>
           <textarea
