@@ -54,6 +54,62 @@ export default function MQAAEntry() {
     }
   };
 
+  // Image compression helper
+  const compressImage = (file) => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = (event) => {
+        const img = new Image();
+        img.src = event.target.result;
+        img.onload = () => {
+          const canvas = document.createElement("canvas");
+          const MAX_WIDTH = 1200;
+          const MAX_HEIGHT = 1200;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, width, height);
+
+          // Convert to blob (JPG, quality 0.7 to 0.8)
+          canvas.toBlob(
+            (blob) => {
+              if (blob) {
+                // Return a new File object
+                const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, "") + ".jpg", {
+                  type: "image/jpeg",
+                  lastModified: Date.now(),
+                });
+                resolve(compressedFile);
+              } else {
+                reject(new Error("Canvas toBlob failed"));
+              }
+            },
+            "image/jpeg",
+            0.75
+          );
+        };
+        img.onerror = (err) => reject(err);
+      };
+      reader.onerror = (err) => reject(err);
+    });
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -64,18 +120,20 @@ export default function MQAAEntry() {
 
       // 1. Upload image if exists
       if (formData.image) {
-        const fileExt = formData.image.name.split(".").pop();
-        const fileName = `${Date.now()}.${fileExt}`;
+        // Compress image before upload
+        const compressedFile = await compressImage(formData.image);
+
+        const fileName = `${Date.now()}.jpg`;
         const { data: uploadData, error: uploadError } = await supabase.storage
           .from("mqaa-images")
-          .upload(fileName, formData.image);
+          .upload(fileName, compressedFile);
 
         if (uploadError) throw uploadError;
 
         const { data: publicUrlData } = supabase.storage
           .from("mqaa-images")
           .getPublicUrl(fileName);
-        
+
         image_url = publicUrlData.publicUrl;
       }
 
@@ -117,7 +175,7 @@ export default function MQAAEntry() {
   return (
     <div className="max-w-2xl mx-auto p-4 sm:p-6 bg-white shadow-lg rounded-xl mt-6">
       <h2 className="text-2xl font-bold text-indigo-800 mb-6 border-b pb-2">MQAA - Ghi nhận Bất thường</h2>
-      
+
       {message.text && (
         <div className={`p-3 mb-4 rounded-lg text-sm font-medium ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
           {message.text}
