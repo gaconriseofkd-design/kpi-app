@@ -48,6 +48,8 @@ export default function MQAADashboard() {
             "Ca": log.shift,
             "Line": log.line,
             "Leader": log.leader_name,
+            "MSNV": log.worker_id || "",
+            "Họ tên": log.worker_name || "",
             "Loại": log.issue_type,
             "Mô tả": log.description,
             "Link ảnh": Array.isArray(log.image_url) ? log.image_url.join(", ") : log.image_url,
@@ -103,6 +105,7 @@ export default function MQAADashboard() {
                                 <th className="p-4 font-semibold text-gray-600">Ca</th>
                                 <th className="p-4 font-semibold text-gray-600">Line</th>
                                 <th className="p-4 font-semibold text-gray-600">Leader</th>
+                                <th className="p-4 font-semibold text-gray-600">Nhân viên</th>
                                 <th className="p-4 font-semibold text-gray-600">Loại</th>
                                 <th className="p-4 font-semibold text-gray-600">Mô tả</th>
                                 <th className="p-4 font-semibold text-gray-600 text-center">Ảnh</th>
@@ -111,11 +114,11 @@ export default function MQAADashboard() {
                         <tbody>
                             {loading ? (
                                 <tr>
-                                    <td colSpan="7" className="p-10 text-center text-gray-400">Đang tải dữ liệu...</td>
+                                    <td colSpan="10" className="p-10 text-center text-gray-400">Đang tải dữ liệu...</td>
                                 </tr>
                             ) : logs.length === 0 ? (
                                 <tr>
-                                    <td colSpan="7" className="p-10 text-center text-gray-400">Không tìm thấy bản ghi nào.</td>
+                                    <td colSpan="10" className="p-10 text-center text-gray-400">Không tìm thấy bản ghi nào.</td>
                                 </tr>
                             ) : (
                                 logs.map((log) => (
@@ -124,6 +127,16 @@ export default function MQAADashboard() {
                                         <td className="p-4 text-indigo-700 font-bold">{log.shift}</td>
                                         <td className="p-4 font-medium">{log.line}</td>
                                         <td className="p-4 text-gray-600">{log.leader_name}</td>
+                                        <td className="p-4">
+                                            {log.worker_name ? (
+                                                <>
+                                                    <div className="font-medium text-gray-900">{log.worker_name}</div>
+                                                    <div className="text-xs text-gray-500">{log.worker_id}</div>
+                                                </>
+                                            ) : (
+                                                <span className="text-gray-300 italic text-xs">Trống</span>
+                                            )}
+                                        </td>
                                         <td className="p-4">
                                             <span className={`px-2 py-1 rounded-full text-xs font-bold ${log.issue_type === 'Tuân thủ' ? 'bg-blue-100 text-blue-700' :
                                                 log.issue_type === 'Chất lượng' ? 'bg-orange-100 text-orange-700' :

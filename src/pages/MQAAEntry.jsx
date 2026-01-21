@@ -15,9 +15,11 @@ export default function MQAAEntry() {
 
   const [formData, setFormData] = useState({
     date: new Date().toISOString().slice(0, 10),
-    shift: getDefaultShift(), // Thêm Ca
     line: "",
-    leader_name: "", // Đổi thành nhập chính
+    shift: getDefaultShift(),
+    leader_name: "",
+    worker_id: "", // MSNV
+    worker_name: "", // Họ tên
     issue_type: "Tuân thủ",
     description: "",
     images: [],
@@ -69,6 +71,30 @@ export default function MQAAEntry() {
       alert("Sai mật khẩu!");
     }
   };
+
+  // Tự động tìm thông tin khi nhập MSNV (Nếu có)
+  useEffect(() => {
+    const fetchWorkerInfo = async () => {
+      if (formData.worker_id.length >= 4) {
+        const { data } = await supabase
+          .from("users")
+          .select("full_name, approver_name")
+          .eq("msnv", formData.worker_id)
+          .single();
+
+        if (data) {
+          setFormData((prev) => ({
+            ...prev,
+            worker_name: data.full_name,
+            leader_name: data.approver_name || prev.leader_name,
+          }));
+        }
+      }
+    };
+
+    const timer = setTimeout(fetchWorkerInfo, 500);
+    return () => clearTimeout(timer);
+  }, [formData.worker_id]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -194,9 +220,11 @@ export default function MQAAEntry() {
           shift: formData.shift,
           line: formData.line,
           leader_name: formData.leader_name,
+          worker_id: formData.worker_id || null,
+          worker_name: formData.worker_name || null,
           issue_type: formData.issue_type,
           description: formData.description,
-          image_url: image_urls, // Now sending an array
+          image_url: image_urls,
         },
       ]);
 
@@ -207,6 +235,8 @@ export default function MQAAEntry() {
       setFormData((prev) => ({
         ...prev,
         leader_name: "",
+        worker_id: "",
+        worker_name: "",
         description: "",
         images: [],
       }));
@@ -306,7 +336,7 @@ export default function MQAAEntry() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-sm font-semibold text-gray-700">Ngày</label>
+            <label className="text-sm font-semibold text-gray-700">Ngày vi phạm</label>
             <input
               type="date"
               name="date"
@@ -316,6 +346,21 @@ export default function MQAAEntry() {
               required
             />
           </div>
+          <div className="space-y-1">
+            <label className="text-sm font-semibold text-gray-700">Line/Vị trí</label>
+            <input
+              type="text"
+              name="line"
+              value={formData.line}
+              onChange={handleInputChange}
+              placeholder="Vd: D1A, M3..."
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+              required
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1">
             <label className="text-sm font-semibold text-gray-700">Ca làm việc</label>
             <select
@@ -331,23 +376,8 @@ export default function MQAAEntry() {
               <option value="Ca HC">Ca HC (Hành chính)</option>
             </select>
           </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-sm font-semibold text-gray-700">Line/Vị trí</label>
-            <input
-              type="text"
-              name="line"
-              value={formData.line}
-              onChange={handleInputChange}
-              placeholder="Vd: D1A, M3..."
-              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
-              required
-            />
-          </div>
-          <div className="space-y-1">
-            <label className="text-sm font-semibold text-gray-700">Leader phụ trách</label>
+            <label className="text-sm font-semibold text-gray-700">Tên Leader phụ trách</label>
             <input
               type="text"
               name="leader_name"
@@ -356,6 +386,31 @@ export default function MQAAEntry() {
               placeholder="Nhập tên Leader"
               className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
               required
+            />
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="text-sm font-semibold text-gray-700 text-gray-500">MSNV Vi phạm (Nếu có)</label>
+            <input
+              type="text"
+              name="worker_id"
+              value={formData.worker_id}
+              onChange={handleInputChange}
+              placeholder="Không bắt buộc"
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+            />
+          </div>
+          <div className="space-y-1">
+            <label className="text-sm font-semibold text-gray-700 text-gray-500">Họ tên nhân viên (Nếu có)</label>
+            <input
+              type="text"
+              name="worker_name"
+              value={formData.worker_name}
+              onChange={handleInputChange}
+              placeholder="Không bắt buộc"
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
             />
           </div>
         </div>

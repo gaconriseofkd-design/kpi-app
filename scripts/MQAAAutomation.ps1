@@ -17,6 +17,7 @@ $L_DATE = [System.Text.Encoding]::Unicode.GetString((0x4E, 0x00, 0x67, 0x00, 0xE
 $L_SHIFT = [System.Text.Encoding]::Unicode.GetString((0x43, 0x00, 0x61, 0x00, 0x3A, 0x00)) # Ca:
 $L_LINE = [System.Text.Encoding]::Unicode.GetString((0x4C, 0x00, 0x69, 0x00, 0x6E, 0x00, 0x65, 0x00, 0x3A, 0x00)) # Line:
 $L_LEADER = [System.Text.Encoding]::Unicode.GetString((0x4C, 0x00, 0x65, 0x00, 0x61, 0x00, 0x64, 0x00, 0x65, 0x00, 0x72, 0x00, 0x3A, 0x00)) # Leader:
+$L_WORKER = [System.Text.Encoding]::Unicode.GetString((0x4E, 0x00, 0x67, 0x00, 0x1B, 0x01, 0x1D, 0x1E, 0x69, 0x00, 0x20, 0x00, 0x76, 0x00, 0x69, 0x00, 0x20, 0x00, 0x70, 0x00, 0x68, 0x00, 0x10, 0x1E, 0x6D, 0x00, 0x3A, 0x00)) # Người vi phạm:
 $L_ISSUE_TYPE = [System.Text.Encoding]::Unicode.GetString((0x4C, 0x00, 0x6F, 0x00, 0x10, 0x1E, 0x69, 0x00, 0x20, 0x00, 0x76, 0x00, 0x69, 0x00, 0x20, 0x00, 0x70, 0x00, 0x68, 0x00, 0x10, 0x1E, 0x6D, 0x00, 0x3A, 0x00)) # Loại vi phạm:
 $L_DESCRIPTION = [System.Text.Encoding]::Unicode.GetString((0x4D, 0x00, 0xF4, 0x00, 0x20, 0x00, 0x74, 0x00, 0x1EA3, 0x00, 0x3A, 0x00)) # Mô tả:
 $L_SEP = "-----------------------"
@@ -27,6 +28,7 @@ $E_CALENDAR = [System.Text.Encoding]::Unicode.GetString((0x4D, 0xD8, 0x13, 0xDDD
 $E_CLOCK = [System.Text.Encoding]::Unicode.GetString((0x42, 0xD8, 0x30, 0x23)) # ⏰
 $E_LOCATION = [System.Text.Encoding]::Unicode.GetString((0x4D, 0xD8, 0xCD, 0xDCD)) # 📍
 $E_OFFICER = [System.Text.Encoding]::Unicode.GetString((0x4E, 0xD8, 0x6E, 0xDC6E)) # 👮
+$E_USER = [System.Text.Encoding]::Unicode.GetString((0x44, 0xD8, 0x10, 0xDC)) # 👤 
 $E_WARNING = [System.Text.Encoding]::Unicode.GetString((0x40, 0xD8, 0x20, 0x26)) # ⚠️
 $E_NOTE = [System.Text.Encoding]::Unicode.GetString((0x4D, 0xD8, 0x1D, 0xDDC)) # 📝
 
@@ -199,8 +201,14 @@ public static extern bool IsIconic(IntPtr hWnd);
         $E_CALENDAR + " " + $L_DATE + " " + $log.date + "`n" +
         $E_CLOCK + " " + $L_SHIFT + " " + $log.shift + "`n" +
         $E_LOCATION + " " + $L_LINE + " " + $log.line + "`n" +
-        $E_OFFICER + " " + $L_LEADER + " " + $log.leader_name + "`n" +
-        $E_WARNING + " " + $L_ISSUE_TYPE + " " + $log.issue_type + "`n" +
+        $E_OFFICER + " " + $L_LEADER + " " + $log.leader_name + "`n"
+        
+        # Thêm thông tin nhân viên nếu có
+        if ($log.worker_name) {
+            $msg += $E_USER + " " + $L_WORKER + " " + $log.worker_name + " (" + $log.worker_id + ")`n"
+        }
+        
+        $msg += $E_WARNING + " " + $L_ISSUE_TYPE + " " + $log.issue_type + "`n" +
         $E_NOTE + " " + $L_DESCRIPTION + " " + $log.description + "`n" +
         $L_SEP
         
