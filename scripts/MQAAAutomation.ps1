@@ -2,11 +2,12 @@
 # Script tự động gửi báo cáo MQAA vào Zalo mỗi sáng 08:00
 
 # === Cấu hình (Người dùng thay đổi tại đây) ===
-$SUPABASE_URL = "YOUR_SUPABASE_URL"
-$SUPABASE_KEY = "YOUR_SUPABASE_ANON_KEY"
-$ZALO_GROUP_NAME = "NHÓM BÁO CÁO MQAA" # Nhập tên chính xác của nhóm Zalo
+$SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
+$SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0"
+$ZALO_GROUP_NAME = "MQAA" # Nhập tên chính xác của nhóm Zalo
 
 # === Khởi tạo thư viện ===
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
@@ -41,6 +42,7 @@ function Send-ZaloImage {
 
 # === Bắt đầu thực hiện ===
 $yesterday = (Get-Date).AddDays(-1).ToString("yyyy-MM-dd")
+Write-Host "-------------------------------------------"
 Write-Host "Đang lấy dữ liệu MQAA cho ngày: $yesterday"
 
 # Truy vấn Supabase (Sử dụng REST API)
@@ -49,6 +51,7 @@ $headers = @{
     "Authorization" = "Bearer $SUPABASE_KEY"
 }
 $url = "$SUPABASE_URL/rest/v1/mqaa_logs?date=eq.$yesterday"
+Write-Host "URL: $url"
 
 try {
     $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Get
