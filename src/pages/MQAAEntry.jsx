@@ -10,11 +10,11 @@ export default function MQAAEntry() {
     worker_id: "",
     worker_name: "",
     leader_name: "",
-    issue_type: "Tuân thủ",
+    issue_type: "Tuân thủ", // This was changed to image_types in the instruction, but keeping issue_type as it's used in the select and insert.
     description: "",
-    image: null,
+    images: [], // Changed from image: null
   });
-  const [preview, setPreview] = useState(null);
+  const [previews, setPreviews] = useState([]); // Changed from preview: null
   const [message, setMessage] = useState({ type: "", text: "" });
 
   // Auto-fetch worker & leader info when worker_id changes
@@ -47,11 +47,20 @@ export default function MQAAEntry() {
   };
 
   const handleImageChange = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setFormData((prev) => ({ ...prev, image: file }));
-      setPreview(URL.createObjectURL(file));
+    const files = Array.from(e.target.files);
+    if (files.length > 0) {
+      setFormData((prev) => ({ ...prev, images: [...prev.images, ...files] }));
+      const newPreviews = files.map(file => URL.createObjectURL(file));
+      setPreviews(prev => [...prev, ...newPreviews]);
     }
+  };
+
+  const removeImage = (index) => {
+    setFormData(prev => ({
+      ...prev,
+      images: prev.images.filter((_, i) => i !== index)
+    }));
+    setPreviews(prev => prev.filter((_, i) => i !== index));
   };
 
   // Image compression helper
@@ -116,25 +125,26 @@ export default function MQAAEntry() {
     setMessage({ type: "", text: "" });
 
     try {
-      let image_url = "";
+      let image_urls = [];
 
-      // 1. Upload image if exists
-      if (formData.image) {
-        // Compress image before upload
-        const compressedFile = await compressImage(formData.image);
+      // 1. Upload all images
+      if (formData.images.length > 0) {
+        for (const file of formData.images) {
+          const compressedFile = await compressImage(file);
+          const fileName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
 
-        const fileName = `${Date.now()}.jpg`;
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from("mqaa-images")
-          .upload(fileName, compressedFile);
+          const { data: uploadData, error: uploadError } = await supabase.storage
+            .from("mqaa-images")
+            .upload(fileName, compressedFile);
 
-        if (uploadError) throw uploadError;
+          if (uploadError) throw uploadError;
 
-        const { data: publicUrlData } = supabase.storage
-          .from("mqaa-images")
-          .getPublicUrl(fileName);
+          const { data: publicUrlData } = supabase.storage
+            .from("mqaa-images")
+            .getPublicUrl(fileName);
 
-        image_url = publicUrlData.publicUrl;
+          image_urls.push(publicUrlData.publicUrl);
+        }
       }
 
       // 2. Insert record into mqaa_logs
@@ -147,13 +157,13 @@ export default function MQAAEntry() {
           leader_name: formData.leader_name,
           issue_type: formData.issue_type,
           description: formData.description,
-          image_url,
+          image_url: image_urls, // Now sending an array
         },
       ]);
 
       if (insertError) throw insertError;
 
-      setMessage({ type: "success", text: "Đã lưu bản ghi MQAA thành công!" });
+      setMessage({ type: "success", text: `Đã lưu thành công với ${image_urls.length} hình ảnh!` });
       // Reset form (keep date and line for convenience)
       setFormData((prev) => ({
         ...prev,
@@ -161,9 +171,9 @@ export default function MQAAEntry() {
         worker_name: "",
         leader_name: "",
         description: "",
-        image: null,
+        images: [],
       }));
-      setPreview(null);
+      setPreviews([]);
     } catch (error) {
       console.error("Error saving MQAA:", error);
       setMessage({ type: "error", text: "Lỗi: " + error.message });
@@ -272,24 +282,35 @@ export default function MQAAEntry() {
         </div>
 
         <div className="space-y-2">
-          <label className="text-sm font-semibold text-gray-700 block">Hình ảnh bằng chứng</label>
-          <div className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-xl p-4 bg-gray-50 hover:bg-gray-100 transition cursor-pointer relative">
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={handleImageChange}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
-            />
-            {preview ? (
-              <img src={preview} alt="Preview" className="max-h-48 rounded-lg shadow-md" />
-            ) : (
-              <div className="text-center text-gray-500">
-                <p className="text-lg">📷 Chụp ảnh hoặc Chọn file</p>
-                <p className="text-xs">Hỗ trợ mở camera trên điện thoại</p>
+          <label className="text-sm font-semibold text-gray-700 block">Hình ảnh bằng chứng (Có thể chọn nhiều)</label>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 mb-2">
+            {previews.map((src, index) => (
+              <div key={index} className="relative group aspect-square">
+                <img src={src} alt={`Preview ${index}`} className="w-full h-full object-cover rounded-lg shadow-sm border" />
+                <button
+                  type="button"
+                  onClick={() => removeImage(index)}
+                  className="absolute top-1 right-1 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center opacity-0 group-hover:opacity-100 transition shadow-md"
+                >
+                  ×
+                </button>
               </div>
-            )}
+            ))}
+            <label className="flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-xl aspect-square bg-gray-50 hover:bg-gray-100 transition cursor-pointer relative">
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                onChange={handleImageChange}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+              <div className="text-center text-gray-400">
+                <p className="text-2xl mt-[-4px]">+</p>
+                <p className="text-[10px]">Thêm ảnh</p>
+              </div>
+            </label>
           </div>
+          <p className="text-xs text-gray-400">Hỗ trợ chụp nhiều ảnh bằng camera hoặc chọn từ thư viện.</p>
         </div>
 
         <button

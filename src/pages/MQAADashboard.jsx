@@ -51,7 +51,7 @@ export default function MQAADashboard() {
             "Leader": log.leader_name,
             "Loại": log.issue_type,
             "Mô tả": log.description,
-            "Link ảnh": log.image_url,
+            "Link ảnh": Array.isArray(log.image_url) ? log.image_url.join(", ") : log.image_url,
             "Thời gian tạo": log.created_at
         })));
 
@@ -130,8 +130,8 @@ export default function MQAADashboard() {
                                         <td className="p-4 text-gray-600">{log.leader_name}</td>
                                         <td className="p-4">
                                             <span className={`px-2 py-1 rounded-full text-xs font-bold ${log.issue_type === 'Tuân thủ' ? 'bg-blue-100 text-blue-700' :
-                                                    log.issue_type === 'Chất lượng' ? 'bg-orange-100 text-orange-700' :
-                                                        'bg-red-100 text-red-700'
+                                                log.issue_type === 'Chất lượng' ? 'bg-orange-100 text-orange-700' :
+                                                    'bg-red-100 text-red-700'
                                                 }`}>
                                                 {log.issue_type}
                                             </span>
@@ -139,14 +139,22 @@ export default function MQAADashboard() {
                                         <td className="p-4 max-w-xs truncate" title={log.description}>
                                             {log.description}
                                         </td>
-                                        <td className="p-4 text-center">
-                                            {log.image_url ? (
-                                                <a href={log.image_url} target="_blank" rel="noreferrer" className="inline-block p-1 border rounded hover:border-indigo-400 transition">
-                                                    <img src={log.image_url} alt="Proof" className="w-10 h-10 object-cover rounded" />
-                                                </a>
-                                            ) : (
-                                                <span className="text-gray-300">-</span>
-                                            )}
+                                        <td className="p-4">
+                                            <div className="flex flex-wrap justify-center gap-1">
+                                                {Array.isArray(log.image_url) ? (
+                                                    log.image_url.map((url, i) => (
+                                                        <a key={i} href={url} target="_blank" rel="noreferrer" className="inline-block p-0.5 border rounded hover:border-indigo-400 transition">
+                                                            <img src={url} alt={`Proof ${i}`} className="w-8 h-8 object-cover rounded" />
+                                                        </a>
+                                                    ))
+                                                ) : log.image_url ? (
+                                                    <a href={log.image_url} target="_blank" rel="noreferrer" className="inline-block p-0.5 border rounded hover:border-indigo-400 transition">
+                                                        <img src={log.image_url} alt="Proof" className="w-8 h-8 object-cover rounded" />
+                                                    </a>
+                                                ) : (
+                                                    <span className="text-gray-300">-</span>
+                                                )}
+                                            </div>
                                         </td>
                                     </tr>
                                 ))

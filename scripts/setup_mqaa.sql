@@ -8,7 +8,7 @@ create table if not exists mqaa_logs (
   leader_name text,
   issue_type text check (issue_type in ('Tuân thủ', 'Chất lượng', 'Bất thường')),
   description text,
-  image_url text,
+  image_url text[],
   created_at timestamp with time zone default now()
 );
 

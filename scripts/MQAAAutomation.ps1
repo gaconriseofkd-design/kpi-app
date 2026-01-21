@@ -45,7 +45,7 @@ Write-Host "Đang lấy dữ liệu MQAA cho ngày: $yesterday"
 
 # Truy vấn Supabase (Sử dụng REST API)
 $headers = @{
-    "apikey" = $SUPABASE_KEY
+    "apikey"        = $SUPABASE_KEY
     "Authorization" = "Bearer $SUPABASE_KEY"
 }
 $url = "$SUPABASE_URL/rest/v1/mqaa_logs?date=eq.$yesterday"
@@ -96,12 +96,21 @@ try {
         Send-ZaloMessage -text $msg
         
         if ($log.image_url) {
-            Send-ZaloImage -imageUrl $log.image_url
+            # Kiểm tra nếu là mảng nhiều ảnh
+            if ($log.image_url -is [array]) {
+                foreach ($url in $log.image_url) {
+                    Send-ZaloImage -imageUrl $url
+                }
+            }
+            else {
+                Send-ZaloImage -imageUrl $log.image_url
+            }
         }
     }
 
     Write-Host "Hoàn thành gửi báo cáo!"
 
-} catch {
+}
+catch {
     Write-Error "Lỗi thực thi: $($_.Exception.Message)"
 }
