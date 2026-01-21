@@ -4,17 +4,25 @@ import { supabase } from "../lib/supabaseClient";
 
 export default function MQAAEntry() {
   const [loading, setLoading] = useState(false);
+
+  // Logic tính Ca mặc định dựa trên giờ hiện tại
+  const getDefaultShift = () => {
+    const hour = new Date().getHours();
+    if (hour >= 6 && hour < 14) return "Ca 1";
+    if (hour >= 14 && hour < 22) return "Ca 2";
+    return "Ca 3";
+  };
+
   const [formData, setFormData] = useState({
     date: new Date().toISOString().slice(0, 10),
+    shift: getDefaultShift(), // Thêm Ca
     line: "",
-    worker_id: "",
-    worker_name: "",
-    leader_name: "",
-    issue_type: "Tuân thủ", // This was changed to image_types in the instruction, but keeping issue_type as it's used in the select and insert.
+    leader_name: "", // Đổi thành nhập chính
+    issue_type: "Tuân thủ",
     description: "",
-    images: [], // Changed from image: null
+    images: [],
   });
-  const [previews, setPreviews] = useState([]); // Changed from preview: null
+  const [previews, setPreviews] = useState([]);
   const [message, setMessage] = useState({ type: "", text: "" });
 
   // Settings State
@@ -61,30 +69,6 @@ export default function MQAAEntry() {
       alert("Sai mật khẩu!");
     }
   };
-
-  // Auto-fetch worker & leader info when worker_id changes
-  useEffect(() => {
-    const fetchWorkerInfo = async () => {
-      if (formData.worker_id.length >= 4) {
-        const { data, error } = await supabase
-          .from("users")
-          .select("full_name, approver_name")
-          .eq("msnv", formData.worker_id)
-          .single();
-
-        if (data) {
-          setFormData((prev) => ({
-            ...prev,
-            worker_name: data.full_name,
-            leader_name: data.approver_name || "",
-          }));
-        }
-      }
-    };
-
-    const timer = setTimeout(fetchWorkerInfo, 500);
-    return () => clearTimeout(timer);
-  }, [formData.worker_id]);
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -207,9 +191,8 @@ export default function MQAAEntry() {
       const { error: insertError } = await supabase.from("mqaa_logs").insert([
         {
           date: formData.date,
+          shift: formData.shift,
           line: formData.line,
-          worker_id: formData.worker_id,
-          worker_name: formData.worker_name,
           leader_name: formData.leader_name,
           issue_type: formData.issue_type,
           description: formData.description,
@@ -220,11 +203,9 @@ export default function MQAAEntry() {
       if (insertError) throw insertError;
 
       setMessage({ type: "success", text: `Đã lưu thành công với ${image_urls.length} hình ảnh!` });
-      // Reset form (keep date and line for convenience)
+      // Reset form (keep date, shift and line for convenience)
       setFormData((prev) => ({
         ...prev,
-        worker_id: "",
-        worker_name: "",
         leader_name: "",
         description: "",
         images: [],
@@ -336,6 +317,24 @@ export default function MQAAEntry() {
             />
           </div>
           <div className="space-y-1">
+            <label className="text-sm font-semibold text-gray-700">Ca làm việc</label>
+            <select
+              name="shift"
+              value={formData.shift}
+              onChange={handleInputChange}
+              className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
+              required
+            >
+              <option value="Ca 1">Ca 1 (06:00 - 14:00)</option>
+              <option value="Ca 2">Ca 2 (14:00 - 22:00)</option>
+              <option value="Ca 3">Ca 3 (22:00 - 06:00)</option>
+              <option value="Ca HC">Ca HC (Hành chính)</option>
+            </select>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
             <label className="text-sm font-semibold text-gray-700">Line/Vị trí</label>
             <input
               type="text"
@@ -347,42 +346,18 @@ export default function MQAAEntry() {
               required
             />
           </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="text-sm font-semibold text-gray-700">MSNV Vi phạm</label>
+            <label className="text-sm font-semibold text-gray-700">Leader phụ trách</label>
             <input
               type="text"
-              name="worker_id"
-              value={formData.worker_id}
+              name="leader_name"
+              value={formData.leader_name}
               onChange={handleInputChange}
-              placeholder="Nhập mã nhân viên"
+              placeholder="Nhập tên Leader"
               className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none"
               required
             />
           </div>
-          <div className="space-y-1">
-            <label className="text-sm font-semibold text-gray-700">Họ tên (Tự động)</label>
-            <input
-              type="text"
-              name="worker_name"
-              value={formData.worker_name}
-              readOnly
-              className="w-full p-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-600 outline-none"
-            />
-          </div>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-sm font-semibold text-gray-700">Tên Leader (Tự động)</label>
-          <input
-            type="text"
-            name="leader_name"
-            value={formData.leader_name}
-            readOnly
-            className="w-full p-2 bg-gray-50 border border-gray-300 rounded-lg text-gray-600 outline-none"
-          />
         </div>
 
         <div className="space-y-1">
@@ -450,7 +425,7 @@ export default function MQAAEntry() {
         >
           {loading ? "Đang xử lý..." : "GỬI BÁO CÁO MQAA"}
         </button>
-      </form>
-    </div>
+      </form >
+    </div >
   );
 }

@@ -45,9 +45,8 @@ export default function MQAADashboard() {
 
         const worksheet = XLSX.utils.json_to_sheet(logs.map(log => ({
             "Ngày": log.date,
+            "Ca": log.shift,
             "Line": log.line,
-            "MSNV": log.worker_id,
-            "Họ tên": log.worker_name,
             "Leader": log.leader_name,
             "Loại": log.issue_type,
             "Mô tả": log.description,
@@ -101,8 +100,8 @@ export default function MQAADashboard() {
                         <thead>
                             <tr className="bg-gray-50 border-b border-gray-200">
                                 <th className="p-4 font-semibold text-gray-600">Ngày</th>
+                                <th className="p-4 font-semibold text-gray-600">Ca</th>
                                 <th className="p-4 font-semibold text-gray-600">Line</th>
-                                <th className="p-4 font-semibold text-gray-600">Nhân viên</th>
                                 <th className="p-4 font-semibold text-gray-600">Leader</th>
                                 <th className="p-4 font-semibold text-gray-600">Loại</th>
                                 <th className="p-4 font-semibold text-gray-600">Mô tả</th>
@@ -122,11 +121,8 @@ export default function MQAADashboard() {
                                 logs.map((log) => (
                                     <tr key={log.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
                                         <td className="p-4">{log.date}</td>
+                                        <td className="p-4 text-indigo-700 font-bold">{log.shift}</td>
                                         <td className="p-4 font-medium">{log.line}</td>
-                                        <td className="p-4">
-                                            <div className="font-medium text-gray-900">{log.worker_name}</div>
-                                            <div className="text-xs text-gray-500">{log.worker_id}</div>
-                                        </td>
                                         <td className="p-4 text-gray-600">{log.leader_name}</td>
                                         <td className="p-4">
                                             <span className={`px-2 py-1 rounded-full text-xs font-bold ${log.issue_type === 'Tuân thủ' ? 'bg-blue-100 text-blue-700' :

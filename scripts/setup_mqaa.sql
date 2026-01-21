@@ -2,8 +2,9 @@
 create table if not exists mqaa_logs (
   id uuid primary key default uuid_generate_v4(),
   date date not null default current_date,
+  shift text, -- Thêm cột Ca (Ca 1, Ca 2, Ca 3, Ca HC)
   line text not null,
-  worker_id text not null,
+  worker_id text, -- Chuyển thành nullable
   worker_name text,
   leader_name text,
   issue_type text check (issue_type in ('Tuân thủ', 'Chất lượng', 'Bất thường')),
