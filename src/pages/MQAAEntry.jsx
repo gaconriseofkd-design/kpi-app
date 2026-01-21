@@ -17,6 +17,51 @@ export default function MQAAEntry() {
   const [previews, setPreviews] = useState([]); // Changed from preview: null
   const [message, setMessage] = useState({ type: "", text: "" });
 
+  // Settings State
+  const [showSettings, setShowSettings] = useState(false);
+  const [password, setPassword] = useState("");
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [settings, setSettings] = useState({
+    report_time: "08:00",
+    zalo_group: "MQAA",
+    image_limit: 10
+  });
+
+  // Fetch settings on mount
+  useEffect(() => {
+    const fetchSettings = async () => {
+      const { data } = await supabase.from("mqaa_settings").select("*").eq("id", 1).single();
+      if (data) {
+        setSettings({
+          report_time: data.report_time,
+          zalo_group: data.zalo_group,
+          image_limit: data.image_limit
+        });
+      }
+    };
+    fetchSettings();
+  }, []);
+
+  const handleSaveSettings = async () => {
+    const { error } = await supabase.from("mqaa_settings").update(settings).eq("id", 1);
+    if (!error) {
+      alert("Đã lưu cài đặt!");
+      setShowSettings(false);
+      setIsAuthorized(false);
+      setPassword("");
+    } else {
+      alert("Lỗi khi lưu: " + error.message);
+    }
+  };
+
+  const checkPassword = () => {
+    if (password === "0364592629") {
+      setIsAuthorized(true);
+    } else {
+      alert("Sai mật khẩu!");
+    }
+  };
+
   // Auto-fetch worker & leader info when worker_id changes
   useEffect(() => {
     const fetchWorkerInfo = async () => {
@@ -49,8 +94,19 @@ export default function MQAAEntry() {
   const handleImageChange = (e) => {
     const files = Array.from(e.target.files);
     if (files.length > 0) {
-      setFormData((prev) => ({ ...prev, images: [...prev.images, ...files] }));
-      const newPreviews = files.map(file => URL.createObjectURL(file));
+      const remainingSlots = settings.image_limit - formData.images.length;
+      if (remainingSlots <= 0) {
+        alert(`Bạn chỉ được phép tải tối đa ${settings.image_limit} ảnh.`);
+        return;
+      }
+
+      const filesToAdd = files.slice(0, remainingSlots);
+      if (files.length > remainingSlots) {
+        alert(`Chỉ có thể thêm ${remainingSlots} ảnh do giới hạn ${settings.image_limit} ảnh.`);
+      }
+
+      setFormData((prev) => ({ ...prev, images: [...prev.images, ...filesToAdd] }));
+      const newPreviews = filesToAdd.map(file => URL.createObjectURL(file));
       setPreviews(prev => [...prev, ...newPreviews]);
     }
   };
@@ -183,8 +239,82 @@ export default function MQAAEntry() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto p-4 sm:p-6 bg-white shadow-lg rounded-xl mt-6">
-      <h2 className="text-2xl font-bold text-indigo-800 mb-6 border-b pb-2">MQAA - Ghi nhận Bất thường</h2>
+    <div className="max-w-2xl mx-auto p-4 sm:p-6 bg-white shadow-lg rounded-xl mt-6 relative">
+      <div className="flex justify-between items-center mb-6 border-b pb-2">
+        <h2 className="text-2xl font-bold text-indigo-800">MQAA - Ghi nhận Bất thường</h2>
+        <button
+          onClick={() => setShowSettings(true)}
+          className="p-2 text-gray-400 hover:text-indigo-600 transition"
+          title="Cài đặt hệ thống"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 002.572-1.065z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-2xl max-w-sm w-full p-6">
+            {!isAuthorized ? (
+              <div className="space-y-4">
+                <h3 className="text-xl font-bold text-gray-800">Xác thực Admin</h3>
+                <input
+                  type="password"
+                  placeholder="Nhập mã pin..."
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full p-3 border border-gray-300 rounded-lg outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                <div className="flex gap-2">
+                  <button onClick={checkPassword} className="flex-1 py-2 bg-indigo-600 text-white rounded-lg font-bold">OK</button>
+                  <button onClick={() => setShowSettings(false)} className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold">Hủy</button>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <h3 className="text-xl font-bold text-gray-800">Cài đặt Hệ thống</h3>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <label className="text-sm font-semibold text-gray-600">Thời điểm báo cáo (Giờ:Phút)</label>
+                    <input
+                      type="time"
+                      value={settings.report_time}
+                      onChange={(e) => setSettings({ ...settings, report_time: e.target.value })}
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-semibold text-gray-600">Tên nhóm Zalo</label>
+                    <input
+                      type="text"
+                      value={settings.zalo_group}
+                      onChange={(e) => setSettings({ ...settings, zalo_group: e.target.value })}
+                      placeholder="Tên chính xác của nhóm"
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-semibold text-gray-600">Giới hạn số ảnh / 1 lần</label>
+                    <input
+                      type="number"
+                      value={settings.image_limit}
+                      onChange={(e) => setSettings({ ...settings, image_limit: parseInt(e.target.value) })}
+                      className="w-full p-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-2 pt-2">
+                  <button onClick={handleSaveSettings} className="flex-1 py-2 bg-green-600 text-white rounded-lg font-bold">Lưu</button>
+                  <button onClick={() => { setShowSettings(false); setIsAuthorized(false); setPassword(""); }} className="flex-1 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold">Đóng</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {message.text && (
         <div className={`p-3 mb-4 rounded-lg text-sm font-medium ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>

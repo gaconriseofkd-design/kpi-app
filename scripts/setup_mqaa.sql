@@ -29,3 +29,20 @@ create policy "Public Read Access" on storage.objects for select using (bucket_i
 
 -- Allow public upload access
 create policy "Public Upload Access" on storage.objects for insert with check (bucket_id = 'mqaa-images');
+
+-- Bảng lưu cấu hình MQAA
+create table if not exists mqaa_settings (
+  id integer primary key default 1,
+  report_time text default '08:00',
+  zalo_group text default 'MQAA',
+  image_limit integer default 10,
+  updated_at timestamp with time zone default now()
+);
+
+-- Chèn dữ liệu mặc định
+insert into mqaa_settings (id, report_time, zalo_group, image_limit)
+values (1, '08:00', 'MQAA', 10)
+on conflict (id) do nothing;
+
+alter table mqaa_settings enable row level security;
+create policy "Allow public access for settings" on mqaa_settings for all using (true);
