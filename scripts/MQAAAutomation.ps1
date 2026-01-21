@@ -96,7 +96,28 @@ try {
     if ($settings) {
         $ZALO_GROUP_NAME = $settings[0].zalo_group
         $IMAGE_LIMIT = $settings[0].image_limit
-        Write-Host "Cấu hình: Nhóm '$ZALO_GROUP_NAME', Giới hạn $IMAGE_LIMIT ảnh."
+        $REPORT_TIME = $settings[0].report_time # VD: "08:00"
+        $LAST_RUN = $settings[0].last_run_date   # VD: "2026-01-21"
+        
+        $todayStr = Get-Date -Format "yyyy-MM-dd"
+        $currentTime = Get-Date -Format "HH:mm"
+        
+        Write-Host "Giờ hiện tại: $currentTime | Giờ báo cáo: $REPORT_TIME"
+        Write-Host "Ngày chạy cuối: $LAST_RUN | Ngày hôm nay: $todayStr"
+
+        # Kiểm tra nếu hôm nay đã chạy rồi
+        if ($LAST_RUN -eq $todayStr) {
+            Write-Host "Báo cáo ngày hôm nay đã được gửi trước đó. Kết thúc."
+            exit
+        }
+
+        # Kiểm tra nếu chưa đến giờ báo cáo
+        if ($currentTime -lt $REPORT_TIME) {
+            Write-Host "Chưa đến giờ báo cáo ($REPORT_TIME). Kết thúc."
+            exit
+        }
+        
+        Write-Host "Đã đến giờ báo cáo! Bắt đầu xử lý..."
     }
 }
 catch {
@@ -112,26 +133,56 @@ try {
     $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Get
     if ($response.Count -eq 0) {
         Write-Host "Không có vi phạm nào trong ngày hôm qua."
+        # Cập nhật ngày chạy để không kiểm tra lại hôm nay (dù không có báo cáo)
+        $updateBody = '{"last_run_date":"' + $todayStr + '"}'
+        Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Patch -Body $updateBody -ContentType "application/json"
         exit
     }
 
     Write-Host "Tìm thấy $($response.Count) bản ghi. Bắt đầu gửi Zalo..."
 
     # 2. Kích hoạt Zalo
-    $zalo = Get-Process -Name Zalo -ErrorAction SilentlyContinue
-    if (-not $zalo) {
-        Write-Error "Zalo PC chưa mở. Vui lòng mở Zalo trước."
+    $zaloProcess = Get-Process -Name Zalo -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle } | Select-Object -First 1
+    if (-not $zaloProcess) {
+        Write-Error "Không tìm thấy cửa sổ Zalo đang chạy. Vui lòng mở Zalo PC trước."
+        exit
+    }
+
+    # Thư viện để khôi phục cửa sổ nếu bị thu nhỏ
+    $signature = @"
+[DllImport("user32.dll")]
+public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+[DllImport("user32.dll")]
+[return: MarshalAs(UnmanagedType.Bool)]
+public static extern bool SetForegroundWindow(IntPtr hWnd);
+[DllImport("user32.dll")]
+public static extern bool IsIconic(IntPtr hWnd);
+"@
+    $type = Add-Type -MemberDefinition $signature -Name "Win32Utils" -Namespace "Win32" -PassThru -ErrorAction SilentlyContinue
+
+    $hWnd = $zaloProcess.MainWindowHandle
+    if ([Win32.Win32Utils]::IsIconic($hWnd)) {
+        Write-Host "Zalo đang bị thu nhỏ, đang khôi phục..."
+        [Win32.Win32Utils]::ShowWindow($hWnd, 9) # 9 = SW_RESTORE
+        Start-Sleep -Milliseconds 500
+    }
+    
+    [Win32.Win32Utils]::SetForegroundWindow($hWnd)
+    
+    $wshell = New-Object -ComObject WScript.Shell
+    $isActivated = $wshell.AppActivate($zaloProcess.Id)
+    
+    if (-not $isActivated) {
+        Write-Error "Không thể kích hoạt cửa sổ Zalo. Hãy chắc chắn Zalo không bị ẩn hoàn toàn (vào Tray Bar)."
         exit
     }
     
-    # Kích hoạt cửa sổ Zalo (Sử dụng AppActivate)
-    $wshell = New-Object -ComObject WScript.Shell
-    $wshell.AppActivate("Zalo")
+    Write-Host "Đã kích hoạt Zalo thành công."
     Start-Sleep -Seconds 2
 
     # 3. Tìm nhóm Zalo
     [System.Windows.Forms.SendKeys]::SendWait("^f")
-    Start-Sleep -Milliseconds 500
+    Start-Sleep -Milliseconds 800
     [System.Windows.Forms.Clipboard]::SetText($ZALO_GROUP_NAME)
     [System.Windows.Forms.SendKeys]::SendWait("^v")
     Start-Sleep -Seconds 1
@@ -165,6 +216,17 @@ try {
             
             Send-ZaloImageGroup -imageUrls $urls
         }
+    }
+
+    # 5. Cập nhật ngày chạy thành công vào Supabase
+    Write-Host "Cập nhật trạng thái đã gửi báo cáo ngày hôm nay..."
+    $updateBody = '{"last_run_date":"' + $todayStr + '"}'
+    try {
+        $null = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Patch -Body $updateBody -ContentType "application/json"
+        Write-Host "Đã cập nhật ngày chạy cuối: $todayStr"
+    }
+    catch {
+        Write-Warning "Không thể cập nhật last_run_date (400 Bad Request?). Hãy kiểm tra xem bạn đã thêm cột last_run_date vào bảng mqaa_settings chưa."
     }
 
     Write-Host "Hoàn thành gửi báo cáo!"

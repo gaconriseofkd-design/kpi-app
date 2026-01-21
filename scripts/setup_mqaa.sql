@@ -36,6 +36,7 @@ create table if not exists mqaa_settings (
   report_time text default '08:00',
   zalo_group text default 'MQAA',
   image_limit integer default 10,
+  last_run_date date,
   updated_at timestamp with time zone default now()
 );
 
