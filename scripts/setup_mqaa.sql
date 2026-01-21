@@ -1,0 +1,31 @@
+-- Create the mqaa_logs table
+create table if not exists mqaa_logs (
+  id uuid primary key default uuid_generate_v4(),
+  date date not null default current_date,
+  line text not null,
+  worker_id text not null,
+  worker_name text,
+  leader_name text,
+  issue_type text check (issue_type in ('Tuân thủ', 'Chất lượng', 'Bất thường')),
+  description text,
+  image_url text,
+  created_at timestamp with time zone default now()
+);
+
+-- Enable RLS
+alter table mqaa_logs enable row level security;
+
+-- Create policies (Allowing all for now as per project context if needed, but normally more restrictive)
+create policy "Allow all for mqaa_logs" on mqaa_logs for all using (true) with check (true);
+
+-- Storage Setup (Bucket creation usually via UI, but here's how to set up policies if bucket exists)
+-- Note: Replace 'mqaa-images' with your actual bucket name.
+-- Ensure the bucket is created through the Supabase dashboard first.
+
+-- Policies for mqaa-images bucket
+-- (Assumes the bucket is named 'mqaa-images')
+-- Allow public read access
+create policy "Public Read Access" on storage.objects for select using (bucket_id = 'mqaa-images');
+
+-- Allow public upload access
+create policy "Public Upload Access" on storage.objects for insert with check (bucket_id = 'mqaa-images');
