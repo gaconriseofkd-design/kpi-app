@@ -4,7 +4,7 @@
 # === Cấu hình (Người dùng thay đổi tại đây) ===
 $SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
 $SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0"
-$ZALO_GROUP_NAME = "MQAA" # Nhập tên chính xác của nhóm Zalo
+$ZALO_GROUP_NAME = "MQAA TESTTING REPORT" # Nhập tên chính xác của nhóm Zalo
 
 # === Khởi tạo thư viện ===
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -58,6 +58,8 @@ function Send-ZaloImageGroup {
     param([string[]]$imageUrls)
     if ($imageUrls.Count -eq 0) { return }
     
+    Write-Host ">>> Đang chuẩn bị gửi $($imageUrls.Count) ảnh..." -ForegroundColor Cyan
+    
     $tempFolder = Join-Path $env:TEMP ("mqaa_group_" + (Get-Date -Format "yyyyMMdd_HHmmss") + "_" + (Get-Random))
     $null = New-Item -ItemType Directory -Path $tempFolder -Force
     
@@ -65,21 +67,28 @@ function Send-ZaloImageGroup {
     
     try {
         foreach ($url in $imageUrls) {
+            Write-Host "--- Tải ảnh: $url"
             $fileName = [System.IO.Path]::GetFileName(([uri]$url).AbsolutePath)
             if (-not $fileName) { $fileName = "image_$(Get-Random).jpg" }
             $localPath = Join-Path $tempFolder $fileName
             
-            Invoke-WebRequest -Uri $url -OutFile $localPath
-            [void]$filePaths.Add($localPath)
+            Invoke-WebRequest -Uri $url -OutFile $localPath -UserAgent "Mozilla/5.0"
+            if (Test-Path $localPath) {
+                $size = (Get-Item $localPath).Length
+                Write-Host "--- Tải thành công ($size bytes): $fileName"
+                [void]$filePaths.Add($localPath)
+            }
         }
         
         # Set clipboard as FileDropList (this allows Zalo to group them)
         [System.Windows.Forms.Clipboard]::SetFileDropList($filePaths)
         
+        Write-Host ">>> Đang dán ảnh vào Zalo (Clipboard -> Ctrl+V)..." -ForegroundColor Cyan
         [System.Windows.Forms.SendKeys]::SendWait("^v")
-        Start-Sleep -Milliseconds 2000 # Wait for Zalo to process group
+        Start-Sleep -Milliseconds 3000 # Wait for Zalo to process group (tăng thêm thời gian)
         [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-        Start-Sleep -Seconds 2
+        Start-Sleep -Seconds 3
+        Write-Host ">>> Đã gửi nhóm ảnh xong." -ForegroundColor Green
     }
     catch {
         Write-Warning "Lỗi khi gom nhóm ảnh: $($_.Exception.Message)"
@@ -93,78 +102,77 @@ function Send-ZaloImageGroup {
 }
 
 # === Bắt đầu thực hiện ===
-$yesterday = (Get-Date).AddDays(-1).ToString("yyyy-MM-dd")
-Write-Host "-------------------------------------------"
-Write-Host "Đang lấy dữ liệu MQAA cho ngày: $yesterday"
-
-# Thiết lập headers Supabase
-$headers = @{
-    "apikey"        = $SUPABASE_KEY
-    "Authorization" = "Bearer $SUPABASE_KEY"
-}
-
-# 0. Lấy cấu hình hệ thống
 try {
-    $settingsUrl = "$SUPABASE_URL/rest/v1/mqaa_settings?id=eq.1"
-    $settings = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Get
-    if ($settings) {
-        $ZALO_GROUP_NAME = $settings[0].zalo_group
-        $IMAGE_LIMIT = $settings[0].image_limit
-        $REPORT_TIME = $settings[0].report_time # VD: "08:00"
-        $LAST_RUN = $settings[0].last_run_date   # VD: "2026-01-21"
-        
-        $todayStr = Get-Date -Format "yyyy-MM-dd"
-        $currentTime = Get-Date -Format "HH:mm"
-        
-        Write-Host "Giờ hiện tại: $currentTime | Giờ báo cáo: $REPORT_TIME"
-        Write-Host "Ngày chạy cuối: $LAST_RUN | Ngày hôm nay: $todayStr"
+    # 0. Thiết lập ngày tháng
+    $yesterday = (Get-Date).AddDays(-1).ToString("yyyy-MM-dd")
+    $todayStr = Get-Date -Format "yyyy-MM-dd"
+    $currentTime = Get-Date -Format "HH:mm"
 
-        # TẠM THỜI TẮT KIỂM TRA ĐỂ TEST (Bỏ comment nếu muốn chạy chính thức)
-        <#
-        if ($LAST_RUN -eq $todayStr) {
-            Write-Host "Báo cáo ngày hôm nay đã được gửi trước đó. Kết thúc."
-            exit
-        }
-        #>
+    Write-Host "-------------------------------------------"
+    Write-Host "Đang lấy dữ liệu MQAA cho ngày: $yesterday"
 
-        # Kiểm tra nếu chưa đến giờ báo cáo
-        if ($currentTime -lt $REPORT_TIME) {
-            Write-Host "Chưa đến giờ báo cáo ($REPORT_TIME). Kết thúc."
-            exit
-        }
-        
-        Write-Host "Đã đến giờ báo cáo! Bắt đầu xử lý..."
+    # Thiết lập headers Supabase
+    $headers = @{
+        "apikey"        = $SUPABASE_KEY
+        "Authorization" = "Bearer $SUPABASE_KEY"
     }
-}
-catch {
-    Write-Warning "Không thể lấy cấu hình, dùng mặc định."
+
+    # 1. Lấy cấu hình hệ thống
+    $settingsUrl = "$SUPABASE_URL/rest/v1/mqaa_settings?id=eq.1"
     $IMAGE_LIMIT = 10
-}
+    $ZALO_GROUP_NAME = "My Documents"
+    $REPORT_TIME = "08:00"
+    $LAST_RUN = ""
 
-# 1. Truy vấn dữ liệu vi phạm
-$url = "$SUPABASE_URL/rest/v1/mqaa_logs?date=eq.$yesterday"
-Write-Host "URL: $url"
+    try {
+        $settings = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Get
+        if ($settings) {
+            $ZALO_GROUP_NAME = if ($settings[0].zalo_group) { $settings[0].zalo_group } else { "MQAA" }
+            $IMAGE_LIMIT = if ($settings[0].image_limit -gt 0) { [int]$settings[0].image_limit } else { 10 }
+            $REPORT_TIME = if ($settings[0].report_time) { $settings[0].report_time } else { "08:00" }
+            $LAST_RUN = $settings[0].last_run_date
+            
+            Write-Host "Giờ hiện tại: $currentTime | Giờ báo cáo: $REPORT_TIME"
+            Write-Host "Ngày chạy cuối: $LAST_RUN | Ngày hôm nay: $todayStr"
 
-try {
+            # KIỂM TRA ĐIỀU KIỆN CHẠY BÁO CÁO CHI TIẾT
+            if ($LAST_RUN -eq $todayStr) {
+                Write-Host "Báo cáo ngày hôm nay đã được gửi trước đó. Kết thúc."
+                return
+            }
+            if ($currentTime -lt $REPORT_TIME) {
+                Write-Host "Chưa đến giờ báo cáo ($REPORT_TIME). Kết thúc."
+                return
+            }
+            Write-Host "Bắt đầu xử lý báo cáo..."
+        }
+    }
+    catch {
+        Write-Warning "Không thể lấy cấu hình chi tiết, dùng mặc định."
+    }
+
+    # 2. Truy vấn dữ liệu vi phạm
+    $url = "$SUPABASE_URL/rest/v1/mqaa_logs?date=eq.$yesterday&select=*"
+    Write-Host "URL: $url"
+    
     $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Get
     if ($response.Count -eq 0) {
-        Write-Host "Không có vi phạm nào trong ngày hôm qua."
-        # Cập nhật ngày chạy để không kiểm tra lại hôm nay (dù không có báo cáo)
+        Write-Host "Không có vi phạm nào trong ngày $yesterday."
+        # Cập nhật ngày chạy để không kiểm tra lại
         $updateBody = '{"last_run_date":"' + $todayStr + '"}'
-        Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Patch -Body $updateBody -ContentType "application/json"
-        exit
+        $null = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Patch -Body $updateBody -ContentType "application/json"
+        return
     }
 
     Write-Host "Tìm thấy $($response.Count) bản ghi. Bắt đầu gửi Zalo..."
 
-    # 2. Kích hoạt Zalo
+    # 3. Kích hoạt Zalo
     $zaloProcess = Get-Process -Name Zalo -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle } | Select-Object -First 1
     if (-not $zaloProcess) {
-        Write-Error "Không tìm thấy cửa sổ Zalo đang chạy. Vui lòng mở Zalo PC trước."
-        exit
+        Write-Error "Không tìm thấy Zalo PC. Vui lòng mở Zalo trước."
+        return
     }
 
-    # Thư viện để khôi phục cửa sổ nếu bị thu nhỏ
     $signature = @"
 [DllImport("user32.dll")]
 public static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
@@ -175,28 +183,15 @@ public static extern bool SetForegroundWindow(IntPtr hWnd);
 public static extern bool IsIconic(IntPtr hWnd);
 "@
     $type = Add-Type -MemberDefinition $signature -Name "Win32Utils" -Namespace "Win32" -PassThru -ErrorAction SilentlyContinue
-
     $hWnd = $zaloProcess.MainWindowHandle
     if ([Win32.Win32Utils]::IsIconic($hWnd)) {
-        Write-Host "Zalo đang bị thu nhỏ, đang khôi phục..."
-        [Win32.Win32Utils]::ShowWindow($hWnd, 9) # 9 = SW_RESTORE
+        [Win32.Win32Utils]::ShowWindow($hWnd, 9)
         Start-Sleep -Milliseconds 500
     }
-    
     [Win32.Win32Utils]::SetForegroundWindow($hWnd)
-    
-    $wshell = New-Object -ComObject WScript.Shell
-    $isActivated = $wshell.AppActivate($zaloProcess.Id)
-    
-    if (-not $isActivated) {
-        Write-Error "Không thể kích hoạt cửa sổ Zalo. Hãy chắc chắn Zalo không bị ẩn hoàn toàn (vào Tray Bar)."
-        exit
-    }
-    
-    Write-Host "Đã kích hoạt Zalo thành công."
     Start-Sleep -Seconds 2
 
-    # 3. Tìm nhóm Zalo
+    # Tìm nhóm Zalo
     [System.Windows.Forms.SendKeys]::SendWait("^f")
     Start-Sleep -Milliseconds 800
     [System.Windows.Forms.Clipboard]::SetText($ZALO_GROUP_NAME)
@@ -207,7 +202,6 @@ public static extern bool IsIconic(IntPtr hWnd);
 
     # 4. Gửi từng bản ghi
     foreach ($log in $response) {
-        # Build message string using concatenation for maximum safety
         $msg = $E_ANNOUNCE + " " + $L_HEADER + "`n" +
         $L_SEP + "`n" +
         $E_CALENDAR + " " + $L_DATE + " " + $log.date + "`n" +
@@ -215,98 +209,70 @@ public static extern bool IsIconic(IntPtr hWnd);
         $E_CLOCK + " " + $L_SHIFT + " " + $log.shift + "`n" +
         $E_LOCATION + " " + $L_LINE + " " + $log.line + "`n" +
         $E_OFFICER + " " + $L_LEADER + " " + $log.leader_name + "`n"
-        
-        # Thêm thông tin nhân viên nếu có
+
         if ($log.worker_name) {
             $msg += $E_USER + " " + $L_WORKER + " " + $log.worker_name + " (" + $log.worker_id + ")`n"
         }
-        
+
         $msg += $E_WARNING + " " + $L_ISSUE_TYPE + " " + $log.issue_type + "`n" +
         $E_NOTE + " " + $L_DESCRIPTION + " " + $log.description + "`n" +
         $L_SEP
-        
+
         Send-ZaloMessage -text $msg
-        
+
         if ($log.image_url) {
-            # Convert to array if it is a single string and apply limit
-            $urls = if ($log.image_url -is [array]) { $log.image_url } else { @($log.image_url) }
+            $urls = @()
+            if ($log.image_url -is [array]) { $urls = $log.image_url }
+            elseif ($log.image_url -is [string] -and $log.image_url -ne "") { $urls = @($log.image_url) }
             
-            # Giới hạn số lượng ảnh gửi theo cấu hình
-            if ($urls.Count -gt $IMAGE_LIMIT) {
-                Write-Host "Ghi đè giới hạn ảnh: $($urls.Count) -> $IMAGE_LIMIT"
-                $urls = $urls[0..($IMAGE_LIMIT - 1)]
+            if ($urls.Count -gt 0) {
+                if ($IMAGE_LIMIT -gt 0 -and $urls.Count -gt $IMAGE_LIMIT) {
+                    $urls = $urls[0..($IMAGE_LIMIT - 1)]
+                }
+                Send-ZaloImageGroup -imageUrls $urls
             }
-            
-            Send-ZaloImageGroup -imageUrls $urls
         }
     }
 
-    # 5. BÁO CÁO TỔNG KẾT TUẦN
+    # 5. Báo cáo tổng kết tuần
+    Write-Host ">>> Đã gửi xong tất cả báo cáo chi tiết. Đợi 2 giây trước khi gửi tổng kết tuần..."
+    Start-Sleep -Seconds 2
     Write-Host "-------------------------------------------"
     Write-Host "Đang tạo báo cáo tổng kết tuần..."
-
-    # Tính ngày Thứ 2 của tuần hiện tại
-    $currentDate = Get-Date -Hour 0 -Minute 0 -Second 0
-    $daysToSubtract = ([int]$currentDate.DayOfWeek - 1 + 7) % 7
-    $mondayDate = $currentDate.AddDays(-$daysToSubtract)
+    $mondayDate = (Get-Date).AddDays( - (([int](Get-Date).DayOfWeek - 1 + 7) % 7)).Date
     $mondayStr = $mondayDate.ToString("yyyy-MM-dd")
-    
-    # Lấy toàn bộ dữ liệu từ Thứ 2 đến hôm qua
     $weeklyUrl = "$SUPABASE_URL/rest/v1/mqaa_logs?date=gte.$mondayStr&date=lte.$yesterday&select=*"
-    try {
-        $weeklyData = Invoke-RestMethod -Uri $weeklyUrl -Headers $headers -Method Get
+    
+    $weeklyData = Invoke-RestMethod -Uri $weeklyUrl -Headers $headers -Method Get
+    if ($weeklyData.Count -gt 0) {
+        $totalCount = $weeklyData.Count
+        $sectionStats = $weeklyData | Group-Object section | Select-Object Name, Count | Sort-Object Count -Descending
+        $topLines = $weeklyData | Group-Object line | Select-Object Name, Count | Sort-Object Count -Descending | Select-Object -First 3
         
-        if ($weeklyData.Count -gt 0) {
-            $totalCount = $weeklyData.Count
-            
-            # Thống kê theo Section
-            $sectionStats = $weeklyData | Group-Object section | Select-Object Name, Count | Sort-Object Count -Descending
-            
-            # Top 3 Line
-            $topLines = $weeklyData | Group-Object line | Select-Object Name, Count | Sort-Object Count -Descending | Select-Object -First 3
-            
-            # Xây dựng tin nhắn tổng kết
-            $summaryMsg = $E_CHART + " " + $L_WEEKLY_TITLE + "`n" +
-            "*(T" + [char]0x1EEB + " Th" + [char]0x1EE9 + " 2, " + $mondayDate.ToString("dd/MM") + " " + [char]0x0111 + [char]0x1EBF + "n " + (Get-Date).ToString("dd/MM") + ")*`n" +
-            $L_SEP + "`n" +
-            $E_CHART + " " + $L_TOTAL_ERRORS + " **$totalCount** " + "l" + [char]0x1ED7 + "i`n`n" +
-            $E_LOCATION + " " + $L_STATS_SECTION + "`n"
-            
-            foreach ($stat in $sectionStats) {
-                $percent = [Math]::Round(($stat.Count / $totalCount) * 100, 1)
-                $summaryMsg += $E_BLUE_DOT + " **" + $stat.Name + "**: " + $stat.Count + " l" + [char]0x1ED7 + "i ($percent%)`n"
-            }
-            
-            $summaryMsg += "`n" + $E_FIRE + " " + $L_TOP_LINES + "`n"
-            $rankEmojis = @($E_NUM1, $E_NUM2, $E_NUM3)
-            for ($i = 0; $i -lt $topLines.Count; $i++) {
-                $summaryMsg += $rankEmojis[$i] + " **Line " + $topLines[$i].Name + "**: " + $topLines[$i].Count + " l" + [char]0x1ED7 + "i`n"
-            }
-            
-            $summaryMsg += $L_SEP
-            
-            Send-ZaloMessage -text $summaryMsg
-            Write-Host "Đã gửi báo cáo tổng kết tuần."
+        $summaryMsg = $E_CHART + " " + $L_WEEKLY_TITLE + "`n" +
+        "*(T" + [char]0x1EEB + " Th" + [char]0x1EE9 + " 2, " + $mondayDate.ToString("dd/MM") + " " + [char]0x0111 + [char]0x1EBF + "n " + (Get-Date).ToString("dd/MM") + ")*`n" +
+        $L_SEP + "`n" +
+        $E_CHART + " " + $L_TOTAL_ERRORS + " **$totalCount** " + "l" + [char]0x1ED7 + "i`n`n" +
+        $E_LOCATION + " " + $L_STATS_SECTION + "`n"
+
+        foreach ($stat in $sectionStats) {
+            $percent = [Math]::Round(($stat.Count / $totalCount) * 100, 1)
+            $summaryMsg += $E_BLUE_DOT + " **" + $stat.Name + "**: " + $stat.Count + " l" + [char]0x1ED7 + "i ($percent%)`n"
         }
-        else {
-            Write-Host "Không có dữ liệu tuần để tổng kết."
+        
+        $summaryMsg += "`n" + $E_FIRE + " " + $L_TOP_LINES + "`n"
+        $rankEmojis = @($E_NUM1, $E_NUM2, $E_NUM3)
+        for ($i = 0; $i -lt $topLines.Count; $i++) {
+            $summaryMsg += $rankEmojis[$i] + " **Line " + $topLines[$i].Name + "**: " + $topLines[$i].Count + " l" + [char]0x1ED7 + "i`n"
         }
-    }
-    catch {
-        Write-Warning "Không thể lấy dữ liệu tổng kết tuần: $($_.Exception.Message)"
+        $summaryMsg += $L_SEP
+        Send-ZaloMessage -text $summaryMsg
+        Write-Host "Đã gửi báo cáo tổng kết tuần."
     }
 
-    # 6. Cập nhật ngày chạy thành công vào Supabase
-    Write-Host "Cập nhật trạng thái đã gửi báo cáo ngày hôm nay..."
+    # 6. Cập nhật ngày chạy cuối
     $updateBody = '{"last_run_date":"' + $todayStr + '"}'
-    try {
-        $null = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Patch -Body $updateBody -ContentType "application/json"
-        Write-Host "Đã cập nhật ngày chạy cuối: $todayStr"
-    }
-    catch {
-        Write-Warning "Không thể cập nhật last_run_date (400 Bad Request?). Hãy kiểm tra xem bạn đã thêm cột last_run_date vào bảng mqaa_settings chưa."
-    }
-
+    $null = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Patch -Body $updateBody -ContentType "application/json"
     Write-Host "Hoàn thành gửi báo cáo!"
 
 }
