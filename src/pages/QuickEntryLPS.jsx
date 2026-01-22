@@ -652,7 +652,11 @@ export default function ApproverModeHybrid({ section }) {
           <div className="p-3 bg-yellow-50 rounded">
             <h4 className="font-semibold">Điểm KPI Tạm tính (Cho template):</h4>
             <p>NS/Giờ: {tplProdRate.toFixed(2)} | Giờ chính xác: {tplExactHours.toFixed(2)}</p>
-            <p>Sản lượng: {tplP} | Chất lượng: {tplQ} | **Tổng: {tplKPI}** (Tối đa 15)</p>
+            <p>
+              Sản lượng: {tplP} | Chất lượng: {tplQ}
+              {section === 'LAMINATION' && <> | Tuân thủ: {tplC} </>}
+              | **Tổng: {tplKPI}** (Tối đa 15)
+            </p>
           </div>
 
           <div className="flex justify-end gap-3">
