@@ -14,7 +14,7 @@ const MACHINE_MAP = {
 /* --- LAMINATION CONSTANTS --- */
 const LAMINATION_QUALITY_OPTIONS = [
   { value: "SCRAP", label: "Hàng phế" },
-  { value: "FAIL_BONDING", label: "Hàng fail bonding (Drey)" },
+  { value: "FAIL_BONDING", label: "Hàng fail bonding (Dry)" },
 ];
 const LAMINATION_COMPLIANCE_OPTIONS = [
   { value: "NONE", label: "Không vi phạm" },
