@@ -21,6 +21,10 @@ $L_LEADER = "Leader:"                                                     # Lead
 $L_WORKER = "Ng" + [char]0x01B0 + [char]0x1EDD + "i vi ph" + [char]0x1EA1 + "m:" # Người vi phạm:
 $L_ISSUE_TYPE = "Lo" + [char]0x1EA1 + "i vi ph" + [char]0x1EA1 + "m:"       # Loại vi phạm:
 $L_DESCRIPTION = "M" + [char]0x00F4 + " t" + [char]0x1EA3 + ":"             # Mô tả:
+$L_WEEKLY_TITLE = [char]0xD83D + [char]0xDCC8 + " *T" + [char]0x1ED4 + "NG K" + [char]0x1EBF + "T VI PH" + [char]0x1EA0 + "M MQAA TRONG TU" + [char]0x1EA7 + "N*"
+$L_TOTAL_ERRORS = "T" + [char]0x1ED5 + "ng s" + [char]0x1ED1 + " l" + [char]0x1ED7 + "i ghi nh" + [char]0x1EAD + "n:"
+$L_STATS_SECTION = "Th" + [char]0x1ED1 + "ng k" + [char]0x00EA + " theo B" + [char]0x1ED9 + " ph" + [char]0x1EAD + "n:"
+$L_TOP_LINES = "Top 3 Line vi ph" + [char]0x1EA1 + "m nhi" + [char]0x1EC1 + "u nh" + [char]0x1EA5 + "t:"
 $L_SEP = "-----------------------"
 
 # Emojis (Surrogate pairs for wide characters)
@@ -33,6 +37,12 @@ $E_OFFICER = [char]0xD83D + [char]0xDC6E                                  # 👮
 $E_USER = [char]0xD83D + [char]0xDC64                                     # 👤
 $E_WARNING = [char]0x26A0 + [char]0xFE0F                                  # ⚠️
 $E_NOTE = [char]0xD83D + [char]0xDCDD                                     # 📝
+$E_CHART = [char]0xD83D + [char]0xDCC8                                    # 📊
+$E_BLUE_DOT = [char]0xD83D + [char]0xDD39                                 # 🔹
+$E_FIRE = [char]0xD83D + [char]0xDD25                                     # 🔥
+$E_NUM1 = "1" + [char]0x20E3
+$E_NUM2 = "2" + [char]0x20E3
+$E_NUM3 = "3" + [char]0x20E3
 
 function Send-ZaloMessage {
     param([string]$text)
@@ -231,7 +241,62 @@ public static extern bool IsIconic(IntPtr hWnd);
         }
     }
 
-    # 5. Cập nhật ngày chạy thành công vào Supabase
+    # 5. BÁO CÁO TỔNG KẾT TUẦN
+    Write-Host "-------------------------------------------"
+    Write-Host "Đang tạo báo cáo tổng kết tuần..."
+
+    # Tính ngày Thứ 2 của tuần hiện tại
+    $currentDate = Get-Date -Hour 0 -Minute 0 -Second 0
+    $daysToSubtract = ([int]$currentDate.DayOfWeek - 1 + 7) % 7
+    $mondayDate = $currentDate.AddDays(-$daysToSubtract)
+    $mondayStr = $mondayDate.ToString("yyyy-MM-dd")
+    
+    # Lấy toàn bộ dữ liệu từ Thứ 2 đến hôm qua
+    $weeklyUrl = "$SUPABASE_URL/rest/v1/mqaa_logs?date=gte.$mondayStr&date=lte.$yesterday&select=*"
+    try {
+        $weeklyData = Invoke-RestMethod -Uri $weeklyUrl -Headers $headers -Method Get
+        
+        if ($weeklyData.Count -gt 0) {
+            $totalCount = $weeklyData.Count
+            
+            # Thống kê theo Section
+            $sectionStats = $weeklyData | Group-Object section | Select-Object Name, Count | Sort-Object Count -Descending
+            
+            # Top 3 Line
+            $topLines = $weeklyData | Group-Object line | Select-Object Name, Count | Sort-Object Count -Descending | Select-Object -First 3
+            
+            # Xây dựng tin nhắn tổng kết
+            $summaryMsg = $E_CHART + " " + $L_WEEKLY_TITLE + "`n" +
+            "*(T" + [char]0x1EEB + " Th" + [char]0x1EE9 + " 2, " + $mondayDate.ToString("dd/MM") + " " + [char]0x0111 + [char]0x1EBF + "n " + (Get-Date).ToString("dd/MM") + ")*`n" +
+            $L_SEP + "`n" +
+            $E_CHART + " " + $L_TOTAL_ERRORS + " **$totalCount** " + "l" + [char]0x1ED7 + "i`n`n" +
+            $E_LOCATION + " " + $L_STATS_SECTION + "`n"
+            
+            foreach ($stat in $sectionStats) {
+                $percent = [Math]::Round(($stat.Count / $totalCount) * 100, 1)
+                $summaryMsg += $E_BLUE_DOT + " **" + $stat.Name + "**: " + $stat.Count + " l" + [char]0x1ED7 + "i ($percent%)`n"
+            }
+            
+            $summaryMsg += "`n" + $E_FIRE + " " + $L_TOP_LINES + "`n"
+            $rankEmojis = @($E_NUM1, $E_NUM2, $E_NUM3)
+            for ($i = 0; $i -lt $topLines.Count; $i++) {
+                $summaryMsg += $rankEmojis[$i] + " **Line " + $topLines[$i].Name + "**: " + $topLines[$i].Count + " l" + [char]0x1ED7 + "i`n"
+            }
+            
+            $summaryMsg += $L_SEP
+            
+            Send-ZaloMessage -text $summaryMsg
+            Write-Host "Đã gửi báo cáo tổng kết tuần."
+        }
+        else {
+            Write-Host "Không có dữ liệu tuần để tổng kết."
+        }
+    }
+    catch {
+        Write-Warning "Không thể lấy dữ liệu tổng kết tuần: $($_.Exception.Message)"
+    }
+
+    # 6. Cập nhật ngày chạy thành công vào Supabase
     Write-Host "Cập nhật trạng thái đã gửi báo cáo ngày hôm nay..."
     $updateBody = '{"last_run_date":"' + $todayStr + '"}'
     try {
