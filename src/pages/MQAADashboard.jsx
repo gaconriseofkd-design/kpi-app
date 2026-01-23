@@ -3,9 +3,12 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import * as XLSX from "xlsx";
 
+const SECTIONS = ["ALL", "Leanline_DC", "Leanline_Molded", "Lamination", "Prefitting", "Molding", "Hàng bù"];
+
 export default function MQAADashboard() {
     const [logs, setLogs] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState("ALL");
     const [filters, setFilters] = useState({
         startDate: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().slice(0, 10),
         endDate: new Date().toISOString().slice(0, 10),
@@ -35,15 +38,18 @@ export default function MQAADashboard() {
         fetchLogs();
     }, [filters]);
 
+    // Lọc dữ liệu theo tab hiện tại
+    const filteredLogs = logs.filter(log => activeTab === "ALL" || log.section === activeTab);
+
     const handleFilterChange = (e) => {
         const { name, value } = e.target;
         setFilters((prev) => ({ ...prev, [name]: value }));
     };
 
     const exportToExcel = () => {
-        if (logs.length === 0) return alert("Không có dữ liệu để xuất!");
+        if (filteredLogs.length === 0) return alert("Không có dữ liệu để xuất!");
 
-        const worksheet = XLSX.utils.json_to_sheet(logs.map(log => ({
+        const worksheet = XLSX.utils.json_to_sheet(filteredLogs.map(log => ({
             "Ngày": log.date,
             "Bộ phận": log.section,
             "Ca": log.shift,
@@ -59,41 +65,60 @@ export default function MQAADashboard() {
 
         const workbook = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(workbook, worksheet, "MQAA_Logs");
-        XLSX.writeFile(workbook, `MQAA_Report_${filters.startDate}_to_${filters.endDate}.xlsx`);
+        const fileName = `MQAA_${activeTab}_${filters.startDate}_to_${filters.endDate}.xlsx`;
+        XLSX.writeFile(workbook, fileName);
     };
 
     return (
         <div className="p-4 sm:p-6 space-y-6">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
-                <h2 className="text-2xl font-bold text-gray-800">Dashboard MQAA</h2>
+            <div className="flex flex-col gap-4 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <h2 className="text-2xl font-bold text-gray-800">Dashboard MQAA</h2>
 
-                <div className="flex flex-wrap items-end gap-3">
-                    <div className="space-y-1">
-                        <label className="text-xs font-semibold text-gray-500 uppercase">Từ ngày</label>
-                        <input
-                            type="date"
-                            name="startDate"
-                            value={filters.startDate}
-                            onChange={handleFilterChange}
-                            className="block p-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
+                    <div className="flex flex-wrap items-end gap-3">
+                        <div className="space-y-1">
+                            <label className="text-xs font-semibold text-gray-500 uppercase">Từ ngày</label>
+                            <input
+                                type="date"
+                                name="startDate"
+                                value={filters.startDate}
+                                onChange={handleFilterChange}
+                                className="block p-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                        </div>
+                        <div className="space-y-1">
+                            <label className="text-xs font-semibold text-gray-500 uppercase">Đến ngày</label>
+                            <input
+                                type="date"
+                                name="endDate"
+                                value={filters.endDate}
+                                onChange={handleFilterChange}
+                                className="block p-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                            />
+                        </div>
+                        <button
+                            onClick={exportToExcel}
+                            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-green-700 transition"
+                        >
+                            Xuất Excel ({activeTab === "ALL" ? "Toàn bộ" : activeTab})
+                        </button>
                     </div>
-                    <div className="space-y-1">
-                        <label className="text-xs font-semibold text-gray-500 uppercase">Đến ngày</label>
-                        <input
-                            type="date"
-                            name="endDate"
-                            value={filters.endDate}
-                            onChange={handleFilterChange}
-                            className="block p-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                        />
-                    </div>
-                    <button
-                        onClick={exportToExcel}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-green-700 transition"
-                    >
-                        Xuất Excel
-                    </button>
+                </div>
+
+                {/* Section Tabs */}
+                <div className="flex overflow-x-auto pb-2 gap-2 border-t pt-4">
+                    {SECTIONS.map(sec => (
+                        <button
+                            key={sec}
+                            onClick={() => setActiveTab(sec)}
+                            className={`px-4 py-2 rounded-full text-sm font-medium whitespace-nowrap transition ${activeTab === sec
+                                    ? "bg-indigo-600 text-white shadow-md"
+                                    : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                                }`}
+                        >
+                            {sec === "ALL" ? "Toàn bộ" : sec}
+                        </button>
+                    ))}
                 </div>
             </div>
 
@@ -119,12 +144,12 @@ export default function MQAADashboard() {
                                 <tr>
                                     <td colSpan="12" className="p-10 text-center text-gray-400">Đang tải dữ liệu...</td>
                                 </tr>
-                            ) : logs.length === 0 ? (
+                            ) : filteredLogs.length === 0 ? (
                                 <tr>
-                                    <td colSpan="12" className="p-10 text-center text-gray-400">Không tìm thấy bản ghi nào.</td>
+                                    <td colSpan="12" className="p-10 text-center text-gray-400">Không tìm thấy bản ghi nào cho {activeTab === "ALL" ? "bộ lọc hiện tại" : `bộ phận ${activeTab}`}.</td>
                                 </tr>
                             ) : (
-                                logs.map((log) => (
+                                filteredLogs.map((log) => (
                                     <tr key={log.id} className="border-b border-gray-100 hover:bg-gray-50 transition">
                                         <td className="p-4">{log.date}</td>
                                         <td className="p-4 font-medium text-blue-600">{log.section}</td>
