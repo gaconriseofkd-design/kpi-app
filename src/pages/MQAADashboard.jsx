@@ -77,7 +77,9 @@ export default function MQAADashboard() {
         logs.forEach(l => {
             // Normalizing input (uppercase, trim) might be good if data is messy
             const line = (l.line || "N/A").toUpperCase().trim();
-            lineCounts[line] = (lineCounts[line] || 0) + 1;
+            const section = l.section || "?";
+            const key = `${line} (${section})`; // Include section in key
+            lineCounts[key] = (lineCounts[key] || 0) + 1;
         });
         const sortedLines = Object.entries(lineCounts)
             .sort((a, b) => b[1] - a[1])
@@ -317,14 +319,14 @@ export default function MQAADashboard() {
                                     data={barData}
                                     margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
                                 >
-                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
                                     <XAxis dataKey="date" />
                                     <YAxis allowDecimals={false} />
                                     <RechartsTooltip />
                                     <Legend />
-                                    {/* Generate Bars dynamically based on SECTIONS (excl ALL) */}
+                                    {/* Generate Bars dynamically based on SECTIONS (excl ALL) WITHOUT STACKING */}
                                     {SECTIONS.filter(s => s !== "ALL").map((sec, idx) => (
-                                        <Bar key={sec} dataKey={sec} stackId="a" fill={COLORS[idx % COLORS.length]} />
+                                        <Bar key={sec} dataKey={sec} fill={COLORS[idx % COLORS.length]} radius={[4, 4, 0, 0]} />
                                     ))}
                                 </BarChart>
                             </ResponsiveContainer>
