@@ -239,8 +239,6 @@ function RulesContent() {
         </button>
       </div>
 
-      {/* HIỂN THỊ RULE CHẤT LƯỢNG (Q) */}
-      <QualityRulesInfo section={section} />
 
       {/* Test nhanh */}
       <div className="p-3 rounded border bg-white inline-flex items-center gap-2 flex-wrap">
