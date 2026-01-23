@@ -9,14 +9,14 @@ import * as XLSX from "xlsx";
 const HYBRID_SECTIONS = ["LAMINATION", "PREFITTING", "BÀO", "TÁCH"];
 const isHybridSection = (s) => HYBRID_SECTIONS.includes(s);
 const normalizeSection = (s, currentSection) => {
-    if (!s) return currentSection.toUpperCase() || "MOLDING";
-    const cleaned = s.toString().trim().toUpperCase();
-    
-    // Nếu là loại Leanline, thay thế khoảng trắng bằng gạch dưới
-    if (cleaned.startsWith("LEANLINE")) {
-        return cleaned.replace(/\s/g, '_');
-    }
-    return cleaned;
+  if (!s) return currentSection.toUpperCase() || "MOLDING";
+  const cleaned = s.toString().trim().toUpperCase();
+
+  // Nếu là loại Leanline, thay thế khoảng trắng bằng gạch dưới
+  if (cleaned.startsWith("LEANLINE")) {
+    return cleaned.replace(/\s/g, '_');
+  }
+  return cleaned;
 }
 // Các Section cần nhập Category (Molding, Hybrid, và Leanline Molded)
 const requiresCategory = (s) => s === "MOLDING" || isHybridSection(s) || s === "LEANLINE_MOLDED";
@@ -62,18 +62,18 @@ function RulesContent() {
   const [saving, setSaving] = useState(false);
   const [testOE, setTestOE] = useState(100);
   const [testCat, setTestCat] = useState("");
-  
+
   const needsCategory = requiresCategory(section.toUpperCase());
 
   // 📥 Load rule hiện có
   async function load() {
     setLoading(true);
-    const dbSection = section.toUpperCase(); 
+    const dbSection = section.toUpperCase();
 
     const { data, error } = await supabase
       .from("kpi_rule_productivity")
       .select("*")
-      .eq("section", dbSection) 
+      .eq("section", dbSection)
       .order("category", { ascending: true })
       .order("threshold", { ascending: false });
     setLoading(false);
@@ -135,9 +135,9 @@ function RulesContent() {
       const seen = new Set();
       const payload = [];
       for (const row of raw) {
-        const catKey = needsCategory ? row.category : ""; 
+        const catKey = needsCategory ? row.category : "";
         const key = `${row.section}|${catKey}|${row.threshold}`;
-        
+
         if (!seen.has(key)) { seen.add(key); payload.push(row); }
       }
 
@@ -166,11 +166,11 @@ function RulesContent() {
     const payload = rows.map(r => {
       const x = { ...r };
       delete x.id;
-      x.section   = (x.section || section || "MOLDING").toUpperCase();
-      x.category  = (x.category || "").toString().trim().replace(/\s+/g, " ");
+      x.section = (x.section || section || "MOLDING").toUpperCase();
+      x.category = (x.category || "").toString().trim().replace(/\s+/g, " ");
       x.threshold = Number(x.threshold || 0);
-      x.score     = Number(x.score || 0);
-      x.active    = !!x.active;
+      x.score = Number(x.score || 0);
+      x.active = !!x.active;
       if (!("note" in x)) x.note = "";
       return x;
     });
@@ -186,8 +186,8 @@ function RulesContent() {
 
     setSaving(true);
     const { error } = await supabase
-    .from("kpi_rule_productivity")
-    .upsert(payload, { onConflict: 'section,category,threshold' });
+      .from("kpi_rule_productivity")
+      .upsert(payload, { onConflict: 'section,category,threshold' });
     setSaving(false);
 
     if (error) return alert("Lưu lỗi: " + error.message);
@@ -200,14 +200,14 @@ function RulesContent() {
     const currentSection = section.toUpperCase();
     const isMolding = currentSection === "MOLDING";
 
-    if (needsCategory) { 
+    if (needsCategory) {
       const list = rows.filter((r) => r.active && r.category === testCat);
       const v = Number(testOE);
       const sorted = [...list].sort((a, b) => b.threshold - a.threshold);
       for (const r of sorted) if (v >= r.threshold) return r.score;
       return 0;
     }
-    
+
     // Leanline DC
     return scoreByProductivity(testOE, rows);
   }, [testOE, rows, testCat, section]);
@@ -238,6 +238,9 @@ function RulesContent() {
           {saving ? "Đang lưu..." : "Lưu tất cả"}
         </button>
       </div>
+
+      {/* HIỂN THỊ RULE CHẤT LƯỢNG (Q) */}
+      <QualityRulesInfo section={section} />
 
       {/* Test nhanh */}
       <div className="p-3 rounded border bg-white inline-flex items-center gap-2 flex-wrap">
@@ -449,6 +452,79 @@ function RulesContent() {
             </tbody>
           </table>
         )}
+      </div>
+    </div>
+  );
+}
+
+function QualityRulesInfo({ section }) {
+  const s = (section || "").toUpperCase();
+
+  // 1. RULES CHO LAMINATION
+  if (s === "LAMINATION") {
+    return (
+      <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
+        <h3 className="font-bold text-orange-800 mb-2">Quy định điểm Chất lượng ({s})</h3>
+        <ul className="list-disc pl-5 text-sm space-y-1">
+          <li><b>Fail Bonding / Dry:</b> 0 điểm.</li>
+          <li><b>Hàng phế (Scrap):</b>
+            <ul className="list-circle pl-5 mt-1">
+              <li>0 - 1 đôi: <b>5</b> điểm</li>
+              <li>2 - 3 đôi: <b>4</b> điểm</li>
+              <li>4 - 5 đôi: <b>2</b> điểm</li>
+              <li>&gt; 5 đôi: <b>0</b> điểm</li>
+            </ul>
+          </li>
+          <li><b>Điểm Tuân thủ (C):</b> Bắt đầu <b>3</b> điểm. Trừ 1 điểm cho mỗi lỗi (tối thiểu 0). <i className="text-gray-500">(Vi phạm khác không trừ điểm)</i></li>
+        </ul>
+        <div className="mt-2 text-sm italic text-gray-600">
+          Tổng điểm KPI = P (max 7) + Q (max 5) + C (max 3) = 15 điểm.
+        </div>
+      </div>
+    );
+  }
+
+  // 2. RULES CHO LEANLINE (MOLDED & DC & DEFAULT)
+  return (
+    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+      <h3 className="font-bold text-blue-800 mb-2">Quy định điểm Chất lượng (Q) - {s}</h3>
+      <div className="flex flex-wrap gap-8">
+        <div>
+          <h4 className="font-semibold text-sm underline mb-1">Bảng điểm Q cơ bản:</h4>
+          <table className="text-sm border bg-white">
+            <thead>
+              <tr className="bg-gray-100 border-b"><th className="p-1 px-3 border-r">Số đôi phế</th><th className="p-1 px-3">Điểm</th></tr>
+            </thead>
+            <tbody>
+              <tr className="border-b"><td className="p-1 px-3 border-r">0 đôi</td><td className="p-1 px-3 font-bold">10</td></tr>
+              <tr className="border-b"><td className="p-1 px-3 border-r">≤ 2 đôi</td><td className="p-1 px-3 font-bold">8</td></tr>
+              <tr className="border-b"><td className="p-1 px-3 border-r">≤ 4 đôi</td><td className="p-1 px-3 font-bold">6</td></tr>
+              <tr className="border-b"><td className="p-1 px-3 border-r">≤ 6 đôi</td><td className="p-1 px-3 font-bold">4</td></tr>
+              <tr className="border-b"><td className="p-1 px-3 border-r">&gt; 6 đôi</td><td className="p-1 px-3 font-bold text-red-600">0</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        {/* Section Leanline Molded có logic trừ điểm riêng */}
+        {s === "LEANLINE_MOLDED" && (
+          <div className="max-w-md">
+            <h4 className="font-semibold text-sm underline mb-1 text-red-700">Lưu ý riêng cho Leanline Molded:</h4>
+            <ul className="list-disc pl-5 text-sm space-y-1">
+              <li><b>Phàn nàn khách hàng:</b> Trừ 8 điểm.</li>
+              <li><b>Vi phạm tuân thủ khác:</b> Trừ 2 điểm.</li>
+              <li><b>Lỗi nghiêm trọng (Sai Tech, Logo, Dao...):</b>
+                <ul className="list-circle pl-5">
+                  <li>1 đôi: Còn <b>4</b> điểm Q.</li>
+                  <li>≥ 2 đôi: <b>0</b> điểm Q.</li>
+                </ul>
+              </li>
+              <li><b>Lỗi thường (Đóng gói, dán tem...):</b> Trừ theo số đôi (làm tròn chẵn).</li>
+            </ul>
+          </div>
+        )}
+      </div>
+      <div className="mt-2 text-sm italic text-gray-600">
+        Tổng điểm KPI = P (max 5) + Q (max 10) = 15 điểm.
       </div>
     </div>
   );
