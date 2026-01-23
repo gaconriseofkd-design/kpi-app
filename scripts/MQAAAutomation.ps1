@@ -47,7 +47,7 @@ $E_NUM3 = "3" + [char]0x20E3
 function Send-ZaloMessage {
     param([string]$text)
     # Use .NET Clipboard for better Unicode handling in PowerShell 5.1
-    [System.Windows.Forms.Clipboard]::SetText($text)
+    [System.Windows.Forms.Clipboard]::SetText($text, [System.Windows.Forms.TextDataFormat]::UnicodeText)
     [System.Windows.Forms.SendKeys]::SendWait("^v")
     Start-Sleep -Milliseconds 500
     [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
@@ -136,10 +136,10 @@ try {
             Write-Host "Ngày chạy cuối: $LAST_RUN | Ngày hôm nay: $todayStr"
 
             # KIỂM TRA ĐIỀU KIỆN CHẠY BÁO CÁO CHI TIẾT
-            if ($LAST_RUN -eq $todayStr) {
-                Write-Host "Báo cáo ngày hôm nay đã được gửi trước đó. Kết thúc."
-                return
-            }
+            # if ($LAST_RUN -eq $todayStr) {
+            #     Write-Host "Báo cáo ngày hôm nay đã được gửi trước đó. Kết thúc."
+            #     return
+            # }
             if ($currentTime -lt $REPORT_TIME) {
                 Write-Host "Chưa đến giờ báo cáo ($REPORT_TIME). Kết thúc."
                 return
@@ -194,7 +194,7 @@ public static extern bool IsIconic(IntPtr hWnd);
     # Tìm nhóm Zalo
     [System.Windows.Forms.SendKeys]::SendWait("^f")
     Start-Sleep -Milliseconds 800
-    [System.Windows.Forms.Clipboard]::SetText($ZALO_GROUP_NAME)
+    [System.Windows.Forms.Clipboard]::SetText($ZALO_GROUP_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
     [System.Windows.Forms.SendKeys]::SendWait("^v")
     Start-Sleep -Seconds 1
     [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
