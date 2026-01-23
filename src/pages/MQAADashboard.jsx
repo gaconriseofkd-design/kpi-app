@@ -4,10 +4,13 @@ import { supabase } from "../lib/supabaseClient";
 import * as XLSX from "xlsx";
 import {
     PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
-    BarChart, Bar, XAxis, YAxis, CartesianGrid
+    BarChart, Bar, Line, ComposedChart, XAxis, YAxis, CartesianGrid
 } from 'recharts';
 
 const SECTIONS = ["ALL", "Leanline_DC", "Leanline_Molded", "Lamination", "Prefitting", "Molding", "Hàng bù"];
+// Removed 'ALL' for chart iteration, kept 'Hàng bù' at end.
+const CHART_SECTIONS = ["Leanline_DC", "Leanline_Molded", "Lamination", "Prefitting", "Molding", "Hàng bù"];
+
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884d8', '#82ca9d', '#ffc658'];
 
 export default function MQAADashboard() {
@@ -57,14 +60,12 @@ export default function MQAADashboard() {
         });
         const pieData = Object.keys(sectionCounts).map(k => ({ name: k, value: sectionCounts[k] }));
 
-        // 2. Bar Data: Group by Date then Section
-        // Need a list of all unique dates involved, sorted asc
+        // 2. Bar Data: Group by Date then Section + Calculate TOTAL
         const dates = [...new Set(logs.map(l => l.date))].sort();
         const barData = dates.map(d => {
             const dayLogs = logs.filter(l => l.date === d);
-            const row = { date: d };
-            // Initialize all known sections to 0 (optional, but good for stacked)
-            // Or just count what we have
+            const row = { date: d, Total: dayLogs.length }; // Add Total
+
             dayLogs.forEach(l => {
                 const s = l.section || "Unknown";
                 row[s] = (row[s] || 0) + 1;
@@ -75,10 +76,9 @@ export default function MQAADashboard() {
         // 3. Top 5 Lines
         const lineCounts = {};
         logs.forEach(l => {
-            // Normalizing input (uppercase, trim) might be good if data is messy
             const line = (l.line || "N/A").toUpperCase().trim();
             const section = l.section || "?";
-            const key = `${line} (${section})`; // Include section in key
+            const key = `${line} (${section})`;
             lineCounts[key] = (lineCounts[key] || 0) + 1;
         });
         const sortedLines = Object.entries(lineCounts)
@@ -310,12 +310,12 @@ export default function MQAADashboard() {
                         </div>
                     </div>
 
-                    {/* 3. BAR CHART (TREND) */}
+                    {/* 3. CHART (BAR + LINE) - TREND */}
                     <div className="bg-white p-6 rounded-xl shadow-md border border-gray-100 lg:col-span-2">
                         <h3 className="text-lg font-bold text-gray-700 mb-4 border-b pb-2">Xu hướng Lỗi theo Ngày & Bộ phận</h3>
                         <div className="h-[350px] w-full">
                             <ResponsiveContainer width="100%" height="100%">
-                                <BarChart
+                                <ComposedChart
                                     data={barData}
                                     margin={{ top: 20, right: 30, left: 20, bottom: 5 }}
                                 >
@@ -324,11 +324,16 @@ export default function MQAADashboard() {
                                     <YAxis allowDecimals={false} />
                                     <RechartsTooltip />
                                     <Legend />
-                                    {/* Generate Bars dynamically based on SECTIONS (excl ALL) WITHOUT STACKING */}
-                                    {SECTIONS.filter(s => s !== "ALL").map((sec, idx) => (
+
+                                    {/* TOTAL BAR (First) & Trend Line */}
+                                    <Bar dataKey="Total" fill="#374151" name="Tổng cộng" radius={[4, 4, 0, 0]} barSize={20} />
+                                    <Line type="monotone" dataKey="Total" stroke="#374151" strokeWidth={2} dot={{ r: 4 }} name="Trend Tổng" />
+
+                                    {/* SECTION BARS */}
+                                    {CHART_SECTIONS.map((sec, idx) => (
                                         <Bar key={sec} dataKey={sec} fill={COLORS[idx % COLORS.length]} radius={[4, 4, 0, 0]} />
                                     ))}
-                                </BarChart>
+                                </ComposedChart>
                             </ResponsiveContainer>
                         </div>
                     </div>
