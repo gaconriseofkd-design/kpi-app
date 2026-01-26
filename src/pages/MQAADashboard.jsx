@@ -163,8 +163,8 @@ export default function MQAADashboard() {
                     created_at: log.created_at
                 });
 
-                // Tăng độ cao dòng mạnh (140 pts ~ 186 px)
-                row.height = 140;
+                // Độ cao dòng: 230 pixels = 172.5 points
+                row.height = 172.5;
 
                 // Xử lý nhúng TẤT CẢ ảnh
                 if (log.image_url) {
@@ -185,14 +185,14 @@ export default function MQAADashboard() {
                                 // Cột 12 là cột 'images_placeholder' (index 11) nếu mình muốn bắt đầu từ đó.
                                 // Tính toán: Ngày(0), Bộ phận(1)... Mô tả(8), Thời gian tạo(9), Ảnh(10)
                                 worksheet.addImage(imageId, {
-                                    tl: { col: 12 + imgIdx, row: i + 1, nativeColOff: 20000, nativeRowOff: 20000 },
-                                    ext: { width: 180, height: 180 },
+                                    tl: { col: 12 + imgIdx, row: i + 1, nativeColOff: 10000, nativeRowOff: 10000 },
+                                    ext: { width: 230, height: 225 },
                                     editAs: 'oneCell'
                                 });
 
-                                // Mở rộng cột tương ứng để chứa ảnh
+                                // Độ rộng cột: 235 pixels ~ 33 units (ExcelJS uses character units)
                                 const col = worksheet.getColumn(13 + imgIdx);
-                                if (col.width < 38) col.width = 38;
+                                if (col.width < 33) col.width = 33;
 
                                 // Nếu có nhiều ảnh, thêm tiêu đề cho các cột ảnh tiếp theo
                                 if (imgIdx > 0 && i === 0) {
