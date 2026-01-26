@@ -131,8 +131,8 @@ export default function MQAADashboard() {
                 { header: "Họ tên", key: "worker_name", width: 20 },
                 { header: "Loại", key: "issue_type", width: 12 },
                 { header: "Mô tả", key: "description", width: 40 },
-                { header: "Hình ảnh", key: "image", width: 20 }, // Cột hình ảnh
-                { header: "Thời gian tạo", key: "created_at", width: 20 }
+                { header: "Thời gian tạo", key: "created_at", width: 20 },
+                { header: "Hình ảnh bằng chứng", key: "images_placeholder", width: 25 } // Tiêu đề gốc cho cột ảnh đầu tiên
             ];
 
             worksheet.columns = columns;
@@ -153,8 +153,8 @@ export default function MQAADashboard() {
                     created_at: log.created_at
                 });
 
-                // Chỉnh độ cao dòng để ảnh trông rõ hơn (vd: 100 pixels)
-                row.height = 80;
+                // Tăng độ cao dòng để ảnh nằm gọn bên trong (80 points ~ 106 pixels)
+                row.height = 90;
 
                 // Xử lý nhúng TẤT CẢ ảnh
                 if (log.image_url) {
@@ -167,14 +167,24 @@ export default function MQAADashboard() {
                                     buffer: buffer,
                                     extension: 'jpeg',
                                 });
+
+                                // Nhúng ảnh vào cột K (index 12), L, M...
+                                // Cột 12 là cột 'images_placeholder' (index 11) nếu mình muốn bắt đầu từ đó.
+                                // Tính toán: Ngày(0), Bộ phận(1)... Mô tả(8), Thời gian tạo(9), Ảnh(10)
                                 worksheet.addImage(imageId, {
-                                    tl: { col: 9 + imgIdx, row: i + 1 },
-                                    ext: { width: 100, height: 100 },
-                                    editAs: 'oneCell'
+                                    tl: { col: 12 + imgIdx, row: i + 1, nativeColOff: 100000, nativeRowOff: 100000 },
+                                    ext: { width: 110, height: 110 },
+                                    editAs: 'oneCell' // Quan trọng để ảnh "đi theo" dòng khi sort/filter
                                 });
-                                // Mở rộng cột
-                                const col = worksheet.getColumn(10 + imgIdx);
-                                if (col.width < 20) col.width = 20;
+
+                                // Mở rộng cột tương ứng để chứa ảnh
+                                const col = worksheet.getColumn(13 + imgIdx);
+                                if (col.width < 25) col.width = 25;
+
+                                // Nếu có nhiều ảnh, thêm tiêu đề cho các cột ảnh tiếp theo
+                                if (imgIdx > 0 && i === 0) {
+                                    worksheet.getCell(1, 13 + imgIdx).value = `Ảnh ${imgIdx + 1}`;
+                                }
                             } catch (e) {
                                 console.error(`Lỗi addImage tại ảnh ${imgIdx}:`, e);
                             }
