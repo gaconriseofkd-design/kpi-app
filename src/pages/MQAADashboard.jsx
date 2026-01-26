@@ -1,7 +1,8 @@
 // src/pages/MQAADashboard.jsx
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
 import {
     PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
     BarChart, Bar, Line, ComposedChart, XAxis, YAxis, CartesianGrid
@@ -16,6 +17,7 @@ export default function MQAADashboard() {
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("ALL");
     const [viewMode, setViewMode] = useState("LIST");
+    const [exporting, setExporting] = useState(false);
 
     const [filters, setFilters] = useState({
         startDate: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().slice(0, 10),
@@ -46,7 +48,7 @@ export default function MQAADashboard() {
         fetchLogs();
     }, [filters]);
 
-    // --- DATA PROCESSING FOR CHARTS ---
+    // --- DATA PROCESSING FOR CHARTS --- (No changes needed here)
     const { pieData, barData, top5Lines } = useMemo(() => {
         if (!logs.length) return { pieData: [], barData: [], top5Lines: [] };
 
@@ -97,25 +99,104 @@ export default function MQAADashboard() {
         setFilters((prev) => ({ ...prev, [name]: value }));
     };
 
-    const exportToExcel = () => {
+    // Helper: Tải ảnh dưới dạng ArrayBuffer để nhúng vào Excel
+    const fetchImageBuffer = async (url) => {
+        try {
+            const response = await fetch(url);
+            if (!response.ok) throw new Error("Fetch failed");
+            const blob = await response.blob();
+            return await blob.arrayBuffer();
+        } catch (err) {
+            console.error("Lỗi tải ảnh:", url, err);
+            return null;
+        }
+    };
+
+    const exportToExcel = async () => {
         if (filteredLogs.length === 0) return alert("Không có dữ liệu để xuất!");
-        const worksheet = XLSX.utils.json_to_sheet(filteredLogs.map(log => ({
-            "Ngày": log.date,
-            "Bộ phận": log.section,
-            "Ca": log.shift,
-            "Line": log.line,
-            "Leader": log.leader_name,
-            "MSNV": log.worker_id || "",
-            "Họ tên": log.worker_name || "",
-            "Loại": log.issue_type,
-            "Mô tả": log.description,
-            "Link ảnh": Array.isArray(log.image_url) ? log.image_url.join(", ") : log.image_url,
-            "Thời gian tạo": log.created_at
-        })));
-        const workbook = XLSX.utils.book_new();
-        XLSX.utils.book_append_sheet(workbook, worksheet, "MQAA_Logs");
-        const fileName = `MQAA_${activeTab}_${filters.startDate}_to_${filters.endDate}.xlsx`;
-        XLSX.writeFile(workbook, fileName);
+        setExporting(true);
+
+        try {
+            const workbook = new ExcelJS.Workbook();
+            const worksheet = workbook.addWorksheet("MQAA_Logs");
+
+            // Định nghĩa Header
+            const columns = [
+                { header: "Ngày", key: "date", width: 12 },
+                { header: "Bộ phận", key: "section", width: 15 },
+                { header: "Ca", key: "shift", width: 8 },
+                { header: "Line", key: "line", width: 10 },
+                { header: "Leader", key: "leader", width: 20 },
+                { header: "MSNV", key: "worker_id", width: 10 },
+                { header: "Họ tên", key: "worker_name", width: 20 },
+                { header: "Loại", key: "issue_type", width: 12 },
+                { header: "Mô tả", key: "description", width: 40 },
+                { header: "Hình ảnh", key: "image", width: 20 }, // Cột hình ảnh
+                { header: "Thời gian tạo", key: "created_at", width: 20 }
+            ];
+
+            worksheet.columns = columns;
+
+            // Thêm dữ liệu
+            for (let i = 0; i < filteredLogs.length; i++) {
+                const log = filteredLogs[i];
+                const row = worksheet.addRow({
+                    date: log.date,
+                    section: log.section,
+                    shift: log.shift,
+                    line: log.line,
+                    leader: log.leader_name,
+                    worker_id: log.worker_id || "",
+                    worker_name: log.worker_name || "",
+                    issue_type: log.issue_type,
+                    description: log.description,
+                    created_at: log.created_at
+                });
+
+                // Chỉnh độ cao dòng để ảnh trông rõ hơn (vd: 100 pixels)
+                row.height = 80;
+
+                // Xử lý nhúng TẤT CẢ ảnh
+                if (log.image_url) {
+                    const urls = Array.isArray(log.image_url) ? log.image_url : [log.image_url];
+                    for (let imgIdx = 0; imgIdx < urls.length; imgIdx++) {
+                        const buffer = await fetchImageBuffer(urls[imgIdx]);
+                        if (buffer) {
+                            try {
+                                const imageId = workbook.addImage({
+                                    buffer: buffer,
+                                    extension: 'jpeg',
+                                });
+                                worksheet.addImage(imageId, {
+                                    tl: { col: 9 + imgIdx, row: i + 1 },
+                                    ext: { width: 100, height: 100 },
+                                    editAs: 'oneCell'
+                                });
+                                // Mở rộng cột
+                                const col = worksheet.getColumn(10 + imgIdx);
+                                if (col.width < 20) col.width = 20;
+                            } catch (e) {
+                                console.error(`Lỗi addImage tại ảnh ${imgIdx}:`, e);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Định dạng Header
+            worksheet.getRow(1).font = { bold: true };
+            worksheet.getRow(1).alignment = { horizontal: 'center' };
+
+            // Xuất file
+            const buf = await workbook.xlsx.writeBuffer();
+            const fileName = `MQAA_${activeTab}_with_images_${filters.startDate}_to_${filters.endDate}.xlsx`;
+            saveAs(new Blob([buf]), fileName);
+        } catch (error) {
+            console.error("Lỗi xuất Excel nâng cao:", error);
+            alert("Lỗi xuất file: " + error.message);
+        } finally {
+            setExporting(false);
+        }
     };
 
     return (
@@ -134,8 +215,12 @@ export default function MQAADashboard() {
                             <input type="date" name="endDate" value={filters.endDate} onChange={handleFilterChange} className="block p-2 border border-gray-300 rounded-lg text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
                         </div>
                         {viewMode === "LIST" && (
-                            <button onClick={exportToExcel} className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-bold shadow-md hover:bg-green-700 transition">
-                                Xuất Excel ({activeTab === "ALL" ? "Toàn bộ" : activeTab})
+                            <button
+                                onClick={exportToExcel}
+                                disabled={exporting}
+                                className={`px-4 py-2 text-white rounded-lg text-sm font-bold shadow-md transition ${exporting ? "bg-gray-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"}`}
+                            >
+                                {exporting ? "Đang xử lý ảnh..." : `Xuất Excel (${activeTab === "ALL" ? "Toàn bộ" : activeTab})`}
                             </button>
                         )}
                     </div>
