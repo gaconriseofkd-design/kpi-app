@@ -19,7 +19,7 @@ export default function MQAADashboard() {
     const [viewMode, setViewMode] = useState("LIST");
     const [exporting, setExporting] = useState(false);
     const [exportProgress, setExportProgress] = useState(0);
-    const [previewImage, setPreviewImage] = useState(null);
+    const [previewData, setPreviewData] = useState({ images: [], index: 0, isOpen: false });
 
     const [filters, setFilters] = useState({
         startDate: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().slice(0, 10),
@@ -304,14 +304,17 @@ export default function MQAADashboard() {
                                                 <td className="p-4 text-center">
                                                     <div className="flex justify-center gap-1">
                                                         {log.image_url ? (
-                                                            (Array.isArray(log.image_url) ? log.image_url : [log.image_url]).slice(0, 1).map((url, idx) => (
-                                                                <div key={idx} className="relative group cursor-pointer" onClick={() => setPreviewImage(url)}>
-                                                                    <img src={url} alt="thumbnail" className="w-12 h-12 object-cover rounded-lg border border-gray-200 group-hover:opacity-80 transition" />
-                                                                    {Array.isArray(log.image_url) && log.image_url.length > 1 && (
-                                                                        <span className="absolute -top-2 -right-2 bg-indigo-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white shadow-sm">+{log.image_url.length - 1}</span>
-                                                                    )}
-                                                                </div>
-                                                            ))
+                                                            (() => {
+                                                                const urls = Array.isArray(log.image_url) ? log.image_url : [log.image_url];
+                                                                return urls.slice(0, 1).map((url, idx) => (
+                                                                    <div key={idx} className="relative group cursor-pointer" onClick={() => setPreviewData({ images: urls, index: 0, isOpen: true })}>
+                                                                        <img src={url} alt="thumbnail" className="w-12 h-12 object-cover rounded-lg border border-gray-200 group-hover:opacity-80 transition" />
+                                                                        {urls.length > 1 && (
+                                                                            <span className="absolute -top-2 -right-2 bg-indigo-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white shadow-sm">+{urls.length - 1}</span>
+                                                                        )}
+                                                                    </div>
+                                                                ));
+                                                            })()
                                                         ) : (
                                                             <span className="text-gray-400 text-xs italic">Không có ảnh</span>
                                                         )}
@@ -386,14 +389,63 @@ export default function MQAADashboard() {
                 </div>
             )}
             {/* IMAGE PREVIEW MODAL */}
-            {previewImage && (
-                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setPreviewImage(null)}>
-                    <div className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center justify-center gap-4" onClick={e => e.stopPropagation()}>
-                        <button onClick={() => setPreviewImage(null)} className="absolute -top-12 right-0 p-2 text-white hover:text-gray-300 transition-colors">
-                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
-                        </button>
-                        <img src={previewImage} alt="Preview" className="max-w-full max-h-[80vh] rounded-xl shadow-2xl object-contain border-4 border-white/10" />
-                        <a href={previewImage} target="_blank" rel="noreferrer" className="px-6 py-2 bg-white text-gray-900 rounded-full font-bold shadow-lg hover:bg-gray-100 transition-all">Xem ảnh gốc</a>
+            {previewData.isOpen && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-md p-4 animate-in fade-in duration-300"
+                    onClick={() => setPreviewData(p => ({ ...p, isOpen: false }))}>
+
+                    {/* Close Button */}
+                    <button onClick={() => setPreviewData(p => ({ ...p, isOpen: false }))}
+                        className="absolute top-6 right-6 p-3 text-white/70 hover:text-white hover:bg-white/10 rounded-full transition-all z-[10001]">
+                        <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                    </button>
+
+                    <div className="relative max-w-5xl w-full h-full flex flex-col items-center justify-center gap-6" onClick={e => e.stopPropagation()}>
+
+                        {/* Navigation Buttons */}
+                        {previewData.images.length > 1 && (
+                            <>
+                                <button
+                                    onClick={() => setPreviewData(p => ({ ...p, index: (p.index - 1 + p.images.length) % p.images.length }))}
+                                    className="absolute left-0 lg:-left-20 p-4 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all"
+                                >
+                                    <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7"></path></svg>
+                                </button>
+                                <button
+                                    onClick={() => setPreviewData(p => ({ ...p, index: (p.index + 1) % p.images.length }))}
+                                    className="absolute right-0 lg:-right-20 p-4 text-white/50 hover:text-white hover:bg-white/10 rounded-full transition-all"
+                                >
+                                    <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path></svg>
+                                </button>
+                            </>
+                        )}
+
+                        {/* Main Image */}
+                        <div className="relative group max-h-[75vh] w-full flex items-center justify-center">
+                            <img
+                                src={previewData.images[previewData.index]}
+                                alt="Preview"
+                                className="max-w-full max-h-[75vh] rounded-lg shadow-2xl object-contain border border-white/20 animate-in zoom-in-95 duration-300"
+                            />
+
+                            {/* Image Counter */}
+                            {previewData.images.length > 1 && (
+                                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 px-4 py-1.5 bg-black/60 backdrop-blur-md text-white text-sm font-bold rounded-full border border-white/20">
+                                    {previewData.index + 1} / {previewData.images.length}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Actions */}
+                        <div className="flex gap-4">
+                            <a href={previewData.images[previewData.index]} target="_blank" rel="noreferrer"
+                                className="px-8 py-3 bg-white text-gray-900 rounded-xl font-bold shadow-xl hover:scale-105 active:scale-95 transition-all">
+                                Xem ảnh gốc
+                            </a>
+                            <button onClick={() => setPreviewData(p => ({ ...p, isOpen: false }))}
+                                className="px-8 py-3 bg-white/10 text-white rounded-xl font-bold backdrop-blur-md border border-white/20 hover:bg-white/20 transition-all">
+                                Đóng
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
