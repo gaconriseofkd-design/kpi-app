@@ -18,6 +18,7 @@ export default function MQAADashboard() {
     const [activeTab, setActiveTab] = useState("ALL");
     const [viewMode, setViewMode] = useState("LIST");
     const [exporting, setExporting] = useState(false);
+    const [exportProgress, setExportProgress] = useState(0);
 
     const [filters, setFilters] = useState({
         startDate: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().slice(0, 10),
@@ -128,14 +129,23 @@ export default function MQAADashboard() {
                 { header: "Line", key: "line", width: 10 },
                 { header: "Leader", key: "leader", width: 20 },
                 { header: "MSNV", key: "worker_id", width: 10 },
-                { header: "Họ tên", key: "worker_name", width: 20 },
+                { header: "Họ tên", key: "worker_name", width: 25 },
                 { header: "Loại", key: "issue_type", width: 12 },
-                { header: "Mô tả", key: "description", width: 40 },
-                { header: "Thời gian tạo", key: "created_at", width: 20 },
-                { header: "Hình ảnh bằng chứng", key: "images_placeholder", width: 25 } // Tiêu đề gốc cho cột ảnh đầu tiên
+                { header: "Mô tả", key: "description", width: 45 },
+                { header: "Thời gian tạo", key: "created_at", width: 22 },
+                { header: "Hình ảnh bằng chứng", key: "images_placeholder", width: 38 }
             ];
 
             worksheet.columns = columns;
+
+            // Đếm tổng ảnh để báo %
+            let totalImages = 0;
+            filteredLogs.forEach(l => {
+                if (l.image_url) {
+                    totalImages += Array.isArray(l.image_url) ? l.image_url.length : 1;
+                }
+            });
+            let processed = 0;
 
             // Thêm dữ liệu
             for (let i = 0; i < filteredLogs.length; i++) {
@@ -153,14 +163,17 @@ export default function MQAADashboard() {
                     created_at: log.created_at
                 });
 
-                // Tăng độ cao dòng để ảnh nằm gọn bên trong (80 points ~ 106 pixels)
-                row.height = 90;
+                // Tăng độ cao dòng mạnh (140 pts ~ 186 px)
+                row.height = 140;
 
                 // Xử lý nhúng TẤT CẢ ảnh
                 if (log.image_url) {
                     const urls = Array.isArray(log.image_url) ? log.image_url : [log.image_url];
                     for (let imgIdx = 0; imgIdx < urls.length; imgIdx++) {
                         const buffer = await fetchImageBuffer(urls[imgIdx]);
+                        processed++;
+                        setExportProgress(Math.round((processed / Math.max(1, totalImages)) * 100));
+
                         if (buffer) {
                             try {
                                 const imageId = workbook.addImage({
@@ -172,14 +185,14 @@ export default function MQAADashboard() {
                                 // Cột 12 là cột 'images_placeholder' (index 11) nếu mình muốn bắt đầu từ đó.
                                 // Tính toán: Ngày(0), Bộ phận(1)... Mô tả(8), Thời gian tạo(9), Ảnh(10)
                                 worksheet.addImage(imageId, {
-                                    tl: { col: 12 + imgIdx, row: i + 1, nativeColOff: 100000, nativeRowOff: 100000 },
-                                    ext: { width: 110, height: 110 },
-                                    editAs: 'oneCell' // Quan trọng để ảnh "đi theo" dòng khi sort/filter
+                                    tl: { col: 12 + imgIdx, row: i + 1, nativeColOff: 20000, nativeRowOff: 20000 },
+                                    ext: { width: 180, height: 180 },
+                                    editAs: 'oneCell'
                                 });
 
                                 // Mở rộng cột tương ứng để chứa ảnh
                                 const col = worksheet.getColumn(13 + imgIdx);
-                                if (col.width < 25) col.width = 25;
+                                if (col.width < 38) col.width = 38;
 
                                 // Nếu có nhiều ảnh, thêm tiêu đề cho các cột ảnh tiếp theo
                                 if (imgIdx > 0 && i === 0) {
@@ -190,6 +203,8 @@ export default function MQAADashboard() {
                             }
                         }
                     }
+                } else if (totalImages === 0) {
+                    setExportProgress(Math.round(((i + 1) / filteredLogs.length) * 100));
                 }
             }
 
@@ -199,13 +214,14 @@ export default function MQAADashboard() {
 
             // Xuất file
             const buf = await workbook.xlsx.writeBuffer();
-            const fileName = `MQAA_${activeTab}_with_images_${filters.startDate}_to_${filters.endDate}.xlsx`;
+            const fileName = `MQAA_Photos_${activeTab}_${filters.startDate}.xlsx`;
             saveAs(new Blob([buf]), fileName);
         } catch (error) {
-            console.error("Lỗi xuất Excel nâng cao:", error);
+            console.error("Lỗi xuất Excel:", error);
             alert("Lỗi xuất file: " + error.message);
         } finally {
             setExporting(false);
+            setExportProgress(0);
         }
     };
 
@@ -230,7 +246,7 @@ export default function MQAADashboard() {
                                 disabled={exporting}
                                 className={`px-4 py-2 text-white rounded-lg text-sm font-bold shadow-md transition ${exporting ? "bg-gray-400 cursor-not-allowed" : "bg-green-600 hover:bg-green-700"}`}
                             >
-                                {exporting ? "Đang xử lý ảnh..." : `Xuất Excel (${activeTab === "ALL" ? "Toàn bộ" : activeTab})`}
+                                {exporting ? `Đang tải: ${exportProgress}%` : `Xuất Excel (${activeTab === "ALL" ? "Toàn bộ" : activeTab})`}
                             </button>
                         )}
                     </div>
