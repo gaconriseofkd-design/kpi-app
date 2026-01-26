@@ -19,6 +19,7 @@ export default function MQAADashboard() {
     const [viewMode, setViewMode] = useState("LIST");
     const [exporting, setExporting] = useState(false);
     const [exportProgress, setExportProgress] = useState(0);
+    const [previewImage, setPreviewImage] = useState(null);
 
     const [filters, setFilters] = useState({
         startDate: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().slice(0, 10),
@@ -301,7 +302,20 @@ export default function MQAADashboard() {
                                                 </td>
                                                 <td className="p-4 max-w-xs truncate" title={log.description}>{log.description}</td>
                                                 <td className="p-4 text-center">
-                                                    {Array.isArray(log.image_url) ? `(${log.image_url.length} ảnh)` : log.image_url ? '(1 ảnh)' : '-'}
+                                                    <div className="flex justify-center gap-1">
+                                                        {log.image_url ? (
+                                                            (Array.isArray(log.image_url) ? log.image_url : [log.image_url]).slice(0, 1).map((url, idx) => (
+                                                                <div key={idx} className="relative group cursor-pointer" onClick={() => setPreviewImage(url)}>
+                                                                    <img src={url} alt="thumbnail" className="w-12 h-12 object-cover rounded-lg border border-gray-200 group-hover:opacity-80 transition" />
+                                                                    {Array.isArray(log.image_url) && log.image_url.length > 1 && (
+                                                                        <span className="absolute -top-2 -right-2 bg-indigo-600 text-white text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border-2 border-white shadow-sm">+{log.image_url.length - 1}</span>
+                                                                    )}
+                                                                </div>
+                                                            ))
+                                                        ) : (
+                                                            <span className="text-gray-400 text-xs italic">Không có ảnh</span>
+                                                        )}
+                                                    </div>
                                                 </td>
                                             </tr>
                                         ))
@@ -368,6 +382,18 @@ export default function MQAADashboard() {
                                 </ComposedChart>
                             </ResponsiveContainer>
                         </div>
+                    </div>
+                </div>
+            )}
+            {/* IMAGE PREVIEW MODAL */}
+            {previewImage && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in duration-200" onClick={() => setPreviewImage(null)}>
+                    <div className="relative max-w-4xl w-full max-h-[90vh] flex flex-col items-center justify-center gap-4" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => setPreviewImage(null)} className="absolute -top-12 right-0 p-2 text-white hover:text-gray-300 transition-colors">
+                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                        </button>
+                        <img src={previewImage} alt="Preview" className="max-w-full max-h-[80vh] rounded-xl shadow-2xl object-contain border-4 border-white/10" />
+                        <a href={previewImage} target="_blank" rel="noreferrer" className="px-6 py-2 bg-white text-gray-900 rounded-full font-bold shadow-lg hover:bg-gray-100 transition-all">Xem ảnh gốc</a>
                     </div>
                 </div>
             )}
