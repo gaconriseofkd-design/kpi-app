@@ -4,7 +4,7 @@
 # === Cấu hình (Người dùng thay đổi tại đây) ===
 $SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
 $SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0"
-$ZALO_GROUP_NAME = "MQAA TESTTING REPORT" # Nhập tên chính xác của nhóm Zalo
+$ZALO_GROUP_NAME = "My Documents" # Nhập tên chính xác của nhóm Zalo
 
 # === Khởi tạo thư viện ===
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -218,9 +218,7 @@ public static extern bool IsIconic(IntPtr hWnd);
 
         $msg += $E_WARNING + " " + $L_ISSUE_TYPE + " " + $log.issue_type + "`n" +
         $E_NOTE + " " + $L_DESCRIPTION + " " + $log.description + "`n" +
-        $L_SEP + "`n" +
-        $L_DASHBOARD + "`n" +
-        $DASHBOARD_LINK
+        $L_SEP
 
         Send-ZaloMessage -text $msg
 
