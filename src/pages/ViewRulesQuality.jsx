@@ -121,7 +121,7 @@ function MoldedRules() {
           <div className="bg-orange-50 p-2 rounded text-sm font-medium">
             Điểm trừ = (Số đôi làm tròn lên chẵn)
           </div>
-          <p className="text-xs mt-2 italic text-gray-500">Ví dụ: 1 đôi -> tính 2 đôi (trừ 2đ), 3 đôi -> tính 4 đôi (trừ 4đ)...</p>
+          <p className="text-xs mt-2 italic text-gray-500">Ví dụ: 1 đôi - tính 2 đôi (trừ 2đ), 3 đôi - tính 4 đôi (trừ 4đ)...</p>
         </div>
       </div>
     </div>

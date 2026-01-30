@@ -26,6 +26,8 @@ $L_TOTAL_ERRORS = "T" + [char]0x1ED5 + "ng s" + [char]0x1ED1 + " l" + [char]0x1E
 $L_STATS_SECTION = "Th" + [char]0x1ED1 + "ng k" + [char]0x00EA + " theo B" + [char]0x1ED9 + " ph" + [char]0x1EAD + "n:"
 $L_TOP_LINES = "Top 3 Line vi ph" + [char]0x1EA1 + "m nhi" + [char]0x1EC1 + "u nh" + [char]0x1EA5 + "t:"
 $L_SEP = "-----------------------"
+$L_DASHBOARD = [char]0xD83D + [char]0xDCCA + " *Xem Dashboard MQAA t" + [char]0x1EA1 + "i đ" + [char]0x00E2 + "y:*" # 📊 *Xem Dashboard MQAA tại đây:*
+$DASHBOARD_LINK = "https://kpi-app-ckg6.vercel.app/mqaa-dashboard"
 
 # Emojis (Surrogate pairs for wide characters)
 $E_ANNOUNCE = [char]0xD83D + [char]0xDCE2                                  # 📢
@@ -216,7 +218,9 @@ public static extern bool IsIconic(IntPtr hWnd);
 
         $msg += $E_WARNING + " " + $L_ISSUE_TYPE + " " + $log.issue_type + "`n" +
         $E_NOTE + " " + $L_DESCRIPTION + " " + $log.description + "`n" +
-        $L_SEP
+        $L_SEP + "`n" +
+        $L_DASHBOARD + "`n" +
+        $DASHBOARD_LINK
 
         Send-ZaloMessage -text $msg
 
@@ -247,7 +251,13 @@ public static extern bool IsIconic(IntPtr hWnd);
     if ($weeklyData.Count -gt 0) {
         $totalCount = $weeklyData.Count
         $sectionStats = $weeklyData | Group-Object section | Select-Object Name, Count | Sort-Object Count -Descending
-        $topLines = $weeklyData | Group-Object line | Select-Object Name, Count | Sort-Object Count -Descending | Select-Object -First 3
+        $topLines = $weeklyData | Group-Object line | ForEach-Object {
+            [PSCustomObject]@{
+                Line    = $_.Name
+                Count   = $_.Count
+                Section = $_.Group[0].section
+            }
+        } | Sort-Object Count -Descending | Select-Object -First 3
         
         $summaryMsg = $E_CHART + " " + $L_WEEKLY_TITLE + "`n" +
         "*(T" + [char]0x1EEB + " Th" + [char]0x1EE9 + " 2, " + $mondayDate.ToString("dd/MM") + " " + [char]0x0111 + [char]0x1EBF + "n " + (Get-Date).ToString("dd/MM") + ")*`n" +
@@ -263,9 +273,12 @@ public static extern bool IsIconic(IntPtr hWnd);
         $summaryMsg += "`n" + $E_FIRE + " " + $L_TOP_LINES + "`n"
         $rankEmojis = @($E_NUM1, $E_NUM2, $E_NUM3)
         for ($i = 0; $i -lt $topLines.Count; $i++) {
-            $summaryMsg += $rankEmojis[$i] + " **Line " + $topLines[$i].Name + "**: " + $topLines[$i].Count + " l" + [char]0x1ED7 + "i`n"
+            $lineInfo = $topLines[$i]
+            $summaryMsg += $rankEmojis[$i] + " **Line " + $lineInfo.Line + "** (" + $lineInfo.Section + "): " + $lineInfo.Count + " l" + [char]0x1ED7 + "i`n"
         }
-        $summaryMsg += $L_SEP
+        $summaryMsg += $L_SEP + "`n" +
+        $L_DASHBOARD + "`n" +
+        $DASHBOARD_LINK
         Send-ZaloMessage -text $summaryMsg
         Write-Host "Đã gửi báo cáo tổng kết tuần."
     }
