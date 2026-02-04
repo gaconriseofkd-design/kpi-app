@@ -19,7 +19,7 @@ const normalizeSection = (s, currentSection) => {
   return cleaned;
 }
 // Các Section cần nhập Category (Molding, Hybrid, và Leanline Molded)
-const requiresCategory = (s) => s === "MOLDING" || isHybridSection(s) || s === "LEANLINE_MOLDED";
+const requiresCategory = (s) => s === "MOLDING" || isHybridSection(s);
 /* =============== Helper: Lỗi RLS (Giữ nguyên) =============== */
 
 export default function RulesPage() {
@@ -100,10 +100,13 @@ function RulesContent() {
 
   // ➕ Thêm dòng mới
   function addRow() {
+    let category = "";
+    if (section.toUpperCase() === "LEANLINE_MOLDED") category = "%OE";
+
     const newRow =
       needsCategory
         ? { category: "", threshold: 100, score: 7, note: "", active: true }
-        : { threshold: 100, score: 7, note: "", active: true };
+        : { category, threshold: 100, score: 7, note: "", active: true };
     setRows((r) => [newRow, ...r]);
   }
 
@@ -181,7 +184,9 @@ function RulesContent() {
       const x = { ...r };
       delete x.id;
       x.section = (x.section || section || "MOLDING").toUpperCase();
-      x.category = (x.category || "").toString().trim().replace(/\s+/g, " ");
+      let cat = (x.category || "").toString().trim().replace(/\s+/g, " ");
+      if (x.section === "LEANLINE_MOLDED" && !cat) cat = "%OE";
+      x.category = cat;
       x.threshold = Number(x.threshold || 0);
       x.score = Number(x.score || 0);
       x.active = !!x.active;
@@ -442,8 +447,9 @@ function RulesContent() {
                       <td className="p-2">
                         <input
                           type="number"
-                          className="input input-sm input-bordered w-32"
-                          value={r.threshold}
+                          className={`input input-sm input-bordered w-32 ${(!showOriginalThreshold && section.toUpperCase() === "LEANLINE_MOLDED") ? "bg-amber-50 font-bold text-amber-700 border-amber-200" : ""}`}
+                          value={(!showOriginalThreshold && section.toUpperCase() === "LEANLINE_MOLDED") ? r.threshold + 3 : r.threshold}
+                          readOnly={!showOriginalThreshold && section.toUpperCase() === "LEANLINE_MOLDED"}
                           onChange={(e) =>
                             setRows((list) =>
                               list.map((x, i) =>
