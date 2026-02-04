@@ -273,7 +273,7 @@ function RulesContent() {
       </div>
 
       {/* Bảng Rule */}
-      <div className="overflow-auto">
+      <div className="overflow-auto pb-4 border-b">
         {needsCategory ? (
           <table className="min-w-[800px] text-sm">
             <thead>
@@ -451,6 +451,8 @@ function RulesContent() {
           </table>
         )}
       </div>
+
+      <QualityRulesInfo section={section} />
     </div>
   );
 }
@@ -461,68 +463,107 @@ function QualityRulesInfo({ section }) {
   // 1. RULES CHO LAMINATION
   if (s === "LAMINATION") {
     return (
-      <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg">
-        <h3 className="font-bold text-orange-800 mb-2">Quy định điểm Chất lượng ({s})</h3>
-        <ul className="list-disc pl-5 text-sm space-y-1">
-          <li><b>Fail Bonding / Dry:</b> 0 điểm.</li>
-          <li><b>Hàng phế (Scrap):</b>
-            <ul className="list-circle pl-5 mt-1">
-              <li>0 - 1 đôi: <b>5</b> điểm</li>
-              <li>2 - 3 đôi: <b>4</b> điểm</li>
-              <li>4 - 5 đôi: <b>2</b> điểm</li>
-              <li>&gt; 5 đôi: <b>0</b> điểm</li>
+      <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg shadow-sm">
+        <h3 className="font-bold text-orange-800 mb-3 text-lg border-b border-orange-200 pb-1">Bảng tra điểm Chất lượng (Q) & Tuân thủ (C) - {s}</h3>
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="space-y-3">
+            <h4 className="font-semibold text-orange-700">1. Điểm Chất lượng (Q) - Tối đa 5 đ</h4>
+            <ul className="list-disc pl-5 text-sm space-y-2">
+              <li><b>Hàng phế (Scrap):</b>
+                <table className="text-xs border mt-1 bg-white">
+                  <thead><tr className="bg-orange-100"><th className="p-1 px-3 border">Số đôi phế</th><th className="p-1 px-3 border">Điểm Q</th></tr></thead>
+                  <tbody>
+                    <tr><td className="p-1 px-3 border">0 - 1 đôi</td><td className="p-1 px-3 border font-bold">5</td></tr>
+                    <tr><td className="p-1 px-3 border">2 - 3 đôi</td><td className="p-1 px-3 border font-bold">4</td></tr>
+                    <tr><td className="p-1 px-3 border">4 - 5 đôi</td><td className="p-1 px-3 border font-bold">2</td></tr>
+                    <tr><td className="p-1 px-3 border">&gt; 5 đôi</td><td className="p-1 px-3 border font-bold text-red-600">0</td></tr>
+                  </tbody>
+                </table>
+              </li>
+              <li><b>Fail Bonding (Dry):</b> Mặc định <b>0 điểm Q</b>.</li>
             </ul>
-          </li>
-          <li><b>Điểm Tuân thủ (C):</b> Bắt đầu <b>3</b> điểm. Trừ 1 điểm cho mỗi lỗi (tối thiểu 0). <i className="text-gray-500">(Vi phạm khác không trừ điểm)</i></li>
-        </ul>
-        <div className="mt-2 text-sm italic text-gray-600">
-          Tổng điểm KPI = P (max 7) + Q (max 5) + C (max 3) = 15 điểm.
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="font-semibold text-orange-700">2. Điểm Tuân thủ (C) - Tối đa 3 đ</h4>
+            <ul className="list-disc pl-5 text-sm space-y-2">
+              <li>Mặc định ban đầu: <b>3 điểm</b>.</li>
+              <li><b>Vi phạm MQAA / Lỗi Rework:</b> Trừ <b>1 điểm/lần</b> (Tối thiểu 0).</li>
+              <li><b>Vi phạm khác:</b> Ghi nhận nhưng <b>KHÔNG trừ điểm</b> (Vẫn giữ 3đ).</li>
+            </ul>
+          </div>
+        </div>
+        <div className="mt-4 pt-2 border-t border-orange-200 text-sm font-medium text-orange-900">
+          CÔNG THỨC: Tổng điểm = P (max 7) + Q (max 5) + C (max 3) = Tối đa 15 điểm.
         </div>
       </div>
     );
   }
 
-  // 2. RULES CHO LEANLINE (MOLDED & DC & DEFAULT)
+  // 2. RULES CHO MOLDING
+  if (s === "MOLDING") {
+    return (
+      <div className="p-4 bg-teal-50 border border-teal-200 rounded-lg shadow-sm">
+        <h3 className="font-bold text-teal-800 mb-3 text-lg border-b border-teal-200 pb-1">Bảng tra điểm Chất lượng (Q) & Tuân thủ (C) - {s}</h3>
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="space-y-3">
+            <h4 className="font-semibold text-teal-700">1. Điểm Chất lượng (Q) - Tối đa 5 đ</h4>
+            <table className="text-sm border bg-white">
+              <thead><tr className="bg-teal-100"><th className="p-1 px-3 border">Số đôi phế</th><th className="p-1 px-3 border">Điểm Q</th></tr></thead>
+              <tbody>
+                <tr><td className="p-1 px-3 border">0 - 2 đôi</td><td className="p-1 px-3 border font-bold">5</td></tr>
+                <tr><td className="p-1 px-3 border">2.5 - 3 đôi</td><td className="p-1 px-3 border font-bold">4</td></tr>
+                <tr><td className="p-1 px-3 border">3.5 - 5 đôi</td><td className="p-1 px-3 border font-bold">2</td></tr>
+                <tr><td className="p-1 px-3 border">&gt; 5 đôi</td><td className="p-1 px-3 border font-bold text-red-600">0</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="space-y-3">
+            <h4 className="font-semibold text-teal-700">2. Điểm Tuân thủ (C) - Tối đa 3 đ</h4>
+            <ul className="list-disc pl-5 text-sm space-y-1">
+              <li>Mặc định ban đầu: <b>3 điểm</b>.</li>
+              <li><b>Lỗi Nghiêm trọng:</b> Trừ <b>3 điểm</b> (Về 0). <br /><i className="text-gray-500 text-xs">(Vd: Nhiệt độ không quy định)</i></li>
+              <li><b>Lỗi Bình thường:</b> Trừ <b>1 điểm/lần</b>.</li>
+            </ul>
+          </div>
+        </div>
+        <div className="mt-4 pt-2 border-t border-teal-200 text-sm font-medium text-teal-900">
+          CÔNG THỨC: Tổng điểm = P (max 7) + Q (max 5) + C (max 3) = Tối đa 15 điểm.
+        </div>
+      </div>
+    );
+  }
+
+  // 3. RULES CHO CÁC BỘ PHẬN CÒN LẠI (Leanline, Prefitting, Tách, Bào)
   return (
-    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-      <h3 className="font-bold text-blue-800 mb-2">Quy định điểm Chất lượng (Q) - {s}</h3>
-      <div className="flex flex-wrap gap-8">
-        <div>
-          <h4 className="font-semibold text-sm underline mb-1">Bảng điểm Q cơ bản:</h4>
+    <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
+      <h3 className="font-bold text-blue-800 mb-3 text-lg border-b border-blue-200 pb-1">Bảng tra điểm Chất lượng (Q) & Tuân thủ (C) - {s}</h3>
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="space-y-3">
+          <h4 className="font-semibold text-blue-700">1. Điểm Chất lượng (Q) - Tối đa 5 đ</h4>
           <table className="text-sm border bg-white">
-            <thead>
-              <tr className="bg-gray-100 border-b"><th className="p-1 px-3 border-r">Số đôi phế</th><th className="p-1 px-3">Điểm</th></tr>
-            </thead>
+            <thead><tr className="bg-blue-100"><th className="p-1 px-3 border">Số đôi phế</th><th className="p-1 px-3 border">Điểm Q</th></tr></thead>
             <tbody>
-              <tr className="border-b"><td className="p-1 px-3 border-r">0 đôi</td><td className="p-1 px-3 font-bold">10</td></tr>
-              <tr className="border-b"><td className="p-1 px-3 border-r">≤ 2 đôi</td><td className="p-1 px-3 font-bold">8</td></tr>
-              <tr className="border-b"><td className="p-1 px-3 border-r">≤ 4 đôi</td><td className="p-1 px-3 font-bold">6</td></tr>
-              <tr className="border-b"><td className="p-1 px-3 border-r">≤ 6 đôi</td><td className="p-1 px-3 font-bold">4</td></tr>
-              <tr className="border-b"><td className="p-1 px-3 border-r">&gt; 6 đôi</td><td className="p-1 px-3 font-bold text-red-600">0</td></tr>
+              <tr><td className="p-1 px-3 border">0 - 1 đôi</td><td className="p-1 px-3 border font-bold">5</td></tr>
+              <tr><td className="p-1 px-3 border">1.5 - 2 đôi</td><td className="p-1 px-3 border font-bold">4</td></tr>
+              <tr><td className="p-1 px-3 border">2.5 - 3 đôi</td><td className="p-1 px-3 border font-bold">2</td></tr>
+              <tr><td className="p-1 px-3 border">&gt; 3 đôi</td><td className="p-1 px-3 border font-bold text-red-600">0</td></tr>
             </tbody>
           </table>
         </div>
 
-        {/* Section Leanline Molded có logic trừ điểm riêng */}
-        {s === "LEANLINE_MOLDED" && (
-          <div className="max-w-md">
-            <h4 className="font-semibold text-sm underline mb-1 text-red-700">Lưu ý riêng cho Leanline Molded:</h4>
-            <ul className="list-disc pl-5 text-sm space-y-1">
-              <li><b>Phàn nàn khách hàng:</b> Trừ 8 điểm.</li>
-              <li><b>Vi phạm tuân thủ khác:</b> Trừ 2 điểm.</li>
-              <li><b>Lỗi nghiêm trọng (Sai Tech, Logo, Dao...):</b>
-                <ul className="list-circle pl-5">
-                  <li>1 đôi: Còn <b>4</b> điểm Q.</li>
-                  <li>≥ 2 đôi: <b>0</b> điểm Q.</li>
-                </ul>
-              </li>
-              <li><b>Lỗi thường (Đóng gói, dán tem...):</b> Trừ theo số đôi (làm tròn chẵn).</li>
-            </ul>
-          </div>
-        )}
+        <div className="space-y-3">
+          <h4 className="font-semibold text-blue-700">2. Điểm Tuân thủ (C) - Tối đa 3 đ</h4>
+          <ul className="list-disc pl-5 text-sm space-y-1">
+            <li>Mặc định ban đầu: <b>3 điểm</b>.</li>
+            <li><b>Lỗi loại A (Nghiêm trọng):</b> Trừ <b>3 điểm</b> (Về 0). <br /><i className="text-gray-500 text-xs">(Vd: Không mộc dò kim, không bảo hộ, chắn lối thoát hiểm...)</i></li>
+            <li><b>Lỗi loại B (Thường):</b> Trừ <b>1 điểm/lần</b>.</li>
+          </ul>
+        </div>
       </div>
-      <div className="mt-2 text-sm italic text-gray-600">
-        Tổng điểm KPI = P (max 5) + Q (max 10) = 15 điểm.
+      <div className="mt-4 pt-2 border-t border-blue-200 text-sm font-medium text-blue-900">
+        CÔNG THỨC: Tổng điểm = P (max 7) + Q (max 5) + C (max 3) = Tối đa 15 điểm.
       </div>
     </div>
   );
