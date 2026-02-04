@@ -10,20 +10,6 @@ import {
 
 /* ================= Helpers & Scoring ================= */
 
-// Danh sách lỗi Tuân thủ cho LEANLINE_MOLDED
-const MOLDED_COMPLIANCE_OPTIONS = [
-  "NONE",
-  "Đóng gói sai thiếu ( theo đôi)",
-  "Đóng dư, ghi số thiếu sai/ không ghi số thiếu",
-  "Dán nhầm tem size run",
-  "Không in logo",
-  "Chặt sai dao",
-  "In sai logo/ in sai phân đoạn",
-  "Chặt in đóng gói sai yêu cầu đối với chỉ lệnh",
-  "Lỗi in khác",
-  "Lỗi đóng gói khác"
-];
-
 const HYBRID_COMPLIANCE_OPTIONS = [
   { value: "NONE", label: "Không vi phạm" },
   { value: "MQAA", label: "Vi phạm MQAA" },
@@ -31,19 +17,8 @@ const HYBRID_COMPLIANCE_OPTIONS = [
   { value: "OTHER", label: "Vi phạm khác" },
 ];
 
-// Danh sách lỗi nghiêm trọng (Group A)
-const SEVERE_ERRORS = [
-  "Không in logo",
-  "Chặt sai dao",
-  "In sai logo/ in sai phân đoạn",
-  "Chặt in đóng gói sai yêu cầu đối với chỉ lệnh"
-];
-
-// Rule mapping helper cho LEANLINE_MOLDED
 const getMoldedCategoryFromLine = (line) => {
-  if (line === 'M4' || line === 'M5') return 'M4 & M5 %OE';
-  if (line === 'M1' || line === 'M2' || line === 'M3') return 'M1 M2 M3 %OE';
-  return '';
+  return '%OE';
 };
 
 // Machine Map
@@ -80,15 +55,6 @@ function calcWorkingReal(shift, inputHours) {
   const extra = h - 8;
   const adj = extra >= 2 ? extra - 0.5 : extra;
   return base + adj;
-}
-
-function scoreByQuality(defects) {
-  const d = Number(defects || 0);
-  if (d === 0) return 10;
-  if (d <= 2) return 8;
-  if (d <= 4) return 6;
-  if (d <= 6) return 4;
-  return 0;
 }
 
 function scoreByProductivityLeanline(oe, allRules, section, line) {
@@ -203,6 +169,7 @@ export default function EntryPage() {
   const [prodRules, setProdRules] = useState([]);
   const [loading, setLoading] = useState(false);
   const [categoryOptions, setCategoryOptions] = useState([]);
+  const [complianceDict, setComplianceDict] = useState([]);
 
   const today = new Date().toISOString().slice(0, 10);
 
@@ -244,10 +211,22 @@ export default function EntryPage() {
         }
       }
     })();
+
+    // Tải dictionary tuân thủ
+    (async () => {
+      const { data } = await supabase.from("kpi_compliance_dictionary").select("*");
+      if (!cancelled && data) setComplianceDict(data);
+    })();
+
     return () => {
       cancelled = true;
     };
   }, [section]);
+
+  const getComplianceOptions = (cat = "COMPLIANCE") => {
+    const secKey = section === "MOLDING" ? "MOLDING" : (section === "LAMINATION" ? "LAMINATION" : "OTHERS");
+    return ["NONE", ...new Set(complianceDict.filter(r => r.section === secKey && r.category === cat).map(r => r.content))];
+  };
 
   // ====== auto fill họ tên + approver ======
   const userCache = useRef(new Map());
@@ -499,24 +478,9 @@ export default function EntryPage() {
             value={form.compliance}
             onChange={(e) => handleChange("compliance", e.target.value)}
           >
-            <option value="NONE">Không vi phạm</option>
-            {/* Hiển thị list lỗi tương ứng theo Section */}
-            {section === "LEANLINE_MOLDED"
-              ? MOLDED_COMPLIANCE_OPTIONS.map(opt => (
-                <option key={opt} value={opt}>{opt === "NONE" ? "Không vi phạm" : opt}</option>
-              ))
-              : isHybridSection(section)
-                ? HYBRID_COMPLIANCE_OPTIONS.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))
-                : [
-                  "Ký mẫu đầu chuyền trước khi sử dụng",
-                  "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất",
-                  "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất",
-                  "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất",
-                  "Vi phạm nội quy bộ phận/công ty"
-                ].map(opt => <option key={opt} value={opt}>{opt}</option>)
-            }
+            {getComplianceOptions("COMPLIANCE").map(opt => (
+              <option key={opt} value={opt}>{opt === "NONE" ? "Không vi phạm" : opt}</option>
+            ))}
           </select>
         </label>
 
