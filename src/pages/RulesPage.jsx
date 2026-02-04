@@ -651,20 +651,36 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
         </h3>
         <div className="grid md:grid-cols-2 gap-6">
           {/* CỘT CHẤT LƯỢNG (Q) */}
-          <div className="p-4 bg-white rounded-xl border border-orange-100 shadow-sm space-y-3">
-            <div className="flex items-center justify-between border-b pb-2">
-              <h4 className="font-bold text-orange-700">1. Lỗi Chất lượng (Q)</h4>
-              <button onClick={() => handleAdd("QUALITY", "NORMAL")} className="btn btn-xs btn-outline btn-warning text-[10px]">+ Thêm lỗi Q</button>
+          <div className="p-4 bg-white rounded-xl border border-orange-100 shadow-sm space-y-4">
+            <div>
+              <h4 className="font-bold text-orange-700 border-b pb-1 mb-2 text-xs uppercase">Bảng tính điểm theo số đôi phế (Q)</h4>
+              <table className="text-[11px] border w-full bg-white text-center">
+                <thead><tr className="bg-orange-100"><th className="p-1 border text-orange-800">Số đôi phế</th><th className="p-1 border text-orange-800">Điểm Q</th></tr></thead>
+                <tbody>
+                  <tr><td className="p-1 border">0 - 1 đôi</td><td className="p-1 border font-bold">5</td></tr>
+                  <tr><td className="p-1 border">2 - 3 đôi</td><td className="p-1 border font-bold">4</td></tr>
+                  <tr><td className="p-1 border">4 - 5 đôi</td><td className="p-1 border font-bold">2</td></tr>
+                  <tr><td className="p-1 border text-red-600">&gt; 5 đôi</td><td className="p-1 border font-bold text-red-600">0</td></tr>
+                </tbody>
+              </table>
+              <p className="text-[10px] text-gray-500 mt-1 italic">* Fail Bonding (Dry): 0 điểm Q.</p>
             </div>
-            <ul className="list-disc pl-5 text-[11px] space-y-1 text-gray-700">
-              {getRules("QUALITY", "NORMAL").map((item, idx) => (
-                <li key={idx} className="group flex items-center justify-between">
-                  <span>{item.content}</span>
-                  <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
-                </li>
-              ))}
-              {getRules("QUALITY", "NORMAL").length === 0 && <li className="italic text-gray-400">Trống</li>}
-            </ul>
+
+            <div className="pt-2 border-t">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-bold text-orange-700 text-xs uppercase">Danh mục lỗi Chất lượng</h4>
+                <button onClick={() => handleAdd("QUALITY", "NORMAL")} className="btn btn-xs btn-outline btn-warning text-[9px] h-6 min-h-0">+ Thêm</button>
+              </div>
+              <ul className="list-disc pl-4 text-[11px] space-y-1 text-gray-700">
+                {getRules("QUALITY", "NORMAL").map((item, idx) => (
+                  <li key={idx} className="group flex items-center justify-between hover:bg-orange-50 rounded px-1">
+                    <span>{item.content}</span>
+                    <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
+                  </li>
+                ))}
+                {getRules("QUALITY", "NORMAL").length === 0 && <li className="italic text-gray-400">Trống</li>}
+              </ul>
+            </div>
           </div>
 
           {/* CỘT TUÂN THỦ (C) */}
@@ -728,20 +744,35 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
 
           <div className="grid md:grid-cols-2 gap-6">
             {/* CỘT CHẤT LƯỢNG (Q) */}
-            <div className="p-4 bg-white rounded-xl border border-teal-100 shadow-sm space-y-3">
-              <div className="flex items-center justify-between border-b pb-2">
-                <h4 className="font-bold text-teal-700">1. Lỗi Chất lượng (Q)</h4>
-                <button onClick={() => handleAdd("QUALITY", "NORMAL")} className="btn btn-xs btn-outline btn-accent text-[10px]">+ Thêm lỗi Q</button>
+            <div className="p-4 bg-white rounded-xl border border-teal-100 shadow-sm space-y-4">
+              <div>
+                <h4 className="font-bold text-teal-700 border-b pb-1 mb-2 text-xs uppercase">Bảng tính điểm theo số đôi phế (Q)</h4>
+                <table className="text-[11px] border w-full bg-white text-center">
+                  <thead><tr className="bg-teal-100"><th className="p-1 border text-teal-800">Số đôi phế</th><th className="p-1 border text-teal-800">Điểm Q</th></tr></thead>
+                  <tbody>
+                    <tr><td className="p-1 border">0 - 2 đôi</td><td className="p-1 border font-bold">5</td></tr>
+                    <tr><td className="p-1 border">2.5 - 3 đôi</td><td className="p-1 border font-bold">4</td></tr>
+                    <tr><td className="p-1 border">3.5 - 5 đôi</td><td className="p-1 border font-bold">2</td></tr>
+                    <tr><td className="p-1 border text-red-600">&gt; 5 đôi</td><td className="p-1 border font-bold text-red-600">0</td></tr>
+                  </tbody>
+                </table>
               </div>
-              <ul className="list-disc pl-5 text-[11px] space-y-1 text-gray-700">
-                {getRules("QUALITY", "NORMAL").map((item, idx) => (
-                  <li key={idx} className="group flex items-center justify-between">
-                    <span>{item.content}</span>
-                    <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
-                  </li>
-                ))}
-                {getRules("QUALITY", "NORMAL").length === 0 && <li className="italic text-gray-400">Trống</li>}
-              </ul>
+
+              <div className="pt-2 border-t">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-bold text-teal-700 text-xs uppercase">Danh mục lỗi Chất lượng</h4>
+                  <button onClick={() => handleAdd("QUALITY", "NORMAL")} className="btn btn-xs btn-outline btn-accent text-[9px] h-6 min-h-0">+ Thêm</button>
+                </div>
+                <ul className="list-disc pl-4 text-[11px] space-y-1 text-gray-700">
+                  {getRules("QUALITY", "NORMAL").map((item, idx) => (
+                    <li key={idx} className="group flex items-center justify-between hover:bg-teal-50 rounded px-1">
+                      <span>{item.content}</span>
+                      <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
+                    </li>
+                  ))}
+                  {getRules("QUALITY", "NORMAL").length === 0 && <li className="italic text-gray-400">Trống</li>}
+                </ul>
+              </div>
             </div>
 
             {/* CỘT TUÂN THỦ (C) */}
@@ -805,20 +836,35 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
 
         <div className="grid md:grid-cols-2 gap-6">
           {/* CỘT CHẤT LƯỢNG (Q) */}
-          <div className="p-4 bg-white rounded-xl border border-blue-100 shadow-sm space-y-3">
-            <div className="flex items-center justify-between border-b pb-2">
-              <h4 className="font-bold text-blue-700">1. Lỗi Chất lượng (Q)</h4>
-              <button onClick={() => handleAdd("QUALITY", "NORMAL")} className="btn btn-xs btn-outline btn-info text-[10px]">+ Thêm lỗi Q</button>
+          <div className="p-4 bg-white rounded-xl border border-blue-100 shadow-sm space-y-4">
+            <div>
+              <h4 className="font-bold text-blue-700 border-b pb-1 mb-2 text-xs uppercase">Bảng tính điểm theo số đôi phế (Q)</h4>
+              <table className="text-[11px] border w-full bg-white text-center">
+                <thead><tr className="bg-blue-100"><th className="p-1 border text-blue-800">Số đôi phế</th><th className="p-1 border text-blue-800">Điểm Q</th></tr></thead>
+                <tbody>
+                  <tr><td className="p-1 border">0 - 1 đôi</td><td className="p-1 border font-bold">5</td></tr>
+                  <tr><td className="p-1 border">1.5 - 2 đôi</td><td className="p-1 border font-bold">4</td></tr>
+                  <tr><td className="p-1 border">2.5 - 3 đôi</td><td className="p-1 border font-bold">2</td></tr>
+                  <tr><td className="p-1 border text-red-600">&gt; 3 đôi</td><td className="p-1 border font-bold text-red-600">0</td></tr>
+                </tbody>
+              </table>
             </div>
-            <ul className="list-disc pl-5 text-[11px] space-y-1 text-gray-700">
-              {getRules("QUALITY", "NORMAL").map((item, idx) => (
-                <li key={idx} className="group flex items-center justify-between">
-                  <span>{item.content}</span>
-                  <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
-                </li>
-              ))}
-              {getRules("QUALITY", "NORMAL").length === 0 && <li className="italic text-gray-400">Trống</li>}
-            </ul>
+
+            <div className="pt-2 border-t">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="font-bold text-blue-700 text-xs uppercase">Danh mục lỗi Chất lượng</h4>
+                <button onClick={() => handleAdd("QUALITY", "NORMAL")} className="btn btn-xs btn-outline btn-info text-[9px] h-6 min-h-0">+ Thêm</button>
+              </div>
+              <ul className="list-disc pl-4 text-[11px] space-y-1 text-gray-700">
+                {getRules("QUALITY", "NORMAL").map((item, idx) => (
+                  <li key={idx} className="group flex items-center justify-between hover:bg-blue-50 rounded px-1">
+                    <span>{item.content}</span>
+                    <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
+                  </li>
+                ))}
+                {getRules("QUALITY", "NORMAL").length === 0 && <li className="italic text-gray-400">Trống</li>}
+              </ul>
+            </div>
           </div>
 
           {/* CỘT TUÂN THỦ (C) */}
