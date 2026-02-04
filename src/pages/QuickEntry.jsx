@@ -133,6 +133,62 @@ function calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compliance,
   return { qScore: q, pScore: p, day_score: Math.min(15, total), rawTotal: total };
 }
 
+
+function calcWorkingReal(shift, inputHours) {
+  const h = Number(inputHours || 0);
+  if (h < 8) return h;
+  const BASE_BY_SHIFT = { "Ca 1": 7.17, "Ca 2": 7.17, "Ca 3": 6.92, "Ca HC": 6.67 };
+  const base = BASE_BY_SHIFT[shift] ?? 7.17;
+  if (h < 9) return base;
+  const extra = h - 8;
+  const adj = extra >= 2 ? extra - 0.5 : extra;
+  return base + adj;
+}
+
+function calculateScoresMolding({ shift, working_input, mold_hours, output, defects, category }, rules) {
+  const workingReal = calcWorkingReal(shift, working_input);
+  let dt = (Number(workingReal) * 24 - Number(mold_hours || 0)) / 24;
+  // Cap lại logic
+  if (dt > 1) dt = 1;
+  if (dt < 0) dt = 0;
+
+  const workingExact = Math.max(0, Number(workingReal) - dt);
+
+  // Q Score
+  const q = scoreByQuality(defects);
+
+  // P Score
+  let p = 0;
+  const prod = workingExact > 0 ? Number(output || 0) / workingExact : 0;
+
+  if (category && prod > 0) {
+    const relevantRules = (rules || [])
+      .filter(r => r.category === category && r.active !== false)
+      .sort((a, b) => Number(b.threshold) - Number(a.threshold));
+
+    for (const r of relevantRules) {
+      if (prod >= Number(r.threshold)) {
+        p = Number(r.score);
+        break;
+      }
+    }
+  }
+
+  const total = p + q;
+
+  // Return all needed fields
+  return {
+    q_score: q,
+    p_score: p,
+    day_score: Math.min(15, total),
+    rawTotal: total,
+    working_real: Number(workingReal.toFixed(2)),
+    working_exact: Number(workingExact.toFixed(2)),
+    downtime: Number(dt.toFixed(2)),
+    prodRate: prod
+  };
+}
+
 /* ===== Main ===== */
 export default function QuickEntry() {
   const { section } = useKpiSection();
