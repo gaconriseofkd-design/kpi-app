@@ -546,8 +546,7 @@ function QualityRulesInfo({ section, isSingle = true }) {
             <h4 className="font-semibold text-orange-700">2. Điểm Tuân thủ (C) - Tối đa 3 đ</h4>
             <ul className="list-disc pl-5 text-sm space-y-2">
               <li>Mặc định ban đầu: <b>3 điểm</b>.</li>
-              <li><b>Vi phạm MQAA / Lỗi Rework:</b> Trừ <b>1 điểm/lần</b> (Tối thiểu 0).</li>
-              <li><b>Vi phạm khác:</b> Ghi nhận nhưng <b>KHÔNG trừ điểm</b> (Vẫn giữ 3đ).</li>
+              <li><b>Vi phạm MQAA / Lỗi Rework / Vi phạm khác:</b> Trừ <b>1 điểm/lần</b> (Tối thiểu 0).</li>
             </ul>
           </div>
         </div>

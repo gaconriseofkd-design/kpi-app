@@ -57,7 +57,7 @@ function scoreByQualityLamination(type, defects) {
 
 // Helper mới cho LAMINATION (Tuân thủ)
 function scoreByComplianceLamination(type, count) {
-  if (!type || type === 'NONE' || type === 'OTHER') return 3;
+  if (!type || type === 'NONE') return 3;
   const c = Number(count || 0);
   return Math.max(0, 3 - c);
 }
