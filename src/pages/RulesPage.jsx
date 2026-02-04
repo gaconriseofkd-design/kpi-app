@@ -610,7 +610,7 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
       { section: "OTHERS", severity: "NORMAL", content: "Các lỗi tuân thủ khác" }
     ];
 
-    const { error } = await supabase.from("kpi_compliance_dictionary").upsert(defaults, { onConflict: 'content' });
+    const { error } = await supabase.from("kpi_compliance_dictionary").upsert(defaults, { onConflict: 'section,content' });
     if (error) alert(error.message);
     else {
       alert("Đã đồng bộ dữ liệu gốc lên hệ thống!");
