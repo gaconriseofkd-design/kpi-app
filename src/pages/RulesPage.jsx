@@ -216,104 +216,113 @@ function RulesContent() {
 
   // 🖼️ Giao diện chính
   return (
-    <div className="p-4 space-y-4">
-      <div className="flex items-center justify-between gap-4 border-b pb-2">
-        <div className="flex items-center gap-4">
-          <h2 className="text-xl font-bold text-indigo-800">Cấu hình Rule KPI</h2>
-          <span className="px-2 py-1 text-xs font-semibold rounded bg-indigo-100 text-indigo-700 border border-indigo-200">
-            {SECTIONS.find((s) => s.key === section)?.label || section}
-          </span>
-        </div>
-
-        <div className="flex bg-gray-100 p-1 rounded-lg">
+    <div className="p-4 space-y-6">
+      {/* Header & Tabs */}
+      <div className="flex flex-col md:flex-row md:items-center gap-6 border-b pb-4">
+        <div className="flex bg-gray-100 p-1.5 rounded-2xl border border-gray-200 shadow-inner">
           <button
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === "productivity" ? "bg-white shadow text-indigo-700" : "text-gray-500 hover:text-gray-700"}`}
+            className={`px-6 py-2.5 rounded-xl text-sm font-extrabold transition-all duration-300 flex items-center gap-2 ${activeTab === "productivity"
+              ? "bg-indigo-600 text-white shadow-lg shadow-indigo-200 ring-2 ring-indigo-700 scale-105 z-10"
+              : "text-gray-500 hover:bg-white hover:text-indigo-600"
+              }`}
             onClick={() => setActiveTab("productivity")}
           >
-            1. Điểm Sản lượng (P)
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] ${activeTab === "productivity" ? "bg-white text-indigo-600" : "bg-gray-200"}`}>1</div>
+            ĐIỂM SẢN LƯỢNG (P)
           </button>
           <button
-            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === "quality" ? "bg-white shadow text-indigo-700" : "text-gray-500 hover:text-gray-700"}`}
+            className={`px-6 py-2.5 rounded-xl text-sm font-extrabold transition-all duration-300 flex items-center gap-2 ${activeTab === "quality"
+              ? "bg-teal-600 text-white shadow-lg shadow-teal-200 ring-2 ring-teal-700 scale-105 z-10"
+              : "text-gray-500 hover:bg-white hover:text-teal-600"
+              }`}
             onClick={() => setActiveTab("quality")}
           >
-            2. Điểm Chất lượng & Tuân thủ (Q/C)
+            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] ${activeTab === "quality" ? "bg-white text-teal-600" : "bg-gray-200"}`}>2</div>
+            ĐIỂM Q & C
           </button>
+        </div>
+
+        <div className="flex items-center gap-3 ml-auto md:ml-0 order-first md:order-last">
+          <h2 className="text-2xl font-black text-slate-800 tracking-tight">Cấu hình Rule</h2>
+          <span className="px-3 py-1 text-xs font-bold rounded-lg bg-slate-800 text-white shadow-sm">
+            {SECTIONS.find((s) => s.key === section)?.label || section}
+          </span>
         </div>
       </div>
 
       {activeTab === "productivity" && (
-        <div className="space-y-4 animate-in fade-in duration-300">
-          <div className="flex items-center gap-2 flex-wrap bg-white p-3 rounded-xl border shadow-sm">
-            <h3 className="text-sm font-bold text-gray-500 uppercase mr-auto">
-              {needsCategory ? "Thiết lập Ngưỡng Sản lượng" : "Thiết lập %OE"}
+        <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-500">
+          <div className="flex items-center gap-2 flex-wrap bg-white p-4 rounded-2xl border shadow-sm">
+            <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mr-auto">
+              {needsCategory ? "Thiết lập Ngưỡng Sản lượng" : "Thiết lập tỷ lệ %OE"}
             </h3>
-            <button className="btn btn-sm" onClick={load} disabled={loading}>
-              {loading ? "Đang tải..." : "Tải lại"}
-            </button>
-            <button className="btn btn-sm bg-indigo-600 text-white hover:bg-indigo-700" onClick={addRow}>
-              + Thêm dòng
-            </button>
-            <label className="btn btn-sm cursor-pointer bg-green-600 hover:bg-green-700 text-white">
-              📤 Import Excel
-              <input type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleImportExcel} />
-            </label>
-            <button className="btn btn-sm bg-blue-600 text-white hover:bg-blue-700" onClick={saveAll} disabled={saving}>
-              {saving ? "Đang lưu..." : "Lưu tất cả"}
-            </button>
+            <div className="flex items-center gap-2">
+              <button className="btn btn-sm" onClick={load} disabled={loading}>
+                {loading ? "Đang tải..." : "Tải lại"}
+              </button>
+              <button className="btn btn-sm bg-indigo-600 text-white hover:bg-indigo-700" onClick={addRow}>
+                + Thêm dòng
+              </button>
+              <label className="btn btn-sm cursor-pointer bg-green-600 hover:bg-green-700 text-white">
+                📤 Import Excel
+                <input type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleImportExcel} />
+              </label>
+              <button className="btn btn-sm bg-blue-600 text-white hover:bg-blue-700" onClick={saveAll} disabled={saving}>
+                {saving ? "Đang lưu..." : "Lưu tất cả"}
+              </button>
+            </div>
           </div>
 
           {/* Test nhanh */}
-          <div className="p-3 rounded border bg-white inline-flex items-center gap-2 flex-wrap">
+          <div className="p-4 rounded-2xl border bg-indigo-50/50 flex items-center gap-4 flex-wrap">
+            <span className="text-sm font-bold text-indigo-900">Kiểm tra nhanh:</span>
             {needsCategory ? (
-              <>
-                <select
-                  className="input w-36"
-                  value={testCat}
-                  onChange={(e) => setTestCat(e.target.value)}
-                >
-                  <option value="">-- Loại hàng/Line --</option>
-                  {[...new Set(rows.map((r) => r.category).filter(Boolean))].map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-                <span>%OE/Tỷ lệ NS:</span>
-              </>
-            ) : (
-              <span>Test %OE:</span>
-            )}
-            <input
-              type="number"
-              className="input w-28"
-              value={testOE}
-              onChange={(e) => setTestOE(Number(e.target.value))}
-            />
-            <span>
-              → Điểm: <b>{testScore}</b>
-            </span>
+              <select
+                className="select select-sm select-bordered w-44 bg-white"
+                value={testCat}
+                onChange={(e) => setTestCat(e.target.value)}
+              >
+                <option value="">-- Chọn Loại hàng --</option>
+                {[...new Set(rows.map((r) => r.category).filter(Boolean))].map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            ) : null}
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-gray-600">%OE:</span>
+              <input
+                type="number"
+                className="input input-sm input-bordered w-24 bg-white"
+                value={testOE}
+                onChange={(e) => setTestOE(Number(e.target.value))}
+              />
+            </div>
+            <div className="bg-white px-4 py-1 rounded-full border border-indigo-200 shadow-sm">
+              <span className="text-sm text-gray-500">Kết quả:</span>
+              <span className="ml-2 text-lg font-black text-indigo-600">{testScore} điểm</span>
+            </div>
           </div>
 
           {/* Bảng Rule */}
-          <div className="overflow-auto pb-4">
+          <div className="overflow-auto pb-4 bg-white rounded-2xl border shadow-sm">
             {needsCategory ? (
-              <table className="min-w-[800px] text-sm">
+              <table className="table table-sm w-full">
                 <thead>
-                  <tr className="text-left border-b">
-                    <th className="p-2">Loại hàng/Line</th>
-                    <th className="p-2">Ngưỡng (≥)</th>
-                    <th className="p-2">Điểm</th>
-                    <th className="p-2">Ghi chú</th>
-                    <th className="p-2">Active</th>
-                    <th className="p-2">Xoá</th>
+                  <tr className="bg-slate-50">
+                    <th className="p-3">Loại hàng/Line</th>
+                    <th className="p-3">Ngưỡng (≥)</th>
+                    <th className="p-3">Điểm</th>
+                    <th className="p-3">Ghi chú</th>
+                    <th className="p-3 text-center">Active</th>
+                    <th className="p-3 text-center">Xoá</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((r, idx) => (
-                    <tr key={r.id ?? `new-${idx}`} className="border-b hover:bg-gray-50">
+                    <tr key={r.id ?? `new-${idx}`} className="hover:bg-slate-50 transition-colors">
                       <td className="p-2">
                         <input
-                          className="input w-40"
+                          className="input input-sm input-bordered w-full"
                           value={r.category || ""}
                           onChange={(e) =>
                             setRows((list) =>
@@ -327,7 +336,7 @@ function RulesContent() {
                       <td className="p-2">
                         <input
                           type="number"
-                          className="input w-28"
+                          className="input input-sm input-bordered w-24"
                           value={r.threshold}
                           onChange={(e) =>
                             setRows((list) =>
@@ -341,7 +350,7 @@ function RulesContent() {
                       <td className="p-2">
                         <input
                           type="number"
-                          className="input w-20"
+                          className="input input-sm input-bordered w-16"
                           value={r.score}
                           onChange={(e) =>
                             setRows((list) =>
@@ -354,7 +363,7 @@ function RulesContent() {
                       </td>
                       <td className="p-2">
                         <input
-                          className="input w-80"
+                          className="input input-sm input-bordered w-full"
                           value={r.note ?? ""}
                           onChange={(e) =>
                             setRows((list) =>
@@ -365,9 +374,10 @@ function RulesContent() {
                           }
                         />
                       </td>
-                      <td className="p-2">
+                      <td className="p-2 text-center">
                         <input
                           type="checkbox"
+                          className="checkbox checkbox-sm checkbox-primary"
                           checked={!!r.active}
                           onChange={(e) =>
                             setRows((list) =>
@@ -378,40 +388,33 @@ function RulesContent() {
                           }
                         />
                       </td>
-                      <td className="p-2">
-                        <button className="btn" onClick={() => delRow(r.id, idx)}>
+                      <td className="p-2 text-center">
+                        <button className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50" onClick={() => delRow(r.id, idx)}>
                           Xoá
                         </button>
                       </td>
                     </tr>
                   ))}
-                  {!rows.length && (
-                    <tr>
-                      <td colSpan={6} className="p-4 text-center text-gray-500">
-                        Chưa có rule
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
             ) : (
-              <table className="min-w-[700px] text-sm">
+              <table className="table table-sm w-full">
                 <thead>
-                  <tr className="text-left border-b">
-                    <th className="p-2">Ngưỡng %OE (≥)</th>
-                    <th className="p-2">Điểm</th>
-                    <th className="p-2">Ghi chú</th>
-                    <th className="p-2">Active</th>
-                    <th className="p-2">Xoá</th>
+                  <tr className="bg-slate-50">
+                    <th className="p-3">Ngưỡng %OE (≥)</th>
+                    <th className="p-3">Điểm</th>
+                    <th className="p-3">Ghi chú</th>
+                    <th className="p-3 text-center">Active</th>
+                    <th className="p-3 text-center">Xoá</th>
                   </tr>
                 </thead>
                 <tbody>
                   {rows.map((r, idx) => (
-                    <tr key={r.id ?? `new-${idx}`} className="border-b hover:bg-gray-50">
+                    <tr key={r.id ?? `new-${idx}`} className="hover:bg-slate-50 transition-colors">
                       <td className="p-2">
                         <input
                           type="number"
-                          className="input w-28"
+                          className="input input-sm input-bordered w-32"
                           value={r.threshold}
                           onChange={(e) =>
                             setRows((list) =>
@@ -425,7 +428,7 @@ function RulesContent() {
                       <td className="p-2">
                         <input
                           type="number"
-                          className="input w-20"
+                          className="input input-sm input-bordered w-20"
                           value={r.score}
                           onChange={(e) =>
                             setRows((list) =>
@@ -438,7 +441,7 @@ function RulesContent() {
                       </td>
                       <td className="p-2">
                         <input
-                          className="input w-80"
+                          className="input input-sm input-bordered w-full"
                           value={r.note ?? ""}
                           onChange={(e) =>
                             setRows((list) =>
@@ -449,9 +452,10 @@ function RulesContent() {
                           }
                         />
                       </td>
-                      <td className="p-2">
+                      <td className="p-2 text-center">
                         <input
                           type="checkbox"
+                          className="checkbox checkbox-sm checkbox-primary"
                           checked={!!r.active}
                           onChange={(e) =>
                             setRows((list) =>
@@ -462,41 +466,37 @@ function RulesContent() {
                           }
                         />
                       </td>
-                      <td className="p-2">
-                        <button className="btn" onClick={() => delRow(r.id, idx)}>
+                      <td className="p-2 text-center">
+                        <button className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50" onClick={() => delRow(r.id, idx)}>
                           Xoá
                         </button>
                       </td>
                     </tr>
                   ))}
-                  {!rows.length && (
-                    <tr>
-                      <td colSpan={5} className="p-4 text-center text-gray-500">
-                        Chưa có rule
-                      </td>
-                    </tr>
-                  )}
                 </tbody>
               </table>
+            )}
+            {!rows.length && (
+              <div className="p-10 text-center text-gray-400 italic">Chưa có dữ liệu cấu hình.</div>
             )}
           </div>
         </div>
       )}
 
       {activeTab === "quality" && (
-        <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-300">
-          <div className="flex items-center justify-between bg-white p-3 rounded-xl border shadow-sm">
-            <h3 className="text-sm font-bold text-gray-500 uppercase">
-              Tra cứu Quy định Q / C
-            </h3>
+        <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-500">
+          <div className="flex items-center justify-between bg-white p-4 rounded-2xl border shadow-sm">
+            <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Tra cứu Quy định Chất lượng (Q) & Tuân thủ (C)</h3>
             <button
-              className={`btn btn-sm ${showAllSections ? "bg-indigo-500 text-black font-bold" : "bg-gray-100 text-black"}`}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${showAllSections
+                ? "bg-slate-800 text-white border-slate-800 shadow-md"
+                : "bg-white text-slate-800 border-slate-300 hover:bg-slate-50"
+                }`}
               onClick={() => setShowAllSections(!showAllSections)}
             >
-              {showAllSections ? "← Quay lại Section hiện tại" : "Xem tất cả bộ phận"}
+              {showAllSections ? "← Quay lại bộ phận hiện tại" : "Xem tất cả bộ phận"}
             </button>
           </div>
-
           {showAllSections ? (
             <div className="space-y-6">
               <QualityRulesInfo section="LAMINATION" isSingle={false} />
