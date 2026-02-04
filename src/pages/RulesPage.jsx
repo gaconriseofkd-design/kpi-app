@@ -673,7 +673,7 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
             <div className="pt-2 border-t">
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-bold text-orange-700 text-xs uppercase">Danh mục lỗi Chất lượng</h4>
-                <button onClick={() => handleAdd("QUALITY", "NORMAL")} className="btn btn-xs btn-outline btn-warning text-[9px] h-6 min-h-0">+ Thêm</button>
+                <button onClick={() => handleAdd("QUALITY", "NORMAL")} className="btn btn-xs bg-green-400 text-black hover:bg-green-500 border-none text-[9px] h-6 min-h-0 shadow-sm">+ Thêm</button>
               </div>
               <ul className="list-disc pl-4 text-[11px] space-y-1 text-gray-700">
                 {getRules("QUALITY", "NORMAL").map((item, idx) => (
@@ -765,7 +765,7 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
               <div className="pt-2 border-t">
                 <div className="flex items-center justify-between mb-2">
                   <h4 className="font-bold text-teal-700 text-xs uppercase">Danh mục lỗi Chất lượng</h4>
-                  <button onClick={() => handleAdd("QUALITY", "NORMAL")} className="btn btn-xs btn-outline btn-accent text-[9px] h-6 min-h-0">+ Thêm</button>
+                  <button onClick={() => handleAdd("QUALITY", "NORMAL")} className="btn btn-xs bg-green-400 text-black hover:bg-green-500 border-none text-[9px] h-6 min-h-0 shadow-sm">+ Thêm</button>
                 </div>
                 <ul className="list-disc pl-4 text-[11px] space-y-1 text-gray-700">
                   {getRules("QUALITY", "NORMAL").map((item, idx) => (
@@ -857,7 +857,7 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
             <div className="pt-2 border-t">
               <div className="flex items-center justify-between mb-2">
                 <h4 className="font-bold text-blue-700 text-xs uppercase">Danh mục lỗi Chất lượng</h4>
-                <button onClick={() => handleAdd("QUALITY", "NORMAL")} className="btn btn-xs btn-outline btn-info text-[9px] h-6 min-h-0">+ Thêm</button>
+                <button onClick={() => handleAdd("QUALITY", "NORMAL")} className="btn btn-xs bg-green-400 text-black hover:bg-green-500 border-none text-[9px] h-6 min-h-0 shadow-sm">+ Thêm</button>
               </div>
               <ul className="list-disc pl-4 text-[11px] space-y-1 text-gray-700">
                 {getRules("QUALITY", "NORMAL").map((item, idx) => (
