@@ -653,17 +653,21 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
           {/* CỘT CHẤT LƯỢNG (Q) */}
           <div className="p-4 bg-white rounded-xl border border-orange-100 shadow-sm space-y-4">
             <div>
-              <h4 className="font-bold text-orange-700 border-b pb-1 mb-2 text-xs uppercase">Bảng tính điểm theo số đôi phế (Q)</h4>
-              <table className="text-[11px] border w-full bg-white text-center">
+              <h4 className="font-bold text-orange-700 border-b pb-1 mb-2 text-xs uppercase underline">Quy tắc tính điểm Q (Tối đa 5đ):</h4>
+              <p className="text-[11px] font-bold text-blue-700 mb-1">● Nếu là Hàng Phế (Scrap):</p>
+              <table className="text-[11px] border w-full bg-white text-center mb-2">
                 <thead><tr className="bg-orange-100"><th className="p-1 border text-orange-800">Số đôi phế</th><th className="p-1 border text-orange-800">Điểm Q</th></tr></thead>
                 <tbody>
-                  <tr><td className="p-1 border">0 - 1 đôi</td><td className="p-1 border font-bold">5</td></tr>
-                  <tr><td className="p-1 border">2 - 3 đôi</td><td className="p-1 border font-bold">4</td></tr>
-                  <tr><td className="p-1 border">4 - 5 đôi</td><td className="p-1 border font-bold">2</td></tr>
-                  <tr><td className="p-1 border text-red-600">&gt; 5 đôi</td><td className="p-1 border font-bold text-red-600">0</td></tr>
+                  <tr><td className="p-1 border italic">0 - 1 đôi</td><td className="p-1 border font-black text-green-600">5</td></tr>
+                  <tr><td className="p-1 border italic">2 - 3 đôi</td><td className="p-1 border font-black text-blue-600">4</td></tr>
+                  <tr><td className="p-1 border italic">4 - 5 đôi</td><td className="p-1 border font-black text-orange-500">2</td></tr>
+                  <tr><td className="p-1 border italic">&gt; 5 đôi</td><td className="p-1 border font-black text-red-600">0</td></tr>
                 </tbody>
               </table>
-              <p className="text-[10px] text-gray-500 mt-1 italic">* Fail Bonding (Dry): 0 điểm Q.</p>
+              <div className="p-2 bg-red-50 border border-red-200 rounded text-[11px]">
+                <p className="font-bold text-red-700">● Nếu là Hàng Fail Bonding (Dry):</p>
+                <p className="text-red-600 font-medium italic">Trừ thẳng 5 điểm → Còn 0 điểm chất lượng.</p>
+              </div>
             </div>
 
             <div className="pt-2 border-t">

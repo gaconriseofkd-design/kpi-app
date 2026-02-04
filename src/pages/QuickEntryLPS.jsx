@@ -145,9 +145,9 @@ export default function ApproverModeHybrid({ section }) {
     })();
   }, []);
 
-  const getComplianceOptions = () => {
+  const getComplianceOptions = (cat = "COMPLIANCE") => {
     const secKey = section === "MOLDING" ? "MOLDING" : (section === "LAMINATION" ? "LAMINATION" : "OTHERS");
-    return ["NONE", ...new Set(complianceDict.filter(r => r.section === secKey).map(r => r.content))];
+    return ["NONE", ...new Set(complianceDict.filter(r => r.section === secKey && r.category === cat).map(r => r.content))];
   };
 
   // --- STATE MỚI CHO LAMINATION ---
@@ -637,7 +637,7 @@ export default function ApproverModeHybrid({ section }) {
                   <div>
                     <label className="text-sm font-bold block mb-1">Tuân thủ</label>
                     <select className="input input-bordered w-full" value={tplCompliance} onChange={e => setTplCompliance(e.target.value)}>
-                      {getComplianceOptions().map(o => (
+                      {getComplianceOptions("COMPLIANCE").map(o => (
                         <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>
                       ))}
                     </select>
@@ -653,7 +653,14 @@ export default function ApproverModeHybrid({ section }) {
             ) : (
               <>
                 <div><label>Lỗi/Phế</label><input type="number" step="1" className="input" value={tplDefects} onChange={(e) => setTplDefects(e.target.value)} /></div>
-                <div><label>Tuân thủ</label><select className="input text-center" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>{COMPLIANCE_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>
+                <div>
+                  <label>Tuân thủ</label>
+                  <select className="input input-bordered w-full" value={tplCompliance} onChange={e => setTplCompliance(e.target.value)}>
+                    {getComplianceOptions("COMPLIANCE").map(o => (
+                      <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>
+                    ))}
+                  </select>
+                </div>
               </>
             )}
           </div>
@@ -771,7 +778,7 @@ export default function ApproverModeHybrid({ section }) {
 
                       <td className="p-2">
                         <select className="input text-center w-[140px]" value={r.compliance} onChange={e => updateRow(idx, "compliance", e.target.value)}>
-                          {getComplianceOptions().map(o => (
+                          {getComplianceOptions("COMPLIANCE").map(o => (
                             <option key={o} value={o}>{o === "NONE" ? (section === 'LAMINATION' ? "Không vi phạm" : "--") : o}</option>
                           ))}
                         </select>

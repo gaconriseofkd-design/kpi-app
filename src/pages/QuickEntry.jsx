@@ -13,43 +13,7 @@ import {
 import ApproverModeHybrid from "./QuickEntryLPS";
 
 /* ===== Helpers ===== */
-const LEANLINE_COMPLIANCE_OPTIONS = [
-  "NONE",
-  "Không có/không có mẫu đầu chuyền",
-  "Không thực hiện checklist trước khi làm việc",
-  "Không thực hiện checklist dò kim",
-  "Không có mộc dò kim",
-  "Dao chặt không có thông tin",
-  "Không tuân thủ/không đo nhiệt độ tiêu chuẩn máy",
-  "Không sử dụng bảo hộ lao động, chắn lối thoát hiểm",
-  "Sử dụng điện thoại cá nhân với mục đích riêng, nghỉ ngắn, nghỉ cuối ca trước thời gian quy định.",
-  "Không scan đầy đủ QR code",
-  "Ngồi nằm trên vật liệu",
-  "Logo lưu trữ không có tem nhãn",
-  "Dụng cụ để không đúng vị trí, ko có mã số quản lý",
-  "Các lỗi tuân thủ khác"
-];
-
-const LEANLINE_QUALITY_OPTIONS = [
-  "NONE",
-  "Đóng gói sai thiếu (theo dõi)",
-  "Đóng dư, ghi số thiếu sai / không ghi số thiếu",
-  "Dán nhầm tem size run",
-  "Không in logo",
-  "Chặt sai dao",
-  "In sai logo / in sai phần đoạn",
-  "Chặt in đóng gói sai yêu cầu đối với chỉ lệnh",
-  "Lỗi in khác",
-  "Lỗi đóng gói khác",
-  "Phàn nàn khách hàng",
-  "Lỗi Phế"
-];
-
-const MOLDING_COMPLIANCE_OPTIONS = [
-  "NONE",
-  "Không kiểm soát nhiệt độ theo quy định",
-  "Lỗi Tuân thủ khác"
-];
+// Hardcoded options removed in favor of Supabase dictionary
 
 const HYBRID_SECTIONS = ["LAMINATION", "PREFITTING", "BÀO", "TÁCH"];
 const isHybridSection = (sectionKey) => HYBRID_SECTIONS.includes(sectionKey);
@@ -268,9 +232,9 @@ function ApproverModeLeanline({ section }) {
     })();
   }, []);
 
-  const getComplianceOptions = () => {
+  const getComplianceOptions = (cat = "COMPLIANCE") => {
     const secKey = section === "MOLDING" ? "MOLDING" : (section === "LAMINATION" ? "LAMINATION" : "OTHERS");
-    return ["NONE", ...new Set(complianceDict.filter(r => r.section === secKey).map(r => r.content))];
+    return ["NONE", ...new Set(complianceDict.filter(r => r.section === secKey && r.category === cat).map(r => r.content))];
   };
 
   // 1. ĐỊNH NGHĨA DANH SÁCH LINE CHUẨN DỰA TRÊN SECTION
@@ -660,20 +624,17 @@ function ApproverModeLeanline({ section }) {
             <div><label>%OE</label><input type="number" step="1" className="input" value={tplOE} onChange={(e) => setTplOE(e.target.value)} /></div>
             <div><label>Số đôi phế</label><input type="number" step="0.5" className="input" value={tplDefects} onChange={(e) => setTplDefects(e.target.value)} /></div>
 
-            <div className="md:col-span-2 flex gap-2">
+            <div className="md:col-span-2 flex gap-4">
               <div className="flex-1">
-                <label>Lỗi chất lượng</label>
+                <label className="font-bold text-blue-700">Lỗi Chất lượng (Q)</label>
                 <select className="input w-full" value={tplQualityCode} onChange={(e) => setTplQualityCode(e.target.value)}>
-                  {LEANLINE_QUALITY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
+                  {getComplianceOptions("QUALITY").map(o => <option key={o} value={o}>{o === "NONE" ? "Không lỗi" : o}</option>)}
                 </select>
               </div>
-            </div>
-
-            <div className="md:col-span-2 flex gap-2">
               <div className="flex-1">
-                <label>Tuân thủ</label>
+                <label className="font-bold text-red-700">Lỗi Tuân thủ (C)</label>
                 <select className="input w-full" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>
-                  {getComplianceOptions().map(o => <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>)}
+                  {getComplianceOptions("COMPLIANCE").map(o => <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>)}
                 </select>
               </div>
             </div>
@@ -753,12 +714,12 @@ function ApproverModeLeanline({ section }) {
 
                       <td className="p-2">
                         <select className="input w-full p-1 text-xs" value={r.quality_code} onChange={e => updateRow(i, 'quality_code', e.target.value)}>
-                          {LEANLINE_QUALITY_OPTIONS.map(o => <option key={o} value={o}>{o === "NONE" ? "--" : o}</option>)}
+                          {getComplianceOptions("QUALITY").map(o => <option key={o} value={o}>{o === "NONE" ? "--" : o}</option>)}
                         </select>
                       </td>
                       <td className="p-2">
                         <select className="input text-center w-[140px]" value={r.compliance} onChange={e => updateRow(i, "compliance", e.target.value)}>
-                          {getComplianceOptions().map(o => (
+                          {getComplianceOptions("COMPLIANCE").map(o => (
                             <option key={o} value={o}>{o === "NONE" ? (section === 'LAMINATION' ? "Không vi phạm" : "--") : o}</option>
                           ))}
                         </select>
@@ -812,7 +773,13 @@ function ApproverModeMolding({ section }) {
   const pageSize = 50;
   const [page, setPage] = useState(1);
 
+  const [complianceDict, setComplianceDict] = useState([]);
+
   useEffect(() => {
+    supabase.from("kpi_compliance_dictionary").select("*").then(({ data }) => {
+      if (data) setComplianceDict(data);
+    });
+
     supabase.from("kpi_rule_productivity").select("category, threshold, score")
       .eq("section", "MOLDING").eq("active", true)
       .order("category", { ascending: true }).order("threshold", { ascending: false })
@@ -824,6 +791,10 @@ function ApproverModeMolding({ section }) {
         if (list.length > 0) setTplCategory(list[0]);
       });
   }, []);
+
+  const getComplianceOptions = (cat = "COMPLIANCE") => {
+    return ["NONE", ...new Set(complianceDict.filter(r => r.section === "MOLDING" && r.category === cat).map(r => r.content))];
+  };
 
   // ----- THÊM HÀM XOÁ TẤT CẢ (MOLDING) -----
   function removeAllWorkers() {
@@ -1148,13 +1119,19 @@ function ApproverModeMolding({ section }) {
             /></div>
             <div><label>Ca</label><select className="input" value={tplShift} onChange={e => setTplShift(e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></div>
             <div><label>Loại hàng</label><select className="input" value={tplCategory} onChange={e => setTplCategory(e.target.value)}><option value="">-- Chọn loại --</option>{categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-            <div>
-              <label>Tuân thủ</label>
-              <select className="input text-center" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>
-                {getComplianceOptions().map(o => (
-                  <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>
-                ))}
-              </select>
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex-1">
+                <label className="font-bold text-blue-700">Chất lượng</label>
+                <select className="input w-full" value={tplQualityCode} onChange={(e) => setTplQualityCode(e.target.value)}>
+                  {getComplianceOptions("QUALITY").map(o => <option key={o} value={o}>{o === "NONE" ? "--" : o}</option>)}
+                </select>
+              </div>
+              <div className="flex-1">
+                <label className="font-bold text-red-700">Tuân thủ</label>
+                <select className="input w-full" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>
+                  {getComplianceOptions("COMPLIANCE").map(o => <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>)}
+                </select>
+              </div>
             </div>
             <div><label>Giờ làm việc (nhập)</label><input type="number" className="input" value={tplWorkingInput} onChange={e => setTplWorkingInput(e.target.value)} /></div>
             <div><label>Số giờ khuôn chạy</label><input type="number" className="input" value={tplMoldHours} onChange={e => setTplMoldHours(e.target.value)} /></div>
@@ -1288,11 +1265,12 @@ function EditReviewMolding({
                   <td className="p-2">{r.p_score}</td>
                   <td className="p-2">{r.c_score}</td>
                   <td className="p-2 font-semibold">{r.day_score}</td>
-                  <td className="p-2">
-                    <select className="input text-center w-28" value={r.compliance_code} onChange={(e) => updateRow(gi, "compliance_code", e.target.value)}>
-                      {getComplianceOptions().map(o => (
-                        <option key={o} value={o}>{o === "NONE" ? "--" : o}</option>
-                      ))}
+                  <td className="p-2 space-y-1">
+                    <select className="input text-center w-28 text-[10px]" value={r.quality_code} onChange={(e) => updateRow(gi, "quality_code", e.target.value)}>
+                      {getComplianceOptions("QUALITY").map(o => <option key={o} value={o}>{o === "NONE" ? "Q --" : o}</option>)}
+                    </select>
+                    <select className="input text-center w-28 text-[10px]" value={r.compliance_code} onChange={(e) => updateRow(gi, "compliance_code", e.target.value)}>
+                      {getComplianceOptions("COMPLIANCE").map(o => <option key={o} value={o}>{o === "NONE" ? "C --" : o}</option>)}
                     </select>
                   </td>
                   {/* THÊM CỘT INPUT GHI CHÚ */}
@@ -1342,7 +1320,12 @@ function SelfModeMolding({ section }) {
   const [dateTo, setDateTo] = useState("");
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [rulesByCat, setRulesByCat] = useState({});
+  const [complianceDict, setComplianceDict] = useState([]);
   useEffect(() => {
+    supabase.from("kpi_compliance_dictionary").select("*").then(({ data }) => {
+      if (data) setComplianceDict(data);
+    });
+
     supabase.from("kpi_rule_productivity").select("category, threshold, score").eq("section", "MOLDING").eq("active", true)
       .order("category", { ascending: true }).order("threshold", { ascending: false })
       .then(({ data, error }) => {
@@ -1355,6 +1338,10 @@ function SelfModeMolding({ section }) {
         setCategoryOptions([...cats]); setRulesByCat(map);
       });
   }, []);
+
+  const getComplianceOptions = (cat = "COMPLIANCE") => {
+    return ["NONE", ...new Set(complianceDict.filter(r => r.section === "MOLDING" && r.category === cat).map(r => r.content))];
+  };
   const [rows, setRows] = useState([]);
   function listDates(from, to) {
     const res = []; const start = new Date(from); const end = new Date(to);
@@ -1471,7 +1458,14 @@ function SelfModeMolding({ section }) {
                     <td><input type="number" className="input text-center" value={r.output} onChange={(e) => update(i, "output", e.target.value)} /></td>
                     <td><input type="number" className="input text-center" value={r.defects} onChange={(e) => update(i, "defects", e.target.value)} step="0.5" /></td>
                     <td>{r.q_score}</td><td>{r.p_score}</td><td>{r.c_score}</td><td className="font-semibold">{r.day_score}</td>
-                    <td><select className="input text-center" value={r.compliance_code} onChange={(e) => update(i, "compliance_code", e.target.value)}>{MOLDING_COMPLIANCE_OPTIONS.map(o => (<option key={o} value={o}>{o === "NONE" ? "--" : o}</option>))}</select></td>
+                    <td className="p-2 space-y-1">
+                      <select className="input text-center w-28 text-[10px]" value={r.quality_code} onChange={(e) => update(i, "quality_code", e.target.value)}>
+                        {getComplianceOptions("QUALITY").map(o => <option key={o} value={o}>{o === "NONE" ? "Q --" : o}</option>)}
+                      </select>
+                      <select className="input text-center w-28 text-[10px]" value={r.compliance_code} onChange={(e) => update(i, "compliance_code", e.target.value)}>
+                        {getComplianceOptions("COMPLIANCE").map(o => <option key={o} value={o}>{o === "NONE" ? "C --" : o}</option>)}
+                      </select>
+                    </td>
                   </tr>
                 ))}
               </tbody>
