@@ -91,7 +91,7 @@ function calcWorkingReal(shift, inputHours) {
   return base + adj;
 }
 
-function calculateScoresMolding({ shift, working_input, mold_hours, output, defects, category, compliance }, rules) {
+function calculateScoresMolding({ shift, working_input, mold_hours, output, defects, category, quality_code, compliance }, rules) {
   const workingReal = calcWorkingReal(shift, working_input);
   let dt = (Number(workingReal) * 24 - Number(mold_hours || 0)) / 24;
   // Cap lại logic
@@ -101,6 +101,8 @@ function calculateScoresMolding({ shift, working_input, mold_hours, output, defe
   const workingExact = Math.max(0, Number(workingReal) - dt);
 
   // Quality Score
+  // Nếu có quality_code (lỗi chất lượng cụ thể) thì có thể xử lý điểm ở đây.
+  // Hiện tại vẫn giữ logic theo số đôi phế.
   const q = scoreByQualityMolding(defects);
 
   // Compliance Score
@@ -766,6 +768,7 @@ function ApproverModeMolding({ section }) {
   const [tplOutput, setTplOutput] = useState(0);
   const [tplCategory, setTplCategory] = useState("");
   const [tplDefects, setTplDefects] = useState(0);
+  const [tplQualityCode, setTplQualityCode] = useState("NONE");
   const [tplCompliance, setTplCompliance] = useState("NONE");
   const [reviewRows, setReviewRows] = useState([]);
   const [selReview, setSelReview] = useState(() => new Set());
@@ -806,9 +809,10 @@ function ApproverModeMolding({ section }) {
   const previewScores = useMemo(() => {
     return calculateScoresMolding({
       shift: tplShift, working_input: tplWorkingInput, mold_hours: tplMoldHours,
-      output: tplOutput, defects: tplDefects, category: tplCategory, compliance: tplCompliance
+      output: tplOutput, defects: tplDefects, category: tplCategory,
+      quality_code: tplQualityCode, compliance: tplCompliance
     }, prodRules);
-  }, [tplShift, tplWorkingInput, tplMoldHours, tplOutput, tplDefects, tplCategory, tplCompliance, prodRules]);
+  }, [tplShift, tplWorkingInput, tplMoldHours, tplOutput, tplDefects, tplCategory, tplQualityCode, tplCompliance, prodRules]);
   const tplQ = previewScores.q_score;
   const tplP = previewScores.p_score;
   const tplKPI = previewScores.day_score;
@@ -908,6 +912,7 @@ function ApproverModeMolding({ section }) {
         approver_msnv: w.approver_msnv || approverIdInput, approver_name: w.approver_name,
         category: tplCategory, working_input: toNum(tplWorkingInput),
         mold_hours: toNum(tplMoldHours), output: toNum(tplOutput), defects: toNum(tplDefects),
+        quality_code: tplQualityCode,
         compliance_code: tplCompliance, q_score: scores.q_score, p_score: scores.p_score,
         c_score: scores.c_score, // ADDED
         day_score: scores.day_score, working_real: scores.working_real,
@@ -932,8 +937,8 @@ function ApproverModeMolding({ section }) {
     setReviewRows((old) => {
       const arr = old.slice();
       const r0 = arr[i] || {};
-      // CẬP NHẬT: Thêm "approver_note"
-      const r = ["compliance_code", "category", "shift", "work_date", "approver_note"].includes(key)
+      // CẬP NHẬT: Thêm "approver_note", "quality_code"
+      const r = ["compliance_code", "quality_code", "category", "shift", "work_date", "approver_note"].includes(key)
         ? { ...r0, [key]: val } : { ...r0, [key]: toNum(val, 0) };
       const scores = calculateScoresMolding({ ...r, compliance: r.compliance_code }, prodRules);
       arr[i] = {
@@ -976,6 +981,7 @@ function ApproverModeMolding({ section }) {
         approver_msnv: r.approver_msnv, approver_name: r.approver_name, category: r.category,
         working_input: r.working_input, working_real: r.working_real, working_exact: r.working_exact,
         downtime: r.downtime, mold_hours: r.mold_hours, output: r.output, defects: Number(r.defects || 0),
+        quality_code: r.quality_code || null,
         q_score: scores.q_score, p_score: scores.p_score, c_score: scores.c_score, day_score: scores.day_score, overflow,
         compliance_code: r.compliance_code, status: "approved", approved_at: now,
         approver_note: r.approver_note || null,
@@ -1175,10 +1181,12 @@ function ApproverModeMolding({ section }) {
         <EditReviewMolding
           pageSize={pageSize} page={page} setPage={setPage} totalPages={totalPages} pageRows={pageRows}
           selReview={selReview} toggleAllReviewOnPage={toggleAllReviewOnPage}
-          toggleOneReview={toggleOneReview} // <-- THÊM PROP NÀY
+          toggleOneReview={toggleOneReview}
           saveBatch={saveBatch} saving={saving}
           updateRow={updateRow}
           categoryOptions={categoryOptions}
+          getComplianceOptions={getComplianceOptions}
+          today={today}
           resetToStep1={resetToStep1}
         />
       )}
@@ -1191,7 +1199,7 @@ function ApproverModeMolding({ section }) {
 function EditReviewMolding({
   pageSize, page, setPage, totalPages, pageRows, selReview,
   toggleAllReviewOnPage, toggleOneReview, updateRow, saveBatch, saving,
-  categoryOptions,
+  categoryOptions, getComplianceOptions, today,
   resetToStep1
 }) {
   const globalIndex = (idx) => (page - 1) * pageSize + idx;
@@ -1361,7 +1369,7 @@ function SelfModeMolding({ section }) {
     const base = days.map((d) => ({
       section, date: d, ca: "", worker_id: workerId, worker_name: workerName, entrant_msnv: entrantId, entrant_name: entrantName,
       category: "", working_input: 8, working_real: 0, downtime: 0, working_exact: 0, mold_hours: 0,
-      output: 0, defects: 0, q_score: 0, p_score: 0, day_score: 0, compliance_code: "NONE", status: "approved",
+      output: 0, defects: 0, quality_code: "NONE", q_score: 0, p_score: 0, day_score: 0, compliance_code: "NONE", status: "approved",
     }));
     setRows(base);
   }
@@ -1383,7 +1391,7 @@ function SelfModeMolding({ section }) {
   function update(i, key, val) {
     setRows((old) => {
       const copy = old.slice();
-      const r = { ...copy[i], [key]: ["ca", "category", "compliance_code"].includes(key) ? val : toNum(val, 0) };
+      const r = { ...copy[i], [key]: ["ca", "category", "compliance_code", "quality_code"].includes(key) ? val : toNum(val, 0) };
       copy[i] = recompute(r);
       return copy;
     });
@@ -1403,6 +1411,7 @@ function SelfModeMolding({ section }) {
         working_exact: finalScores.working_exact,
         downtime: finalScores.downtime,
         mold_hours: r.mold_hours, output: r.output, defects: Number(r.defects || 0),
+        quality_code: r.quality_code || null,
         q_score: finalScores.q_score, p_score: finalScores.p_score, c_score: finalScores.c_score, day_score: finalScores.day_score, overflow,
         compliance_code: r.compliance_code, status: "approved", approved_at: now,
       };
