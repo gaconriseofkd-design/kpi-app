@@ -540,9 +540,6 @@ export default function EntryPage() {
       <div className="mt-3 p-4 rounded bg-gray-50">
         <p>Giờ làm việc nhập: <b>{Number(form.workHours || 0)}</b></p>
         <p>Giờ dừng máy: <b>{Number(form.stopHours || 0)}</b></p>
-        {section === "LEANLINE_MOLDED" && (
-          <p>Rule: Line M1-M3: 77.0-109.8% | Line M4-M5: 74.5-110.9%</p>
-        )}
         {isHybrid && (
           <>
             <p>Giờ thực tế (Quy đổi): <b>{scores.workingReal.toFixed(2)}</b></p>

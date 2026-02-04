@@ -572,11 +572,17 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
     if (pass !== "davidtu") return;
 
     const defaults = [
+      // 1. LAMINATION
       { section: "LAMINATION", severity: "NORMAL", content: "Vi phạm MQAA" },
       { section: "LAMINATION", severity: "NORMAL", content: "Lỗi Rework" },
       { section: "LAMINATION", severity: "NORMAL", content: "Vi phạm khác" },
+
+      // 2. MOLDING
       { section: "MOLDING", severity: "SEVERE", content: "Không kiểm soát nhiệt độ theo quy định" },
       { section: "MOLDING", severity: "NORMAL", content: "Lỗi Tuân thủ khác" },
+
+      // 3. OTHERS (LEANLINE, PREFITTING, TÁCH, BÀO...)
+      // SEVERE - LOẠI A
       { section: "OTHERS", severity: "SEVERE", content: "Không có/không có mẫu đầu chuyền" },
       { section: "OTHERS", severity: "SEVERE", content: "Không thực hiện checklist trước khi làm việc" },
       { section: "OTHERS", severity: "SEVERE", content: "Không thực hiện checklist dò kim" },
@@ -584,12 +590,23 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
       { section: "OTHERS", severity: "SEVERE", content: "Dao chặt không có thông tin" },
       { section: "OTHERS", severity: "SEVERE", content: "Không tuân thủ/không đo nhiệt độ tiêu chuẩn máy" },
       { section: "OTHERS", severity: "SEVERE", content: "Không sử dụng bảo hộ lao động, chắn lối thoát hiểm" },
+      { section: "OTHERS", severity: "SEVERE", content: "Không in logo" },
+      { section: "OTHERS", severity: "SEVERE", content: "Chặt sai dao" },
+      { section: "OTHERS", severity: "SEVERE", content: "In sai logo/ in sai phân đoạn" },
+      { section: "OTHERS", severity: "SEVERE", content: "Chặt in đóng gói sai yêu cầu đối với chỉ lệnh" },
+
+      // NORMAL - LOẠI B
       { section: "OTHERS", severity: "NORMAL", content: "Sử dụng điện thoại cá nhân với mục đích riêng" },
       { section: "OTHERS", severity: "NORMAL", content: "Nghỉ ngắn, nghỉ cuối ca trước thời gian quy định" },
       { section: "OTHERS", severity: "NORMAL", content: "Không scan đầy đủ QR code" },
       { section: "OTHERS", severity: "NORMAL", content: "Ngồi nằm trên vật liệu" },
       { section: "OTHERS", severity: "NORMAL", content: "Logo lưu trữ không có tem nhãn" },
       { section: "OTHERS", severity: "NORMAL", content: "Dụng cụ để không đúng vị trí, ko có mã số quản lý" },
+      { section: "OTHERS", severity: "NORMAL", content: "Đóng gói sai thiếu (theo đôi)" },
+      { section: "OTHERS", severity: "NORMAL", content: "Đóng dư, ghi số thiếu sai/ không ghi số thiếu" },
+      { section: "OTHERS", severity: "NORMAL", content: "Dán nhầm tem size run" },
+      { section: "OTHERS", severity: "NORMAL", content: "Lỗi in khác" },
+      { section: "OTHERS", severity: "NORMAL", content: "Lỗi đóng gói khác" },
       { section: "OTHERS", severity: "NORMAL", content: "Các lỗi tuân thủ khác" }
     ];
 
