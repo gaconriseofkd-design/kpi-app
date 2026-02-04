@@ -282,7 +282,13 @@ function RulesContent() {
               {section.toUpperCase() === "LEANLINE_MOLDED" && (
                 <button
                   className={`btn btn-sm ${showOriginalThreshold ? "bg-amber-600 hover:bg-amber-700" : "bg-slate-500 hover:bg-slate-600"} text-white font-bold shadow-sm`}
-                  onClick={() => setShowOriginalThreshold(!showOriginalThreshold)}
+                  onClick={() => {
+                    if (!showOriginalThreshold) {
+                      const pass = prompt("Nhập mật khẩu để hiện điểm gốc:");
+                      if (pass !== "12345") return alert("Sai mật khẩu!");
+                    }
+                    setShowOriginalThreshold(!showOriginalThreshold);
+                  }}
                   title={showOriginalThreshold ? "Đang hiện điểm gốc. Click để hiện +3%" : "Đang hiện điểm +3%. Click để hiện điểm gốc (Hide)"}
                 >
                   {showOriginalThreshold ? "Show (+3%)" : "Hide"}
