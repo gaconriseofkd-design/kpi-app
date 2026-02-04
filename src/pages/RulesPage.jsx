@@ -63,6 +63,7 @@ function RulesContent() {
   const [testOE, setTestOE] = useState(100);
   const [testCat, setTestCat] = useState("");
   const [activeTab, setActiveTab] = useState("productivity"); // "productivity" or "quality"
+  const [showAllSections, setShowAllSections] = useState(false);
 
   const needsCategory = requiresCategory(section.toUpperCase());
 
@@ -483,22 +484,45 @@ function RulesContent() {
       )}
 
       {activeTab === "quality" && (
-        <div className="animate-in slide-in-from-bottom-2 duration-300">
-          <QualityRulesInfo section={section} />
+        <div className="space-y-4 animate-in slide-in-from-bottom-2 duration-300">
+          <div className="flex items-center justify-between bg-white p-3 rounded-xl border shadow-sm">
+            <h3 className="text-sm font-bold text-gray-500 uppercase">
+              Tra cứu Quy định Q / C
+            </h3>
+            <button
+              className={`btn btn-sm ${showAllSections ? "bg-indigo-600 text-white" : "bg-gray-100"}`}
+              onClick={() => setShowAllSections(!showAllSections)}
+            >
+              {showAllSections ? "← Quay lại Section hiện tại" : "Xem tất cả bộ phận"}
+            </button>
+          </div>
+
+          {showAllSections ? (
+            <div className="space-y-6">
+              <QualityRulesInfo section="LAMINATION" isSingle={false} />
+              <QualityRulesInfo section="MOLDING" isSingle={false} />
+              <QualityRulesInfo section="LEANLINE_DC" isSingle={false} />
+            </div>
+          ) : (
+            <QualityRulesInfo section={section} isSingle={true} />
+          )}
         </div>
       )}
     </div>
   );
 }
 
-function QualityRulesInfo({ section }) {
+function QualityRulesInfo({ section, isSingle = true }) {
   const s = (section || "").toUpperCase();
+  const label = isSingle ? s : (s === "LEANLINE_DC" ? "LEANLINE/PREFITTING/TÁCH/BÀO" : s);
 
   // 1. RULES CHO LAMINATION
   if (s === "LAMINATION") {
     return (
       <div className="p-4 bg-orange-50 border border-orange-200 rounded-lg shadow-sm">
-        <h3 className="font-bold text-orange-800 mb-3 text-lg border-b border-orange-200 pb-1">Bảng tra điểm Chất lượng (Q) & Tuân thủ (C) - {s}</h3>
+        <h3 className="font-bold text-orange-800 mb-3 text-lg border-b border-orange-200 pb-1">
+          {isSingle ? "Bảng tra điểm Chất lượng (Q) & Tuân thủ (C) - " + s : "1. BỘ PHẬN " + label}
+        </h3>
         <div className="grid md:grid-cols-2 gap-6">
           <div className="space-y-3">
             <h4 className="font-semibold text-orange-700">1. Điểm Chất lượng (Q) - Tối đa 5 đ</h4>
@@ -538,7 +562,9 @@ function QualityRulesInfo({ section }) {
   if (s === "MOLDING") {
     return (
       <div className="p-4 bg-teal-50 border border-teal-200 rounded-lg shadow-sm">
-        <h3 className="font-bold text-teal-800 mb-3 text-lg border-b border-teal-200 pb-1">Bảng tra điểm Chất lượng (Q) & Tuân thủ (C) - {s}</h3>
+        <h3 className="font-bold text-teal-800 mb-3 text-lg border-b border-teal-200 pb-1">
+          {isSingle ? "Bảng tra điểm Chất lượng (Q) & Tuân thủ (C) - " + s : "2. BỘ PHẬN " + label}
+        </h3>
         <div className="grid md:grid-cols-2 gap-6">
           <div className="space-y-3">
             <h4 className="font-semibold text-teal-700">1. Điểm Chất lượng (Q) - Tối đa 5 đ</h4>
@@ -572,7 +598,9 @@ function QualityRulesInfo({ section }) {
   // 3. RULES CHO CÁC BỘ PHẬN CÒN LẠI (Leanline, Prefitting, Tách, Bào)
   return (
     <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg shadow-sm">
-      <h3 className="font-bold text-blue-800 mb-3 text-lg border-b border-blue-200 pb-1">Bảng tra điểm Chất lượng (Q) & Tuân thủ (C) - {s}</h3>
+      <h3 className="font-bold text-blue-800 mb-3 text-lg border-b border-blue-200 pb-1">
+        {isSingle ? "Bảng tra điểm Chất lượng (Q) & Tuân thủ (C) - " + s : "3. BỘ PHẬN " + label}
+      </h3>
       <div className="grid md:grid-cols-2 gap-6">
         <div className="space-y-3">
           <h4 className="font-semibold text-blue-700">1. Điểm Chất lượng (Q) - Tối đa 5 đ</h4>
