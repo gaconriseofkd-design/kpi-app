@@ -136,6 +136,19 @@ export default function ApproverModeHybrid({ section }) {
   const [tplOutput, setTplOutput] = useState(100);
   const [tplDefects, setTplDefects] = useState(0);
   const [tplCompliance, setTplCompliance] = useState("NONE");
+  const [complianceDict, setComplianceDict] = useState([]);
+
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("kpi_compliance_dictionary").select("*");
+      if (data) setComplianceDict(data);
+    })();
+  }, []);
+
+  const getComplianceOptions = () => {
+    const secKey = section === "MOLDING" ? "MOLDING" : (section === "LAMINATION" ? "LAMINATION" : "OTHERS");
+    return ["NONE", ...new Set(complianceDict.filter(r => r.section === secKey).map(r => r.content))];
+  };
 
   // --- STATE MỚI CHO LAMINATION ---
   const [tplQualityType, setTplQualityType] = useState('SCRAP'); // SCRAP | FAIL_BONDING
@@ -620,11 +633,13 @@ export default function ApproverModeHybrid({ section }) {
                 )}
 
                 {/* KHỐI TUÂN THỦ CHO LAMINATION */}
-                <div className="md:col-span-2 flex gap-2">
-                  <div className="flex-1">
-                    <label>Tuân thủ</label>
-                    <select className="input text-center" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>
-                      {LAMINATION_COMPLIANCE_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}
+                <div className="md:col-span-2">
+                  <div>
+                    <label className="text-sm font-bold block mb-1">Tuân thủ</label>
+                    <select className="input input-bordered w-full" value={tplCompliance} onChange={e => setTplCompliance(e.target.value)}>
+                      {getComplianceOptions().map(o => (
+                        <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>
+                      ))}
                     </select>
                   </div>
                   {tplCompliance !== 'NONE' && (
@@ -756,10 +771,9 @@ export default function ApproverModeHybrid({ section }) {
 
                       <td className="p-2">
                         <select className="input text-center w-[140px]" value={r.compliance} onChange={e => updateRow(idx, "compliance", e.target.value)}>
-                          {section === 'LAMINATION'
-                            ? LAMINATION_COMPLIANCE_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)
-                            : COMPLIANCE_OPTIONS.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)
-                          }
+                          {getComplianceOptions().map(o => (
+                            <option key={o} value={o}>{o === "NONE" ? (section === 'LAMINATION' ? "Không vi phạm" : "--") : o}</option>
+                          ))}
                         </select>
                       </td>
 

@@ -529,34 +529,81 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
 
   // Helper to add rule
   const handleAdd = async (severity) => {
-    const pass = prompt("Nhập mật khẩu (davidtu):");
+    const pass = prompt("Nhập mật khẩu:");
     if (pass !== "davidtu") return alert("Sai mật khẩu");
     const content = prompt("Nhập nội dung lỗi:");
     if (!content) return;
 
+    const secKey = s === "MOLDING" ? "MOLDING" : (s === "LAMINATION" ? "LAMINATION" : "OTHERS");
+
     const { error } = await supabase
       .from("kpi_compliance_dictionary")
       .insert([{
-        section: s === "MOLDING" ? "MOLDING" : (s === "LAMINATION" ? "LAMINATION" : "OTHERS"),
+        section: secKey,
         severity,
         content,
       }]);
-    if (error) {
-      // Fallback if table doesn't exist yet - just a mock alert for now since we can't create table
-      alert("Lỗi: " + error.message + "\n(Lưu ý: Bàn cần tạo bảng 'kpi_compliance_dictionary' để lưu dữ liệu)");
-    } else {
+    if (error) alert("Lỗi: " + error.message);
+    else {
       alert("Đã thêm thành công");
       onRefresh?.();
     }
   };
 
-  // Filter rules
-  const getRules = (type, defaults) => {
+  const handleDelete = async (content) => {
+    const pass = prompt("Nhập mật khẩu để xoá:");
+    if (pass !== "davidtu") return alert("Sai mật khẩu");
+    if (!confirm(`Xoá lỗi: "${content}"?`)) return;
+
+    const { error } = await supabase
+      .from("kpi_compliance_dictionary")
+      .delete()
+      .eq("content", content);
+
+    if (error) alert("Lỗi khi xoá: " + error.message);
+    else {
+      alert("Đã xoá");
+      onRefresh?.();
+    }
+  };
+
+  const handleSeed = async () => {
+    const pass = prompt("Nhập mật khẩu hệ thống:");
+    if (pass !== "davidtu") return;
+
+    const defaults = [
+      { section: "LAMINATION", severity: "NORMAL", content: "Vi phạm MQAA" },
+      { section: "LAMINATION", severity: "NORMAL", content: "Lỗi Rework" },
+      { section: "LAMINATION", severity: "NORMAL", content: "Vi phạm khác" },
+      { section: "MOLDING", severity: "SEVERE", content: "Không kiểm soát nhiệt độ theo quy định" },
+      { section: "MOLDING", severity: "NORMAL", content: "Lỗi Tuân thủ khác" },
+      { section: "OTHERS", severity: "SEVERE", content: "Không có/không có mẫu đầu chuyền" },
+      { section: "OTHERS", severity: "SEVERE", content: "Không thực hiện checklist trước khi làm việc" },
+      { section: "OTHERS", severity: "SEVERE", content: "Không thực hiện checklist dò kim" },
+      { section: "OTHERS", severity: "SEVERE", content: "Không có mộc dò kim" },
+      { section: "OTHERS", severity: "SEVERE", content: "Dao chặt không có thông tin" },
+      { section: "OTHERS", severity: "SEVERE", content: "Không tuân thủ/không đo nhiệt độ tiêu chuẩn máy" },
+      { section: "OTHERS", severity: "SEVERE", content: "Không sử dụng bảo hộ lao động, chắn lối thoát hiểm" },
+      { section: "OTHERS", severity: "NORMAL", content: "Sử dụng điện thoại cá nhân với mục đích riêng" },
+      { section: "OTHERS", severity: "NORMAL", content: "Nghỉ ngắn, nghỉ cuối ca trước thời gian quy định" },
+      { section: "OTHERS", severity: "NORMAL", content: "Không scan đầy đủ QR code" },
+      { section: "OTHERS", severity: "NORMAL", content: "Ngồi nằm trên vật liệu" },
+      { section: "OTHERS", severity: "NORMAL", content: "Logo lưu trữ không có tem nhãn" },
+      { section: "OTHERS", severity: "NORMAL", content: "Dụng cụ để không đúng vị trí, ko có mã số quản lý" },
+      { section: "OTHERS", severity: "NORMAL", content: "Các lỗi tuân thủ khác" }
+    ];
+
+    const { error } = await supabase.from("kpi_compliance_dictionary").upsert(defaults, { onConflict: 'content' });
+    if (error) alert(error.message);
+    else {
+      alert("Đã đồng bộ dữ liệu gốc lên hệ thống!");
+      onRefresh?.();
+    }
+  };
+
+  const getRules = (type) => {
     const secKey = s === "MOLDING" ? "MOLDING" : (s === "LAMINATION" ? "LAMINATION" : "OTHERS");
-    const dbRules = complianceDict
-      .filter(r => r.section === secKey && r.severity === type)
-      .map(r => r.content);
-    return [...new Set([...defaults, ...dbRules])];
+    return complianceDict.filter(r => r.section === secKey && r.severity === type);
   };
 
   // 1. RULES CHO LAMINATION
@@ -588,13 +635,20 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="font-semibold text-orange-700">2. Điểm Tuân thủ (C) - Tối đa 3 đ</h4>
-              <button onClick={() => handleAdd("NORMAL")} className="btn btn-xs bg-orange-200 text-orange-800 hover:bg-orange-300 border-none">+ Bổ sung Lỗi</button>
+              <div className="flex gap-1">
+                <button onClick={handleSeed} className="btn btn-xs btn-ghost text-[10px] opacity-20 hover:opacity-100">Seed</button>
+                <button onClick={() => handleAdd("NORMAL")} className="btn btn-xs bg-orange-200 text-orange-800 hover:bg-orange-300 border-none">+ Lỗi mới</button>
+              </div>
             </div>
             <ul className="list-disc pl-5 text-[11px] space-y-1 text-gray-700">
               <li>Mặc định ban đầu: <b>3 điểm</b>.</li>
-              {getRules("NORMAL", ["Vi phạm MQAA", "Lỗi Rework", "Vi phạm khác"]).map((item, idx) => (
-                <li key={idx}><b>{item}:</b> Trừ <b>1 điểm/lần</b>.</li>
+              {getRules("NORMAL").map((item, idx) => (
+                <li key={idx} className="group flex items-center justify-between">
+                  <span><b>{item.content}:</b> Trừ <b>1 điểm/lần</b>.</span>
+                  <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
+                </li>
               ))}
+              {getRules("NORMAL").length === 0 && <li className="italic text-gray-400">Vui lòng nhấn Seed để nạp dữ liệu...</li>}
             </ul>
           </div>
         </div>
@@ -636,16 +690,24 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
             </div>
             <ul className="list-disc pl-5 text-[11px] space-y-1 text-gray-700">
               <li>Mặc định ban đầu: <b>3 điểm</b>.</li>
-              <li className="text-red-700 font-bold">Lỗi Nghiêm trọng (Về 0):</li>
+              <li className="text-red-700 font-bold flex items-center justify-between">
+                Lỗi Nghiêm trọng (Về 0):
+              </li>
               <ul className="list-circle pl-5 mb-1">
-                {getRules("SEVERE", ["Không kiểm soát nhiệt độ theo quy định"]).map((item, idx) => (
-                  <li key={idx}>{item}</li>
+                {getRules("SEVERE").map((item, idx) => (
+                  <li key={idx} className="group flex items-center justify-between">
+                    <span>{item.content}</span>
+                    <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
+                  </li>
                 ))}
               </ul>
               <li className="text-teal-700 font-bold">Lỗi Bình thường (-1đ):</li>
               <ul className="list-circle pl-5">
-                {getRules("NORMAL", ["Lỗi Tuân thủ khác"]).map((item, idx) => (
-                  <li key={idx}>{item}</li>
+                {getRules("NORMAL").map((item, idx) => (
+                  <li key={idx} className="group flex items-center justify-between">
+                    <span>{item.content}</span>
+                    <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
+                  </li>
                 ))}
               </ul>
             </ul>
@@ -690,30 +752,20 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
             <li>Mặc định ban đầu: <b>3 điểm</b>.</li>
             <li className="text-red-700 font-bold uppercase">Lỗi loại A (Nghiêm trọng - Về 0):</li>
             <ul className="list-circle pl-5 mb-1">
-              {getRules("SEVERE", [
-                "Không có/không có mẫu đầu chuyền",
-                "Không thực hiện checklist trước khi làm việc",
-                "Không thực hiện checklist dò kim",
-                "Không có mộc dò kim",
-                "Dao chặt không có thông tin",
-                "Không tuân thủ/không đo nhiệt độ tiêu chuẩn máy",
-                "Không sử dụng bảo hộ lao động, chắn lối thoát hiểm"
-              ]).map((item, idx) => (
-                <li key={idx}>{item}</li>
+              {getRules("SEVERE").map((item, idx) => (
+                <li key={idx} className="group flex items-center justify-between">
+                  <span>{item.content}</span>
+                  <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
+                </li>
               ))}
             </ul>
             <li className="text-blue-700 font-bold uppercase">Lỗi loại B (Thường - Trừ 1đ):</li>
             <ul className="list-circle pl-5">
-              {getRules("NORMAL", [
-                "Sử dụng điện thoại cá nhân với mục đích riêng",
-                "Nghỉ ngắn, nghỉ cuối ca trước thời gian quy định",
-                "Không scan đầy đủ QR code",
-                "Ngồi nằm trên vật liệu",
-                "Logo lưu trữ không có tem nhãn",
-                "Dụng cụ để không đúng vị trí, ko có mã số quản lý",
-                "Các lỗi tuân thủ khác"
-              ]).map((item, idx) => (
-                <li key={idx}>{item}</li>
+              {getRules("NORMAL").map((item, idx) => (
+                <li key={idx} className="group flex items-center justify-between">
+                  <span>{item.content}</span>
+                  <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
+                </li>
               ))}
             </ul>
           </ul>

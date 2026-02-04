@@ -258,6 +258,20 @@ function ApproverModeLeanline({ section }) {
   const [tplDefects, setTplDefects] = useState(0);
   const [tplQualityCode, setTplQualityCode] = useState("NONE");
   const [tplCompliance, setTplCompliance] = useState("NONE");
+  const [complianceDict, setComplianceDict] = useState([]);
+
+  // Fetch Compliance Options
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("kpi_compliance_dictionary").select("*");
+      if (data) setComplianceDict(data);
+    })();
+  }, []);
+
+  const getComplianceOptions = () => {
+    const secKey = section === "MOLDING" ? "MOLDING" : (section === "LAMINATION" ? "LAMINATION" : "OTHERS");
+    return ["NONE", ...new Set(complianceDict.filter(r => r.section === secKey).map(r => r.content))];
+  };
 
   // 1. ĐỊNH NGHĨA DANH SÁCH LINE CHUẨN DỰA TRÊN SECTION
   const currentMachines = useMemo(() => {
@@ -659,7 +673,7 @@ function ApproverModeLeanline({ section }) {
               <div className="flex-1">
                 <label>Tuân thủ</label>
                 <select className="input w-full" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>
-                  {LEANLINE_COMPLIANCE_OPTIONS.map(o => <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>)}
+                  {getComplianceOptions().map(o => <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>)}
                 </select>
               </div>
             </div>
@@ -743,8 +757,10 @@ function ApproverModeLeanline({ section }) {
                         </select>
                       </td>
                       <td className="p-2">
-                        <select className="input w-full p-1 text-xs" value={r.compliance} onChange={e => updateRow(i, 'compliance', e.target.value)}>
-                          {LEANLINE_COMPLIANCE_OPTIONS.map(o => <option key={o} value={o}>{o === "NONE" ? "--" : o}</option>)}
+                        <select className="input text-center w-[140px]" value={r.compliance} onChange={e => updateRow(i, "compliance", e.target.value)}>
+                          {getComplianceOptions().map(o => (
+                            <option key={o} value={o}>{o === "NONE" ? (section === 'LAMINATION' ? "Không vi phạm" : "--") : o}</option>
+                          ))}
                         </select>
                       </td>
 
@@ -1132,7 +1148,14 @@ function ApproverModeMolding({ section }) {
             /></div>
             <div><label>Ca</label><select className="input" value={tplShift} onChange={e => setTplShift(e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></div>
             <div><label>Loại hàng</label><select className="input" value={tplCategory} onChange={e => setTplCategory(e.target.value)}><option value="">-- Chọn loại --</option>{categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-            <div><label>Tuân thủ</label><select className="input text-center" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>{MOLDING_COMPLIANCE_OPTIONS.map(o => (<option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>))}</select></div>
+            <div>
+              <label>Tuân thủ</label>
+              <select className="input text-center" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>
+                {getComplianceOptions().map(o => (
+                  <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>
+                ))}
+              </select>
+            </div>
             <div><label>Giờ làm việc (nhập)</label><input type="number" className="input" value={tplWorkingInput} onChange={e => setTplWorkingInput(e.target.value)} /></div>
             <div><label>Số giờ khuôn chạy</label><input type="number" className="input" value={tplMoldHours} onChange={e => setTplMoldHours(e.target.value)} /></div>
             <div><label>Sản lượng / ca</label><input type="number" className="input" value={tplOutput} onChange={e => setTplOutput(e.target.value)} /></div>
@@ -1267,7 +1290,9 @@ function EditReviewMolding({
                   <td className="p-2 font-semibold">{r.day_score}</td>
                   <td className="p-2">
                     <select className="input text-center w-28" value={r.compliance_code} onChange={(e) => updateRow(gi, "compliance_code", e.target.value)}>
-                      {MOLDING_COMPLIANCE_OPTIONS.map(o => (<option key={o} value={o}>{o === "NONE" ? "--" : o}</option>))}
+                      {getComplianceOptions().map(o => (
+                        <option key={o} value={o}>{o === "NONE" ? "--" : o}</option>
+                      ))}
                     </select>
                   </td>
                   {/* THÊM CỘT INPUT GHI CHÚ */}
