@@ -610,20 +610,15 @@ function ReportContent() {
           "THỜI GIAN DỪNG": Number(r.stop_hours ?? 0),
           "%OE/NS": Number(r.oe ?? 0),
           "Số đôi phế": Number(r.defects ?? 0),
-          "Điểm chất lượng": q,
           "Điểm Sản lượng": p,
+          "Điểm chất lượng": q,
+          "Điểm Tuân thủ": Number(r.c_score || 0),
           "Lỗi chất lượng": r.quality_code || "",
           "Tuân thủ": complianceLabel(r.compliance_code),
-          "Điểm Tuân thủ": Number(r.c_score || 0),
         };
 
-        // --- CẬP NHẬT: THÊM CỘT Số đôi lỗi Tuân thủ CHO LEANLINE_MOLDED ---
-        if (section === "LEANLINE_MOLDED") {
-          rowObj["Số đôi lỗi Tuân thủ"] = Number(r.compliance_pairs || 0);
-        }
 
         // --- CÁC CỘT TIẾP THEO ---
-        rowObj["Vi phạm"] = r.violations || (r.compliance_code && r.compliance_code !== "NONE" ? 1 : 0);
         rowObj["Điểm KPI ngày"] = day;
         rowObj["Điểm dư"] = overflow;
         rowObj["Điểm tổng"] = total;
@@ -1303,15 +1298,11 @@ function ReportContent() {
                   <th className="p-2 text-center">Phế</th>
                   <th className="p-2 text-center">P</th>
                   <th className="p-2 text-center">Q</th>
-                  <th className="p-2 text-center">KPI</th>
-                  <th className="p-2 text-center">Lỗi CL</th>
                   <th className="p-2 text-center">C</th>
+                  <th className="p-2 text-center">Lỗi CL</th>
                   <th className="p-2 text-center">Tuân thủ</th>
+                  <th className="p-2 text-center">KPI</th>
 
-                  {/* --- CỘT MỚI: Số đôi lỗi Tuân thủ (CHỈ HIỆN KHI LÀ MOLDED) --- */}
-                  {section === "LEANLINE_MOLDED" && (
-                    <th className="p-2 text-center text-red-600">Số đôi lỗi Tuân thủ</th>
-                  )}
 
                   <th className="p-2 text-center">Duyệt</th>
                 </tr>
@@ -1328,25 +1319,19 @@ function ReportContent() {
                     <td className="p-2 text-center">{fmt(r.defects, 0)}</td>
                     <td className="p-2 text-center">{fmt(r.p_score, 2)}</td>
                     <td className="p-2 text-center">{fmt(r.q_score, 2)}</td>
-                    <td className="p-2 text-center font-semibold">{fmt(r.day_score, 2)}</td>
-                    <td className="p-2 text-center truncate max-w-[120px]" title={r.quality_code}>{r.quality_code || ""}</td>
                     <td className="p-2 text-center font-semibold text-orange-600">{fmt(r.c_score, 1)}</td>
+                    <td className="p-2 text-center truncate max-w-[120px]" title={r.quality_code}>{r.quality_code || ""}</td>
                     <td className="p-2 text-center text-xs text-gray-600 max-w-[150px] truncate" title={r.compliance_code}>
                       {r.compliance_code === "NONE" ? "" : r.compliance_code}
                     </td>
+                    <td className="p-2 text-center font-bold text-blue-600">{fmt(r.day_score, 2)}</td>
 
-                    {/* --- DỮ LIỆU CỘT MỚI --- */}
-                    {section === "LEANLINE_MOLDED" && (
-                      <td className="p-2 text-center font-bold text-red-600">
-                        {r.compliance_pairs ? r.compliance_pairs : ""}
-                      </td>
-                    )}
 
                     <td className="p-2 text-center">{r.status}</td>
                   </tr>
                 ))}
                 {!pageRows.length && (
-                  <tr><td colSpan={section === "LEANLINE_MOLDED" ? 15 : 14} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>
+                  <tr><td colSpan={14} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>
                 )}
               </tbody>
             </table>
