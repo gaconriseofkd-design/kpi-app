@@ -98,11 +98,9 @@ function deriveDayScoresHybrid({ section, defects, category, output, workHours, 
 
 const COMPLIANCE_OPTIONS = [
   { value: "NONE", label: "Không vi phạm" },
-  { value: "LATE", label: "Ký mẫu đầu chuyền trước khi sử dụng" },
-  { value: "PPE", label: "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất" },
-  { value: "MAT", label: "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất" },
-  { value: "SPEC", label: "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất" },
-  { value: "RULE", label: "Vi phạm nội quy bộ phận/công ty" },
+  { value: "MQAA", label: "Vi phạm MQAA" },
+  { value: "REWORK", label: "Hàng lỗi Rework" },
+  { value: "OTHER", label: "Vi phạm khác" },
 ];
 const cx = (...a) => a.filter(Boolean).join(" ");
 const toNum = (v, d = 0) => {

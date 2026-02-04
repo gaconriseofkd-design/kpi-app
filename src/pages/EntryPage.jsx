@@ -12,6 +12,7 @@ import {
 
 // Danh sách lỗi Tuân thủ cho LEANLINE_MOLDED
 const MOLDED_COMPLIANCE_OPTIONS = [
+  "NONE",
   "Đóng gói sai thiếu ( theo đôi)",
   "Đóng dư, ghi số thiếu sai/ không ghi số thiếu",
   "Dán nhầm tem size run",
@@ -21,6 +22,13 @@ const MOLDED_COMPLIANCE_OPTIONS = [
   "Chặt in đóng gói sai yêu cầu đối với chỉ lệnh",
   "Lỗi in khác",
   "Lỗi đóng gói khác"
+];
+
+const HYBRID_COMPLIANCE_OPTIONS = [
+  { value: "NONE", label: "Không vi phạm" },
+  { value: "MQAA", label: "Vi phạm MQAA" },
+  { value: "REWORK", label: "Hàng lỗi Rework" },
+  { value: "OTHER", label: "Vi phạm khác" },
 ];
 
 // Danh sách lỗi nghiêm trọng (Group A)
@@ -495,15 +503,19 @@ export default function EntryPage() {
             {/* Hiển thị list lỗi tương ứng theo Section */}
             {section === "LEANLINE_MOLDED"
               ? MOLDED_COMPLIANCE_OPTIONS.map(opt => (
-                <option key={opt} value={opt}>{opt}</option>
+                <option key={opt} value={opt}>{opt === "NONE" ? "Không vi phạm" : opt}</option>
               ))
-              : [
-                "Ký mẫu đầu chuyền trước khi sử dụng",
-                "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất",
-                "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất",
-                "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất",
-                "Vi phạm nội quy bộ phận/công ty"
-              ].map(opt => <option key={opt} value={opt}>{opt}</option>)
+              : isHybridSection(section)
+                ? HYBRID_COMPLIANCE_OPTIONS.map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))
+                : [
+                  "Ký mẫu đầu chuyền trước khi sử dụng",
+                  "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất",
+                  "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất",
+                  "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất",
+                  "Vi phạm nội quy bộ phận/công ty"
+                ].map(opt => <option key={opt} value={opt}>{opt}</option>)
             }
           </select>
         </label>
