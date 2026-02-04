@@ -58,6 +58,7 @@ export default function RulesPage() {
 function RulesContent() {
   const { section, SECTIONS } = useKpiSection();
   const [rows, setRows] = useState([]);
+  const [complianceDict, setComplianceDict] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [testOE, setTestOE] = useState(100);
@@ -82,8 +83,18 @@ function RulesContent() {
     if (error) return alert(error.message);
     setRows(data || []);
   }
+
+  async function loadCompliance() {
+    const { data, error } = await supabase
+      .from("kpi_compliance_dictionary")
+      .select("*")
+      .order("created_at", { ascending: true });
+    if (!error && data) setComplianceDict(data);
+  }
+
   useEffect(() => {
     load();
+    loadCompliance();
   }, [section]);
 
   // ➕ Thêm dòng mới
@@ -499,12 +510,12 @@ function RulesContent() {
           </div>
           {showAllSections ? (
             <div className="space-y-6">
-              <QualityRulesInfo section="LAMINATION" isSingle={false} />
-              <QualityRulesInfo section="MOLDING" isSingle={false} />
-              <QualityRulesInfo section="LEANLINE_DC" isSingle={false} />
+              <QualityRulesInfo section="LAMINATION" isSingle={false} complianceDict={complianceDict} onRefresh={loadCompliance} />
+              <QualityRulesInfo section="MOLDING" isSingle={false} complianceDict={complianceDict} onRefresh={loadCompliance} />
+              <QualityRulesInfo section="LEANLINE_DC" isSingle={false} complianceDict={complianceDict} onRefresh={loadCompliance} />
             </div>
           ) : (
-            <QualityRulesInfo section={section} isSingle={true} />
+            <QualityRulesInfo section={section} isSingle={true} complianceDict={complianceDict} onRefresh={loadCompliance} />
           )}
         </div>
       )}
@@ -512,9 +523,41 @@ function RulesContent() {
   );
 }
 
-function QualityRulesInfo({ section, isSingle = true }) {
+function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRefresh }) {
   const s = (section || "").toUpperCase();
   const label = isSingle ? s : (s === "LEANLINE_DC" ? "LEANLINE/PREFITTING/TÁCH/BÀO" : s);
+
+  // Helper to add rule
+  const handleAdd = async (severity) => {
+    const pass = prompt("Nhập mật khẩu (davidtu):");
+    if (pass !== "davidtu") return alert("Sai mật khẩu");
+    const content = prompt("Nhập nội dung lỗi:");
+    if (!content) return;
+
+    const { error } = await supabase
+      .from("kpi_compliance_dictionary")
+      .insert([{
+        section: s === "MOLDING" ? "MOLDING" : (s === "LAMINATION" ? "LAMINATION" : "OTHERS"),
+        severity,
+        content,
+      }]);
+    if (error) {
+      // Fallback if table doesn't exist yet - just a mock alert for now since we can't create table
+      alert("Lỗi: " + error.message + "\n(Lưu ý: Bàn cần tạo bảng 'kpi_compliance_dictionary' để lưu dữ liệu)");
+    } else {
+      alert("Đã thêm thành công");
+      onRefresh?.();
+    }
+  };
+
+  // Filter rules
+  const getRules = (type, defaults) => {
+    const secKey = s === "MOLDING" ? "MOLDING" : (s === "LAMINATION" ? "LAMINATION" : "OTHERS");
+    const dbRules = complianceDict
+      .filter(r => r.section === secKey && r.severity === type)
+      .map(r => r.content);
+    return [...new Set([...defaults, ...dbRules])];
+  };
 
   // 1. RULES CHO LAMINATION
   if (s === "LAMINATION") {
@@ -543,10 +586,15 @@ function QualityRulesInfo({ section, isSingle = true }) {
           </div>
 
           <div className="space-y-3">
-            <h4 className="font-semibold text-orange-700">2. Điểm Tuân thủ (C) - Tối đa 3 đ</h4>
-            <ul className="list-disc pl-5 text-sm space-y-2">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold text-orange-700">2. Điểm Tuân thủ (C) - Tối đa 3 đ</h4>
+              <button onClick={() => handleAdd("NORMAL")} className="btn btn-xs bg-orange-200 text-orange-800 hover:bg-orange-300 border-none">+ Bổ sung Lỗi</button>
+            </div>
+            <ul className="list-disc pl-5 text-[11px] space-y-1 text-gray-700">
               <li>Mặc định ban đầu: <b>3 điểm</b>.</li>
-              <li><b>Vi phạm MQAA / Lỗi Rework / Vi phạm khác:</b> Trừ <b>1 điểm/lần</b> (Tối thiểu 0).</li>
+              {getRules("NORMAL", ["Vi phạm MQAA", "Lỗi Rework", "Vi phạm khác"]).map((item, idx) => (
+                <li key={idx}><b>{item}:</b> Trừ <b>1 điểm/lần</b>.</li>
+              ))}
             </ul>
           </div>
         </div>
@@ -579,11 +627,27 @@ function QualityRulesInfo({ section, isSingle = true }) {
           </div>
 
           <div className="space-y-3">
-            <h4 className="font-semibold text-teal-700">2. Điểm Tuân thủ (C) - Tối đa 3 đ</h4>
-            <ul className="list-disc pl-5 text-sm space-y-1">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold text-teal-700">2. Điểm Tuân thủ (C) - Tối đa 3 đ</h4>
+              <div className="flex gap-1">
+                <button onClick={() => handleAdd("SEVERE")} className="btn btn-xs bg-red-100 text-red-700 hover:bg-red-200 border-none"> + Nghiêm trọng</button>
+                <button onClick={() => handleAdd("NORMAL")} className="btn btn-xs bg-teal-100 text-teal-700 hover:bg-teal-200 border-none"> + Thường</button>
+              </div>
+            </div>
+            <ul className="list-disc pl-5 text-[11px] space-y-1 text-gray-700">
               <li>Mặc định ban đầu: <b>3 điểm</b>.</li>
-              <li><b>Lỗi Nghiêm trọng:</b> Trừ <b>3 điểm</b> (Về 0). <br /><i className="text-gray-500 text-xs">(Vd: Nhiệt độ không quy định)</i></li>
-              <li><b>Lỗi Bình thường:</b> Trừ <b>1 điểm/lần</b>.</li>
+              <li className="text-red-700 font-bold">Lỗi Nghiêm trọng (Về 0):</li>
+              <ul className="list-circle pl-5 mb-1">
+                {getRules("SEVERE", ["Không kiểm soát nhiệt độ theo quy định"]).map((item, idx) => (
+                  <li key={idx}>{item}</li>
+                ))}
+              </ul>
+              <li className="text-teal-700 font-bold">Lỗi Bình thường (-1đ):</li>
+              <ul className="list-circle pl-5">
+                {getRules("NORMAL", ["Lỗi Tuân thủ khác"]).map((item, idx) => (
+                  <li key={idx}>{item}</li>
+                ))}
+              </ul>
             </ul>
           </div>
         </div>
@@ -615,11 +679,43 @@ function QualityRulesInfo({ section, isSingle = true }) {
         </div>
 
         <div className="space-y-3">
-          <h4 className="font-semibold text-blue-700">2. Điểm Tuân thủ (C) - Tối đa 3 đ</h4>
-          <ul className="list-disc pl-5 text-sm space-y-1">
+          <div className="flex items-center justify-between">
+            <h4 className="font-semibold text-blue-700">2. Điểm Tuân thủ (C) - Tối đa 3 đ</h4>
+            <div className="flex gap-1">
+              <button onClick={() => handleAdd("SEVERE")} className="btn btn-xs bg-red-100 text-red-700 hover:bg-red-200 border-none"> + Nghiêm trọng</button>
+              <button onClick={() => handleAdd("NORMAL")} className="btn btn-xs bg-blue-100 text-blue-700 hover:bg-blue-200 border-none"> + Thường</button>
+            </div>
+          </div>
+          <ul className="list-disc pl-5 text-[11px] space-y-1 text-gray-700">
             <li>Mặc định ban đầu: <b>3 điểm</b>.</li>
-            <li><b>Lỗi loại A (Nghiêm trọng):</b> Trừ <b>3 điểm</b> (Về 0). <br /><i className="text-gray-500 text-xs">(Vd: Không mộc dò kim, không bảo hộ, chắn lối thoát hiểm...)</i></li>
-            <li><b>Lỗi loại B (Thường):</b> Trừ <b>1 điểm/lần</b>.</li>
+            <li className="text-red-700 font-bold uppercase">Lỗi loại A (Nghiêm trọng - Về 0):</li>
+            <ul className="list-circle pl-5 mb-1">
+              {getRules("SEVERE", [
+                "Không có/không có mẫu đầu chuyền",
+                "Không thực hiện checklist trước khi làm việc",
+                "Không thực hiện checklist dò kim",
+                "Không có mộc dò kim",
+                "Dao chặt không có thông tin",
+                "Không tuân thủ/không đo nhiệt độ tiêu chuẩn máy",
+                "Không sử dụng bảo hộ lao động, chắn lối thoát hiểm"
+              ]).map((item, idx) => (
+                <li key={idx}>{item}</li>
+              ))}
+            </ul>
+            <li className="text-blue-700 font-bold uppercase">Lỗi loại B (Thường - Trừ 1đ):</li>
+            <ul className="list-circle pl-5">
+              {getRules("NORMAL", [
+                "Sử dụng điện thoại cá nhân với mục đích riêng",
+                "Nghỉ ngắn, nghỉ cuối ca trước thời gian quy định",
+                "Không scan đầy đủ QR code",
+                "Ngồi nằm trên vật liệu",
+                "Logo lưu trữ không có tem nhãn",
+                "Dụng cụ để không đúng vị trí, ko có mã số quản lý",
+                "Các lỗi tuân thủ khác"
+              ]).map((item, idx) => (
+                <li key={idx}>{item}</li>
+              ))}
+            </ul>
           </ul>
         </div>
       </div>
