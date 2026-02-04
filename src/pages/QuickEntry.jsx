@@ -2,42 +2,53 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useKpiSection } from "../context/KpiSectionContext";
-import { scoreByQuality } from "../lib/scoring";
+import {
+  scoreByQuality,
+  scoreByQualityLeanline,
+  scoreByQualityMolding,
+  scoreByCompliance,
+  getLeanlineCompliancePenalty,
+  getMoldingCompliancePenalty
+} from "../lib/scoring";
 import ApproverModeHybrid from "./QuickEntryLPS";
 
 /* ===== Helpers ===== */
-const COMPLIANCE_OPTIONS = [
-  { value: "NONE", label: "Không vi phạm" },
-  { value: "Ký mẫu đầu chuyền trước khi sử dụng", label: "Ký mẫu đầu chuyền trước khi sử dụng" },
-  { value: "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất", label: "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất" },
-  { value: "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất", label: "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất" },
-  { value: "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất", label: "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất" },
-  { value: "Lỗi chặt", label: "Lỗi chặt" },
-  { value: "Lỗi in", label: "Lỗi in" },
-  { value: "Lỗi đóng gói", label: "Lỗi đóng gói" },
-  { value: "Lỗi MQAA", label: "Lỗi MQAA" },
-  { value: "Vi phạm nội quy bộ phận/công ty", label: "Vi phạm nội quy bộ phận/công ty" },
+const LEANLINE_COMPLIANCE_OPTIONS = [
+  "NONE",
+  "Không có/không có mẫu đầu chuyền",
+  "Không thực hiện checklist trước khi làm việc",
+  "Không thực hiện checklist dò kim",
+  "Không có mộc dò kim",
+  "Dao chặt không có thông tin",
+  "Không tuân thủ/không đo nhiệt độ tiêu chuẩn máy",
+  "Không sử dụng bảo hộ lao động, chắn lối thoát hiểm",
+  "Sử dụng điện thoại cá nhân với mục đích riêng, nghỉ ngắn, nghỉ cuối ca trước thời gian quy định.",
+  "Không scan đầy đủ QR code",
+  "Ngồi nằm trên vật liệu",
+  "Logo lưu trữ không có tem nhãn",
+  "Dụng cụ để không đúng vị trí, ko có mã số quản lý",
+  "Các lỗi tuân thủ khác"
 ];
 
-const MOLDED_COMPLIANCE_OPTIONS = [
-  "Đóng gói sai thiếu ( theo đôi)",
-  "Đóng dư, ghi số thiếu sai/ không ghi số thiếu",
+const LEANLINE_QUALITY_OPTIONS = [
+  "NONE",
+  "Đóng gói sai thiếu (theo dõi)",
+  "Đóng dư, ghi số thiếu sai / không ghi số thiếu",
   "Dán nhầm tem size run",
   "Không in logo",
   "Chặt sai dao",
-  "In sai logo/ in sai phân đoạn",
+  "In sai logo / in sai phần đoạn",
   "Chặt in đóng gói sai yêu cầu đối với chỉ lệnh",
   "Lỗi in khác",
   "Lỗi đóng gói khác",
-  "Phàn nàn Khách hàng",
-  "Vi phạm Tuân thủ khác..."
+  "Phàn nàn khách hàng",
+  "Lỗi Phế"
 ];
 
-const SEVERE_ERRORS = [
-  "Không in logo",
-  "Chặt sai dao",
-  "In sai logo/ in sai phân đoạn",
-  "Chặt in đóng gói sai yêu cầu đối với chỉ lệnh"
+const MOLDING_COMPLIANCE_OPTIONS = [
+  "NONE",
+  "Không kiểm soát nhiệt độ theo quy định",
+  "Lỗi Tuân thủ khác"
 ];
 
 const HYBRID_SECTIONS = ["LAMINATION", "PREFITTING", "BÀO", "TÁCH"];
@@ -93,44 +104,15 @@ const getLeanlineMachines = (section) => LEANLINE_MACHINES[section] || LEANLINE_
 /**
  * Helper tính toán cho Leanline
  */
-function calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compliance, compliancePairs) {
-  let q = scoreByQuality(defects);
-
-  // Logic tính điểm Tuân thủ mới cho LEANLINE_MOLDED
-  if (sec === "LEANLINE_MOLDED" && compliance && compliance !== "NONE") {
-
-    // 1. Phàn nàn Khách hàng -> Trừ 8 điểm
-    if (compliance === "Phàn nàn Khách hàng") {
-      q = q - 8;
-    }
-    // 2. Vi phạm Tuân thủ khác -> Trừ 2 điểm
-    else if (compliance === "Vi phạm Tuân thủ khác...") {
-      q = q - 2;
-    }
-    // 3. Các lỗi còn lại -> Tính theo số đôi
-    else {
-      const pairs = Number(compliancePairs || 0);
-      if (pairs > 0) {
-        if (SEVERE_ERRORS.includes(compliance)) {
-          // Nhóm A: Nghiêm trọng (1 đôi -> 4đ, >=2 đôi -> 0đ)
-          if (pairs === 1) q = 4;
-          else q = 0;
-        } else {
-          // Nhóm B: Lỗi thường (làm tròn chẵn, trừ điểm)
-          const effPairs = Math.ceil(pairs / 2) * 2;
-          q = q - effPairs;
-        }
-      }
-    }
-  }
-  // Đảm bảo không âm
-  if (q < 0) q = 0;
-
+function calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compliance) {
+  const q = scoreByQualityLeanline(defects);
+  const penalty = getLeanlineCompliancePenalty(compliance);
+  const c = scoreByCompliance(penalty);
   const p = scoreByProductivityLeanlineQuick(oe, rules, sec, line);
-  const total = q + p;
+  const total = q + p + c;
 
   // !!! QUAN TRỌNG: Trả về key là "day_score" để đồng nhất với database !!!
-  return { qScore: q, pScore: p, day_score: Math.min(15, total), rawTotal: total };
+  return { qScore: q, pScore: p, cScore: c, day_score: Math.min(15, total), rawTotal: total };
 }
 
 
@@ -145,7 +127,7 @@ function calcWorkingReal(shift, inputHours) {
   return base + adj;
 }
 
-function calculateScoresMolding({ shift, working_input, mold_hours, output, defects, category }, rules) {
+function calculateScoresMolding({ shift, working_input, mold_hours, output, defects, category, compliance }, rules) {
   const workingReal = calcWorkingReal(shift, working_input);
   let dt = (Number(workingReal) * 24 - Number(mold_hours || 0)) / 24;
   // Cap lại logic
@@ -154,8 +136,12 @@ function calculateScoresMolding({ shift, working_input, mold_hours, output, defe
 
   const workingExact = Math.max(0, Number(workingReal) - dt);
 
-  // Q Score
-  const q = scoreByQuality(defects);
+  // Quality Score
+  const q = scoreByQualityMolding(defects);
+
+  // Compliance Score
+  const penalty = getMoldingCompliancePenalty(compliance);
+  const c = scoreByCompliance(penalty);
 
   // P Score
   let p = 0;
@@ -174,12 +160,13 @@ function calculateScoresMolding({ shift, working_input, mold_hours, output, defe
     }
   }
 
-  const total = p + q;
+  const total = p + q + c;
 
   // Return all needed fields
   return {
     q_score: q,
     p_score: p,
+    c_score: c,
     day_score: Math.min(15, total),
     rawTotal: total,
     working_real: Number(workingReal.toFixed(2)),
@@ -269,8 +256,8 @@ function ApproverModeLeanline({ section }) {
   const [tplStopHours, setTplStopHours] = useState(0);
   const [tplOE, setTplOE] = useState(100);
   const [tplDefects, setTplDefects] = useState(0);
+  const [tplQualityCode, setTplQualityCode] = useState("NONE");
   const [tplCompliance, setTplCompliance] = useState("NONE");
-  const [tplCompliancePairs, setTplCompliancePairs] = useState(0);
 
   // 1. ĐỊNH NGHĨA DANH SÁCH LINE CHUẨN DỰA TRÊN SECTION
   const currentMachines = useMemo(() => {
@@ -313,13 +300,13 @@ function ApproverModeLeanline({ section }) {
     return searchResults.filter(w => w.line === lineFilter);
   }, [searchResults, lineFilter]);
 
-  const calculateScores = (oe, defects, rules, sec, line, compl, pairs) => {
-    return calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compl, pairs);
+  const calculateScores = (oe, defects, rules, sec, line, compl) => {
+    return calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compl);
   };
 
   const previewScores = useMemo(() =>
-    calculateScores(tplOE, tplDefects, prodRules, section, tplLine, tplCompliance, tplCompliancePairs),
-    [tplOE, tplDefects, prodRules, section, tplLine, tplCompliance, tplCompliancePairs]
+    calculateScores(tplOE, tplDefects, prodRules, section, tplLine, tplCompliance),
+    [tplOE, tplDefects, prodRules, section, tplLine, tplCompliance]
   );
 
   const tplQ = previewScores.qScore;
@@ -421,15 +408,16 @@ function ApproverModeLeanline({ section }) {
     if (!selectedWorkers.length) return alert("Chưa chọn nhân viên.");
 
     const rows = selectedWorkers.map((w) => {
-      const scores = calculateScores(tplOE, tplDefects, prodRules, section, tplLine, tplCompliance, tplCompliancePairs);
+      const scores = calculateScores(tplOE, tplDefects, prodRules, section, tplLine, tplCompliance);
       return {
         section, work_date: tplDate, shift: tplShift, msnv: w.msnv, hoten: w.full_name,
         approver_id: w.approver_msnv || approverIdInput, approver_name: w.approver_name,
         line: tplLine,
         work_hours: toNum(tplWorkHours), downtime: toNum(tplStopHours),
         oe: toNum(tplOE), defects: toNum(tplDefects),
-        compliance: tplCompliance, compliance_pairs: toNum(tplCompliancePairs),
-        q_score: scores.qScore, p_score: scores.pScore,
+        quality_code: tplQualityCode,
+        compliance: tplCompliance,
+        q_score: scores.qScore, p_score: scores.pScore, c_score: scores.cScore,
         total_score: scores.day_score, status: "approved", approver_note: "",
       }
     });
@@ -447,14 +435,13 @@ function ApproverModeLeanline({ section }) {
       const arr = [...old];
       const r0 = arr[i] || {};
       let r = { ...r0 };
-      if (["compliance", "line", "shift", "work_date", "approver_note"].includes(key)) {
+      if (["compliance", "quality_code", "line", "shift", "work_date", "approver_note"].includes(key)) {
         r[key] = val;
-        if (key === "compliance" && (val === "NONE" || val === "Phàn nàn Khách hàng" || val === "Vi phạm Tuân thủ khác...")) r.compliance_pairs = 0;
       } else {
         r[key] = toNum(val, 0);
       }
-      const sc = calculateScores(r.oe, r.defects, prodRules, section, r.line, r.compliance, r.compliance_pairs);
-      arr[i] = { ...r, q_score: sc.qScore, p_score: sc.pScore, total_score: sc.day_score };
+      const sc = calculateScores(r.oe, r.defects, prodRules, section, r.line, r.compliance);
+      arr[i] = { ...r, q_score: sc.qScore, p_score: sc.pScore, c_score: sc.cScore, total_score: sc.day_score };
       return arr;
     });
   }
@@ -478,7 +465,7 @@ function ApproverModeLeanline({ section }) {
     const now = new Date().toISOString();
 
     const payload = list.map((r) => {
-      const rawScores = calculateScores(r.oe, r.defects, prodRules, section, r.line, r.compliance, r.compliance_pairs);
+      const rawScores = calculateScores(r.oe, r.defects, prodRules, section, r.line, r.compliance);
       const overflow = Math.max(0, rawScores.rawTotal - 15);
       return {
         date: r.work_date,
@@ -492,9 +479,9 @@ function ApproverModeLeanline({ section }) {
         stop_hours: r.downtime,
         oe: r.oe,
         defects: r.defects,
-
+        quality_code: r.quality_code || null,
         compliance_code: r.compliance,
-        compliance_pairs: (section === "LEANLINE_MOLDED" && r.compliance !== "Phàn nàn Khách hàng" && r.compliance !== "Vi phạm Tuân thủ khác...") ? toNum(r.compliance_pairs) : 0,
+
 
         section,
         status: "approved",
@@ -503,6 +490,7 @@ function ApproverModeLeanline({ section }) {
         approver_note: r.approver_note || null,
         p_score: rawScores.pScore,
         q_score: rawScores.qScore,
+        c_score: rawScores.cScore,
 
         // CHỖ QUAN TRỌNG NHẤT: Lấy đúng key day_score
         day_score: rawScores.day_score ?? 0,
@@ -660,33 +648,26 @@ function ApproverModeLeanline({ section }) {
 
             <div className="md:col-span-2 flex gap-2">
               <div className="flex-1">
-                <label>Tuân thủ</label>
-                <select className="input w-full" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>
-                  <option value="NONE">Không vi phạm</option>
-                  {section === "LEANLINE_MOLDED"
-                    ? MOLDED_COMPLIANCE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)
-                    : COMPLIANCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)
-                  }
+                <label>Lỗi chất lượng</label>
+                <select className="input w-full" value={tplQualityCode} onChange={(e) => setTplQualityCode(e.target.value)}>
+                  {LEANLINE_QUALITY_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
               </div>
-              {/* INPUT SỐ ĐÔI VI PHẠM TRONG TEMPLATE */}
-              {section === "LEANLINE_MOLDED" && tplCompliance !== "NONE" && tplCompliance !== "Phàn nàn Khách hàng" && tplCompliance !== "Vi phạm Tuân thủ khác..." && (
-                <div className="w-24">
-                  <label className="text-red-600 font-bold">Số đôi</label>
-                  <input
-                    type="number"
-                    className="input border-red-500 text-red-700 bg-red-50 font-bold"
-                    value={tplCompliancePairs}
-                    onChange={(e) => setTplCompliancePairs(e.target.value)}
-                  />
-                </div>
-              )}
+            </div>
+
+            <div className="md:col-span-2 flex gap-2">
+              <div className="flex-1">
+                <label>Tuân thủ</label>
+                <select className="input w-full" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>
+                  {LEANLINE_COMPLIANCE_OPTIONS.map(o => <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>)}
+                </select>
+              </div>
             </div>
           </div>
 
           <div className="p-3 bg-yellow-50 rounded border border-yellow-200">
             <h4 className="font-semibold text-yellow-800">Điểm KPI Tạm tính (Template):</h4>
-            <p>Sản lượng: <b>{tplP}</b> | Chất lượng: <b>{tplQ}</b></p>
+            <p>Sản Lượng: <b>{tplP}</b> | Chất Lượng: <b>{tplQ}</b> | Tuân Thủ: <b>{previewScores.cScore}</b></p>
             <p className="text-lg">Tổng điểm: <b className="text-blue-600">{tplKPI}</b> / 15</p>
           </div>
 
@@ -727,11 +708,11 @@ function ApproverModeLeanline({ section }) {
                   <th className="p-2 w-16">Dừng</th>
                   <th className="p-2 w-16">%OE</th>
                   <th className="p-2 w-16">Phế</th>
-                  <th className="p-2 min-w-[200px]">Tuân thủ</th>
-                  {/* Cột Số đôi VP */}
-                  {section === "LEANLINE_MOLDED" && <th className="p-2 w-16 text-red-600">Số đôi</th>}
-                  <th className="p-2 w-12">P</th>
-                  <th className="p-2 w-12">Q</th>
+                  <th className="p-2 min-w-[150px]">Lỗi CL</th>
+                  <th className="p-2 min-w-[150px]">Tuân thủ</th>
+                  <th className="p-2 w-10">P</th>
+                  <th className="p-2 w-10">Q</th>
+                  <th className="p-2 w-10">C</th>
                   <th className="p-2 w-12 font-bold">KPI</th>
                   <th className="p-2">Ghi chú</th>
                 </tr>
@@ -757,32 +738,19 @@ function ApproverModeLeanline({ section }) {
                       <td className="p-2"><input type="number" className="input w-16 p-1" value={r.defects} onChange={e => updateRow(i, 'defects', e.target.value)} /></td>
 
                       <td className="p-2">
+                        <select className="input w-full p-1 text-xs" value={r.quality_code} onChange={e => updateRow(i, 'quality_code', e.target.value)}>
+                          {LEANLINE_QUALITY_OPTIONS.map(o => <option key={o} value={o}>{o === "NONE" ? "--" : o}</option>)}
+                        </select>
+                      </td>
+                      <td className="p-2">
                         <select className="input w-full p-1 text-xs" value={r.compliance} onChange={e => updateRow(i, 'compliance', e.target.value)}>
-                          <option value="NONE">--</option>
-                          {section === "LEANLINE_MOLDED"
-                            ? MOLDED_COMPLIANCE_OPTIONS.map(o => <option key={o} value={o}>{o}</option>)
-                            : COMPLIANCE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)
-                          }
+                          {LEANLINE_COMPLIANCE_OPTIONS.map(o => <option key={o} value={o}>{o === "NONE" ? "--" : o}</option>)}
                         </select>
                       </td>
 
-                      {/* INPUT SỐ ĐÔI TRONG BẢNG */}
-                      {section === "LEANLINE_MOLDED" && (
-                        <td className="p-2">
-                          {/* Ẩn nếu là Phàn nàn KH hoặc Vi phạm khác */}
-                          {r.compliance !== "NONE" && r.compliance !== "Phàn nàn Khách hàng" && r.compliance !== "Vi phạm Tuân thủ khác..." ? (
-                            <input
-                              type="number"
-                              className="input w-16 p-1 border-red-300 text-red-600 bg-red-50 font-bold"
-                              value={r.compliance_pairs}
-                              onChange={e => updateRow(i, 'compliance_pairs', e.target.value)}
-                            />
-                          ) : <span className="text-gray-300 block text-center">-</span>}
-                        </td>
-                      )}
-
                       <td className="p-2 text-center text-gray-600">{r.p_score}</td>
                       <td className="p-2 text-center text-gray-600">{r.q_score}</td>
+                      <td className="p-2 text-center text-gray-600">{r.c_score}</td>
                       <td className="p-2 text-center font-bold text-blue-600 text-lg">{r.total_score}</td>
                       <td className="p-2"><input className="input w-full p-1" value={r.approver_note || ""} onChange={e => updateRow(i, 'approver_note', e.target.value)} /></td>
                     </tr>
@@ -851,9 +819,9 @@ function ApproverModeMolding({ section }) {
   const previewScores = useMemo(() => {
     return calculateScoresMolding({
       shift: tplShift, working_input: tplWorkingInput, mold_hours: tplMoldHours,
-      output: tplOutput, defects: tplDefects, category: tplCategory
+      output: tplOutput, defects: tplDefects, category: tplCategory, compliance: tplCompliance
     }, prodRules);
-  }, [tplShift, tplWorkingInput, tplMoldHours, tplOutput, tplDefects, tplCategory, prodRules]);
+  }, [tplShift, tplWorkingInput, tplMoldHours, tplOutput, tplDefects, tplCategory, tplCompliance, prodRules]);
   const tplQ = previewScores.q_score;
   const tplP = previewScores.p_score;
   const tplKPI = previewScores.day_score;
@@ -954,9 +922,10 @@ function ApproverModeMolding({ section }) {
         category: tplCategory, working_input: toNum(tplWorkingInput),
         mold_hours: toNum(tplMoldHours), output: toNum(tplOutput), defects: toNum(tplDefects),
         compliance_code: tplCompliance, q_score: scores.q_score, p_score: scores.p_score,
+        c_score: scores.c_score, // ADDED
         day_score: scores.day_score, working_real: scores.working_real,
         downtime: scores.downtime, working_exact: scores.working_exact, status: "approved",
-        approver_note: "", // <-- THÊM DÒNG NÀY
+        approver_note: "",
       };
     });
     setReviewRows(rows);
@@ -979,9 +948,9 @@ function ApproverModeMolding({ section }) {
       // CẬP NHẬT: Thêm "approver_note"
       const r = ["compliance_code", "category", "shift", "work_date", "approver_note"].includes(key)
         ? { ...r0, [key]: val } : { ...r0, [key]: toNum(val, 0) };
-      const scores = calculateScoresMolding(r, prodRules);
+      const scores = calculateScoresMolding({ ...r, compliance: r.compliance_code }, prodRules);
       arr[i] = {
-        ...r, q_score: scores.q_score, p_score: scores.p_score, day_score: scores.day_score,
+        ...r, q_score: scores.q_score, p_score: scores.p_score, c_score: scores.c_score, day_score: scores.day_score,
         working_real: scores.working_real, downtime: scores.downtime, working_exact: scores.working_exact,
       };
       return arr;
@@ -1013,16 +982,16 @@ function ApproverModeMolding({ section }) {
     const list = idxs.map((i) => reviewRows[i]);
     const now = new Date().toISOString();
     const payload = list.map((r) => {
-      const scores = calculateScoresMolding(r, prodRules);
+      const scores = calculateScoresMolding({ ...r, compliance: r.compliance_code }, prodRules);
       const overflow = Math.max(0, scores.rawTotal - 15);
       return {
         section: r.section, date: r.work_date, ca: r.shift, worker_id: r.msnv, worker_name: r.hoten,
         approver_msnv: r.approver_msnv, approver_name: r.approver_name, category: r.category,
         working_input: r.working_input, working_real: r.working_real, working_exact: r.working_exact,
         downtime: r.downtime, mold_hours: r.mold_hours, output: r.output, defects: Number(r.defects || 0),
-        q_score: scores.q_score, p_score: scores.p_score, day_score: scores.day_score, overflow,
+        q_score: scores.q_score, p_score: scores.p_score, c_score: scores.c_score, day_score: scores.day_score, overflow,
         compliance_code: r.compliance_code, status: "approved", approved_at: now,
-        approver_note: r.approver_note || null, // <-- THÊM DÒNG NÀY
+        approver_note: r.approver_note || null,
       };
     });
     const { error } = await supabase
@@ -1163,7 +1132,7 @@ function ApproverModeMolding({ section }) {
             /></div>
             <div><label>Ca</label><select className="input" value={tplShift} onChange={e => setTplShift(e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></div>
             <div><label>Loại hàng</label><select className="input" value={tplCategory} onChange={e => setTplCategory(e.target.value)}><option value="">-- Chọn loại --</option>{categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}</select></div>
-            <div><label>Tuân thủ</label><select className="input text-center" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>{COMPLIANCE_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></div>
+            <div><label>Tuân thủ</label><select className="input text-center" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>{MOLDING_COMPLIANCE_OPTIONS.map(o => (<option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>))}</select></div>
             <div><label>Giờ làm việc (nhập)</label><input type="number" className="input" value={tplWorkingInput} onChange={e => setTplWorkingInput(e.target.value)} /></div>
             <div><label>Số giờ khuôn chạy</label><input type="number" className="input" value={tplMoldHours} onChange={e => setTplMoldHours(e.target.value)} /></div>
             <div><label>Sản lượng / ca</label><input type="number" className="input" value={tplOutput} onChange={e => setTplOutput(e.target.value)} /></div>
@@ -1174,7 +1143,7 @@ function ApproverModeMolding({ section }) {
               <div>Giờ T Tế: <b>{previewScores.working_real}</b></div>
               <div>Giờ C Xác: <b>{previewScores.working_exact}</b></div>
               <div>Tỷ lệ NS: <b>{previewScores.prodRate.toFixed(2)}</b></div>
-              <div>Q: <b>{tplQ}</b></div><div>P: <b>{tplP}</b></div>
+              <div>Q: <b>{tplQ}</b></div><div>P: <b>{tplP}</b></div><div>C: <b>{previewScores.c_score}</b></div>
               <div>KPI (Max 15): <b>{tplKPI}</b></div>
             </div>
           </div>
@@ -1262,6 +1231,7 @@ function EditReviewMolding({
               <th className="p-2">Giờ CX</th>
               <th className="p-2">Q</th>
               <th className="p-2">P</th>
+              <th className="p-2">C</th>
               <th className="p-2">KPI</th>
               <th className="p-2">Tuân thủ</th>
               {/* THÊM CỘT MỚI */}
@@ -1293,8 +1263,13 @@ function EditReviewMolding({
                   <td className="p-2">{r.working_exact}</td>
                   <td className="p-2">{r.q_score}</td>
                   <td className="p-2">{r.p_score}</td>
+                  <td className="p-2">{r.c_score}</td>
                   <td className="p-2 font-semibold">{r.day_score}</td>
-                  <td className="p-2"><select className="input text-center w-28" value={r.compliance_code} onChange={(e) => updateRow(gi, "compliance_code", e.target.value)}>{COMPLIANCE_OPTIONS.map((opt) => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></td>
+                  <td className="p-2">
+                    <select className="input text-center w-28" value={r.compliance_code} onChange={(e) => updateRow(gi, "compliance_code", e.target.value)}>
+                      {MOLDING_COMPLIANCE_OPTIONS.map(o => (<option key={o} value={o}>{o === "NONE" ? "--" : o}</option>))}
+                    </select>
+                  </td>
                   {/* THÊM CỘT INPUT GHI CHÚ */}
                   <td className="p-2">
                     <input
@@ -1380,11 +1355,12 @@ function SelfModeMolding({ section }) {
   }
 
   function recompute(row) {
-    const scores = calculateScoresMolding(row, rulesByCat[row.category] || []); // <-- Sửa lỗi: truyền đúng rules
+    const scores = calculateScoresMolding({ ...row, compliance: row.compliance_code }, rulesByCat[row.category] || []);
     return {
       ...row,
       q_score: scores.q_score,
       p_score: scores.p_score,
+      c_score: scores.c_score,
       day_score: scores.day_score,
       working_real: scores.working_real,
       downtime: scores.downtime,
@@ -1405,7 +1381,7 @@ function SelfModeMolding({ section }) {
     if (!rows.length) return alert("Không có dữ liệu để lưu.");
     const now = new Date().toISOString();
     const payload = rows.map((r) => {
-      const finalScores = calculateScoresMolding(r, rulesByCat[r.category] || []); // <-- Sửa lỗi: truyền đúng rules
+      const finalScores = calculateScoresMolding({ ...r, compliance: r.compliance_code }, rulesByCat[r.category] || []);
       const overflow = Math.max(0, finalScores.rawTotal - 15);
       return {
         section: r.section, date: r.date, ca: r.ca, worker_id: r.worker_id, worker_name: r.worker_name,
@@ -1415,7 +1391,7 @@ function SelfModeMolding({ section }) {
         working_exact: finalScores.working_exact,
         downtime: finalScores.downtime,
         mold_hours: r.mold_hours, output: r.output, defects: Number(r.defects || 0),
-        q_score: finalScores.q_score, p_score: finalScores.p_score, day_score: finalScores.day_score, overflow,
+        q_score: finalScores.q_score, p_score: finalScores.p_score, c_score: finalScores.c_score, day_score: finalScores.day_score, overflow,
         compliance_code: r.compliance_code, status: "approved", approved_at: now,
       };
     });
@@ -1456,7 +1432,7 @@ function SelfModeMolding({ section }) {
           <div className="overflow-auto border rounded">
             <table className="min-w-[1100px] text-sm">
               <thead className="bg-gray-50 text-center">
-                <tr><th>Ngày</th><th>Ca</th><th>Loại hàng</th><th>Giờ nhập</th><th>Giờ thực tế</th><th>Downtime</th><th>Giờ chính xác</th><th>Khuôn chạy</th><th>SL/ca</th><th>Phế</th><th>Q</th><th>P</th><th>KPI</th><th>Tuân thủ</th></tr>
+                <tr><th>Ngày</th><th>Ca</th><th>Loại hàng</th><th>Giờ nhập</th><th>Giờ TT</th><th>Giờ CX</th><th>Khuôn</th><th>SL/ca</th><th>Phế</th><th>Q</th><th>P</th><th>C</th><th>KPI</th><th>Tuân thủ</th></tr>
               </thead>
               <tbody className="text-center">
                 {rows.map((r, i) => (
@@ -1469,8 +1445,8 @@ function SelfModeMolding({ section }) {
                     <td><input type="number" className="input text-center" value={r.mold_hours} onChange={(e) => update(i, "mold_hours", e.target.value)} /></td>
                     <td><input type="number" className="input text-center" value={r.output} onChange={(e) => update(i, "output", e.target.value)} /></td>
                     <td><input type="number" className="input text-center" value={r.defects} onChange={(e) => update(i, "defects", e.target.value)} step="0.5" /></td>
-                    <td>{r.q_score}</td><td>{r.p_score}</td><td className="font-semibold">{r.day_score}</td>
-                    <td><select className="input text-center" value={r.compliance_code} onChange={(e) => update(i, "compliance_code", e.target.value)}>{COMPLIANCE_OPTIONS.map(opt => (<option key={opt.value} value={opt.value}>{opt.label}</option>))}</select></td>
+                    <td>{r.q_score}</td><td>{r.p_score}</td><td>{r.c_score}</td><td className="font-semibold">{r.day_score}</td>
+                    <td><select className="input text-center" value={r.compliance_code} onChange={(e) => update(i, "compliance_code", e.target.value)}>{MOLDING_COMPLIANCE_OPTIONS.map(o => (<option key={o} value={o}>{o === "NONE" ? "--" : o}</option>))}</select></td>
                   </tr>
                 ))}
               </tbody>

@@ -35,13 +35,12 @@ function calcWorkingReal(shift, inputHours) {
 }
 const getTableName = (sectionKey) => "kpi_lps_entries";
 
-// Helper mặc định cho các bộ phận cũ (Prefitting, Bào, Tách...)
-function scoreByQualityDefault(defects) {
+// Helper mới cho Prefitting, Bào, Tách (Max 5 điểm)
+function scoreByQualityLPS(defects) {
   const d = Number(defects || 0);
-  if (d === 0) return 10;
-  if (d <= 2) return 8;
-  if (d <= 4) return 6;
-  if (d <= 6) return 4;
+  if (d <= 1) return 5;
+  if (d <= 2) return 4;
+  if (d <= 3) return 2;
   return 0;
 }
 
@@ -81,23 +80,20 @@ function deriveDayScoresHybrid({ section, defects, category, output, workHours, 
   const prodRate = exactHours > 0 ? Number(output || 0) / exactHours : 0;
   const p = scoreByProductivityHybrid(prodRate, category, prodRules);
 
+  let q;
   if (section === 'LAMINATION') {
-    const q = scoreByQualityLamination(qualityType, defects);
-    const c = scoreByComplianceLamination(compliance, complianceCount);
-    const total = p + q + c;
-    return {
-      p_score: p, q_score: q, c_score: c, day_score: Math.min(15, total),
-      prodRate: prodRate, workingReal: workingReal, rawTotal: total,
-    };
+    q = scoreByQualityLamination(qualityType, defects);
   } else {
-    // Logic cũ cho các bộ phận khác
-    const q = scoreByQualityDefault(defects);
-    const total = p + q;
-    return {
-      p_score: p, q_score: q, day_score: Math.min(15, total),
-      prodRate: prodRate, workingReal: workingReal, rawTotal: total,
-    };
+    q = scoreByQualityLPS(defects);
   }
+
+  const c = scoreByComplianceLamination(compliance, complianceCount);
+  const total = p + q + c;
+
+  return {
+    p_score: p, q_score: q, c_score: c, day_score: Math.min(15, total),
+    prodRate: prodRate, workingReal: workingReal, rawTotal: total,
+  };
 }
 
 const COMPLIANCE_OPTIONS = [
@@ -406,7 +402,7 @@ export default function ApproverModeHybrid({ section }) {
         category: r.category, prod_rate: Number(r.prod_rate || 0),
         work_hours: Number(r.work_hours || 0), stop_hours: Number(r.stop_hours || 0),
         output: Number(r.output || 0), defects: Number(r.defects || 0),
-        p_score: r.p_score, q_score: r.q_score, day_score: r.total_score, overflow,
+        p_score: r.p_score, q_score: r.q_score, c_score: r.c_score, day_score: r.total_score, overflow,
         compliance_code: r.compliance, section: r.section, status: "approved", approved_at: now,
         approver_note: r.approver_note || null,
         // Fields mới (hy vọng DB có hoặc bỏ qua)
@@ -653,8 +649,7 @@ export default function ApproverModeHybrid({ section }) {
             <h4 className="font-semibold">Điểm KPI Tạm tính (Cho template):</h4>
             <p>NS/Giờ: {tplProdRate.toFixed(2)} | Giờ chính xác: {tplExactHours.toFixed(2)}</p>
             <p>
-              Sản lượng: {tplP} | Chất lượng: {tplQ}
-              {section === 'LAMINATION' && <> | Tuân thủ: {tplC} </>}
+              Sản lượng: {tplP} | Chất lượng: {tplQ} | Tuân thủ: {tplC}
               | **Tổng: {tplKPI}** (Tối đa 15)
             </p>
           </div>
@@ -699,12 +694,12 @@ export default function ApproverModeHybrid({ section }) {
 
                   <th className="p-2">NS/Giờ</th>
                   <th className="p-2">Q</th><th className="p-2">P</th>
-                  {section === 'LAMINATION' && <th className="p-2">C</th>} {/* Show C Score for Lamination */}
+                  <th className="p-2">C</th>
                   <th className="p-2">KPI</th>
 
                   {/* CỘT TUÂN THỦ */}
                   <th className="p-2 min-w-[150px]">Tuân thủ</th>
-                  {section === 'LAMINATION' && <th className="p-2 w-16 text-red-600">Số lần</th>}
+                  <th className="p-2 w-16 text-red-600">Số lần</th>
 
                   <th className="p-2">Ghi chú</th>
                 </tr>
@@ -758,7 +753,7 @@ export default function ApproverModeHybrid({ section }) {
                       <td className="p-2 font-semibold">{r.prod_rate.toFixed(2)}</td>
                       <td className="p-2 font-semibold text-green-700">{r.q_score}</td>
                       <td className="p-2 font-semibold text-green-700">{r.p_score}</td>
-                      {section === 'LAMINATION' && <td className="p-2 font-semibold text-orange-600">{r.c_score}</td>}
+                      <td className="p-2 font-semibold text-orange-600">{r.c_score}</td>
                       <td className="p-2 font-bold text-lg text-blue-700">{r.total_score}</td>
 
                       <td className="p-2">
@@ -770,14 +765,12 @@ export default function ApproverModeHybrid({ section }) {
                         </select>
                       </td>
 
-                      {/* Cột Số lần vi phạm (Lamination) */}
-                      {section === 'LAMINATION' && (
-                        <td className="p-2">
-                          {r.compliance !== 'NONE' && (
-                            <input type="number" className="input text-center w-[60px] border-red-300 text-red-600 font-bold" value={r.compliance_pairs} onChange={e => updateRow(idx, 'compliance_pairs', e.target.value)} />
-                          )}
-                        </td>
-                      )}
+                      {/* Cột Số lần vi phạm */}
+                      <td className="p-2">
+                        {r.compliance !== 'NONE' && (
+                          <input type="number" className="input text-center w-[60px] border-red-300 text-red-600 font-bold" value={r.compliance_pairs} onChange={e => updateRow(idx, 'compliance_pairs', e.target.value)} />
+                        )}
+                      </td>
 
                       <td className="p-2">
                         <input type="text" className="input text-center w-[120px]" value={r.approver_note || ""} onChange={e => updateRow(idx, "approver_note", e.target.value)} placeholder="Ghi chú" />

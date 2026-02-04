@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useKpiSection } from "../context/KpiSectionContext";
+import {
+  scoreByQualityMolding,
+  scoreByCompliance,
+  getMoldingCompliancePenalty
+} from "../lib/scoring";
 
 /** Quy đổi giờ làm việc thực tế từ giờ nhập + ca làm việc (mô phỏng bảng Choose section list)
  * Excel: =IF(G4<8,G4, IF(G4<9, VLOOKUP(C5, S:AM,16,0),
@@ -26,14 +31,11 @@ function calcWorkingReal(shift, inputHours) {
   return base + adj;
 }
 
-function calcQ(defects) {
-  const d = Number(defects || 0);
-  if (d === 0) return 10;
-  if (d <= 2) return 8;
-  if (d <= 4) return 6;
-  if (d <= 6) return 4;
-  return 0;
-}
+const MOLDING_COMPLIANCE_OPTIONS = [
+  "NONE",
+  "Không kiểm soát nhiệt độ theo quy định",
+  "Lỗi Tuân thủ khác"
+];
 
 export default function EntryPageMolding() {
   const { section } = useKpiSection(); // sẽ là "MOLDING"
@@ -111,7 +113,13 @@ export default function EntryPageMolding() {
   }, [workerId]);
 
   // Điểm Q
-  const qScore = useMemo(() => calcQ(defects), [defects]);
+  const qScore = useMemo(() => scoreByQualityMolding(defects), [defects]);
+
+  // Điểm C
+  const cScore = useMemo(() => {
+    const penalty = getMoldingCompliancePenalty(complianceCode);
+    return scoreByCompliance(penalty);
+  }, [complianceCode]);
 
   // Điểm P (dò theo rule: category + pairs/hour)
   const [pScore, setPScore] = useState(0);
@@ -136,8 +144,8 @@ export default function EntryPageMolding() {
       });
   }, [category, output, workingExact]);
 
-  const dayTotal = Math.min(15, pScore + qScore);
-  const overflow = Math.max(0, pScore + qScore - 15);
+  const dayTotal = Math.min(15, pScore + qScore + cScore);
+  const overflow = Math.max(0, pScore + qScore + cScore - 15);
 
   async function saveEntry() {
     // THÊM KIỂM TRA NGÀY
@@ -164,7 +172,7 @@ export default function EntryPageMolding() {
 
       // molding fields
       category,                            // cột mới
-      
+
       working_input: Number(inputHours || 0),
       working_real: Number(workingReal || 0),
       working_exact: Number(workingExact || 0),
@@ -176,13 +184,13 @@ export default function EntryPageMolding() {
       // điểm
       q_score: qScore,
       p_score: pScore,
+      c_score: cScore,
       day_score: dayTotal,
       overflow,
 
       // tuân thủ
       compliance_code: complianceCode,
-      violations: complianceCode === "NONE" ? 0 : 1,
-    
+
       status: "pending",
     };
 
@@ -199,7 +207,7 @@ export default function EntryPageMolding() {
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         // pages/EntryPageMolding.jsx
-        
+
         <div>
           <label>MSNV người nhập</label>
           <input className="input" value={workerId} onChange={e => setWorkerId(e.target.value.trim())} />
@@ -220,11 +228,11 @@ export default function EntryPageMolding() {
 
         <div>
           <label>Ngày làm việc</label>
-          <input 
-            type="date" 
-            className="input" 
-            value={date} 
-            onChange={e => setDate(e.target.value)} 
+          <input
+            type="date"
+            className="input"
+            value={date}
+            onChange={e => setDate(e.target.value)}
             max={today} // THÊM THUỘC TÍNH MAX
           />
         </div>
@@ -262,23 +270,18 @@ export default function EntryPageMolding() {
 
         <div>
           <label>Số đôi phế</label>
-          <input 
-            type="number" 
-            className="input" 
-            value={defects} 
-            onChange={e => setDefects(e.target.value)} 
+          <input
+            type="number"
+            className="input"
+            value={defects}
+            onChange={e => setDefects(e.target.value)}
             step="0.5" // <-- THÊM BƯỚC NÀY
           />
         </div>
         <div>
           <label>Tuân thủ</label>
           <select className="input" value={complianceCode} onChange={e => setComplianceCode(e.target.value)}>
-            <option value="NONE">Không vi phạm</option>
-            <option value="LATE">Ký mẫu đầu chuyền trước khi sử dụng</option>
-            <option value="PPE">Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất</option>
-            <option value="MAT">Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất</option>
-            <option value="SPEC">Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất</option>
-            <option value="RULE">Vi phạm nội quy bộ phận/công ty</option>
+            {MOLDING_COMPLIANCE_OPTIONS.map(o => <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>)}
           </select>
         </div>
       </div>
@@ -289,6 +292,7 @@ export default function EntryPageMolding() {
         <div>Giờ làm việc chính xác: <b>{workingExact}</b></div>
         <div>Điểm chất lượng (Q): <b>{qScore}</b></div>
         <div>Điểm sản lượng (P): <b>{pScore}</b></div>
+        <div>Điểm tuân thủ (C): <b>{cScore}</b></div>
         <div>Điểm KPI ngày: <b>{dayTotal}</b> &nbsp; (Điểm dư: <b>{overflow}</b>)</div>
       </div>
 

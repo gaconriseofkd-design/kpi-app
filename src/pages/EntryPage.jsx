@@ -2,6 +2,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useKpiSection } from "../context/KpiSectionContext";
+import {
+  scoreByQualityLeanline,
+  scoreByCompliance,
+  getLeanlineCompliancePenalty
+} from "../lib/scoring";
 
 /* ================= Helpers & Scoring ================= */
 
@@ -28,25 +33,25 @@ const SEVERE_ERRORS = [
 
 // Rule mapping helper cho LEANLINE_MOLDED
 const getMoldedCategoryFromLine = (line) => {
-    if (line === 'M4' || line === 'M5') return 'M4 & M5 %OE';
-    if (line === 'M1' || line === 'M2' || line === 'M3') return 'M1 M2 M3 %OE';
-    return ''; 
+  if (line === 'M4' || line === 'M5') return 'M4 & M5 %OE';
+  if (line === 'M1' || line === 'M2' || line === 'M3') return 'M1 M2 M3 %OE';
+  return '';
 };
 
 // Machine Map
 const MACHINE_MAP = {
-    "LAMINATION": ["Máy dán 1", "Máy dán 2", "Máy dán 3", "Máy dán 4", "Máy dán 5", "Máy dán 6", "Máy dán 7"],
-    "PREFITTING": ["Máy cắt 1", "Máy cắt 2", "Máy cắt 3", "Máy cắt 4", "Máy cắt 5", "Máy cắt 6"],
-    "BÀO": ["Máy bào 1", "Máy bào 2", "Máy bào 3", "Máy bào 4"],
-    "TÁCH": ["Máy tách 1", "Máy tách 2", "Máy tách 3", "Máy tách 4"],
-    "LEANLINE_MOLDED": ["M1", "M2", "M3", "M4", "M5"],
-    "LEANLINE_DEFAULT": ["LEAN-D1", "LEAN-D2", "LEAN-D3", "LEAN-D4", "LEAN-H1", "LEAN-H2"],
+  "LAMINATION": ["Máy dán 1", "Máy dán 2", "Máy dán 3", "Máy dán 4", "Máy dán 5", "Máy dán 6", "Máy dán 7"],
+  "PREFITTING": ["Máy cắt 1", "Máy cắt 2", "Máy cắt 3", "Máy cắt 4", "Máy cắt 5", "Máy cắt 6"],
+  "BÀO": ["Máy bào 1", "Máy bào 2", "Máy bào 3", "Máy bào 4"],
+  "TÁCH": ["Máy tách 1", "Máy tách 2", "Máy tách 3", "Máy tách 4"],
+  "LEANLINE_MOLDED": ["M1", "M2", "M3", "M4", "M5"],
+  "LEANLINE_DEFAULT": ["LEAN-D1", "LEAN-D2", "LEAN-D3", "LEAN-D4", "LEAN-H1", "LEAN-H2"],
 };
 
 const HYBRID_SECTIONS = ["LAMINATION", "PREFITTING", "BÀO", "TÁCH"];
 const isHybridSection = (sectionKey) => HYBRID_SECTIONS.includes(sectionKey);
 
-const getTableName = (sectionKey) => 
+const getTableName = (sectionKey) =>
   isHybridSection(sectionKey) ? "kpi_lps_entries" : "kpi_entries";
 
 /** Quy đổi giờ làm việc thực tế từ giờ nhập + ca làm việc */
@@ -65,7 +70,7 @@ function calcWorkingReal(shift, inputHours) {
   if (h < 9) return base;
 
   const extra = h - 8;
-  const adj = extra >= 2 ? extra - 0.5 : extra; 
+  const adj = extra >= 2 ? extra - 0.5 : extra;
   return base + adj;
 }
 
@@ -93,7 +98,7 @@ function scoreByProductivityLeanline(oe, allRules, section, line) {
       .filter(r => r.active !== false && !r.category)
       .sort((a, b) => Number(b.threshold) - Number(a.threshold));
   }
-  
+
   for (const r of rules) {
     if (val >= Number(r.threshold)) return Number(r.score || 0);
   }
@@ -102,11 +107,11 @@ function scoreByProductivityLeanline(oe, allRules, section, line) {
 
 function scoreByProductivityHybrid(prodRate, category, allRules) {
   const val = Number(prodRate ?? 0);
-  const rules = (allRules || []).filter(r => 
-    r.active !== false && 
+  const rules = (allRules || []).filter(r =>
+    r.active !== false &&
     r.category === category
-  ).sort((a, b) => Number(b.threshold) - Number(a.threshold)); 
-  
+  ).sort((a, b) => Number(b.threshold) - Number(a.threshold));
+
   for (const r of rules) {
     if (val >= Number(r.threshold)) return Number(r.score || 0);
   }
@@ -116,32 +121,22 @@ function scoreByProductivityHybrid(prodRate, category, allRules) {
 // CẬP NHẬT: Thêm logic tính điểm Tuân thủ mới
 function deriveDayScores({ section, oe, defects, category, output, workHours, stopHours, ca, line, compliance, compliancePairs }, prodRules) {
   const isHybrid = isHybridSection(section);
-  
-  // 1. Tính điểm chất lượng gốc từ Phế
-  let q = scoreByQuality(defects);
 
-  // 2. Logic Trừ điểm Tuân thủ (Chỉ áp dụng cho LEANLINE_MOLDED)
-  if (section === "LEANLINE_MOLDED" && compliance && compliance !== "NONE") {
-      const pairs = Number(compliancePairs || 0);
-      if (pairs > 0) {
-          if (SEVERE_ERRORS.includes(compliance)) {
-              // Nhóm lỗi nghiêm trọng: 1 đôi -> 4 điểm, >=2 đôi -> 0 điểm
-              if (pairs === 1) {
-                  q = 4;
-              } else {
-                  q = 0;
-              }
-          } else {
-              // Nhóm lỗi thường: Làm tròn lên chẵn, trừ điểm tương ứng
-              // Ví dụ: 3 đôi -> tính là 4 đôi -> trừ 4 điểm
-              const effectivePairs = Math.ceil(pairs / 2) * 2;
-              q = q - effectivePairs;
-          }
-      }
+  let q = 0;
+  let c = 0;
+
+  if (section === "LEANLINE_MOLDED") {
+    q = scoreByQualityLeanline(defects);
+    const penalty = getLeanlineCompliancePenalty(compliance);
+    c = scoreByCompliance(penalty);
+  } else if (section === "LEANLINE_DEFAULT") {
+    q = scoreByQualityLeanline(defects);
+    c = scoreByCompliance(compliancePairs);
+  } else if (isHybrid) {
+    const d = Number(defects || 0);
+    q = (d <= 1) ? 5 : (d <= 2) ? 4 : (d <= 3) ? 2 : 0;
+    c = scoreByCompliance(compliancePairs);
   }
-  
-  // Đảm bảo không âm
-  if (q < 0) q = 0;
 
   let p = 0;
   let prodRate = 0;
@@ -150,19 +145,20 @@ function deriveDayScores({ section, oe, defects, category, output, workHours, st
   if (isHybrid) {
     workingReal = calcWorkingReal(ca, workHours);
     const exactHours = Math.max(0, workingReal - Number(stopHours || 0));
-    
+
     prodRate = exactHours > 0 ? Number(output || 0) / exactHours : 0;
     p = scoreByProductivityHybrid(prodRate, category, prodRules);
   } else {
     prodRate = Number(oe || 0);
-    p = scoreByProductivityLeanline(prodRate, prodRules, section, line); 
+    p = scoreByProductivityLeanline(prodRate, prodRules, section, line);
     workingReal = Number(workHours || 0);
   }
 
-  const total = p + q;
+  const total = p + q + c;
   return {
     p_score: p,
     q_score: q,
+    c_score: c,
     day_score: Math.min(15, total),
     overflow: Math.max(0, total - 15),
     prodRate: prodRate,
@@ -183,8 +179,8 @@ const DEFAULT_FORM = {
   stopHours: 0,
   defects: 0,
   oe: 100,
-  output: 0, 
-  category: "", 
+  output: 0,
+  category: "",
   compliance: "NONE",
   compliancePairs: 0, // <-- THÊM TRƯỜNG NÀY
 };
@@ -193,7 +189,7 @@ export default function EntryPage() {
   const { section } = useKpiSection();
   const isHybrid = isHybridSection(section);
   const tableName = getTableName(section);
-  
+
   const [form, setForm] = useState({ ...DEFAULT_FORM });
 
   const [prodRules, setProdRules] = useState([]);
@@ -209,16 +205,16 @@ export default function EntryPage() {
   // ====== tải rule theo section ======
   useEffect(() => {
     let cancelled = false;
-    
+
     const defaultLine = currentMachines[0] || DEFAULT_FORM.line;
-    setForm(f => ({ 
-        ...DEFAULT_FORM, 
-        date: f.date, 
-        line: defaultLine,
-        category: isHybridSection(section) ? f.category : "", 
-        output: isHybridSection(section) ? f.output : 0, 
-        oe: isHybridSection(section) ? 100 : f.oe,
-    })); 
+    setForm(f => ({
+      ...DEFAULT_FORM,
+      date: f.date,
+      line: defaultLine,
+      category: isHybridSection(section) ? f.category : "",
+      output: isHybridSection(section) ? f.output : 0,
+      oe: isHybridSection(section) ? 100 : f.oe,
+    }));
 
     (async () => {
       const dbSection = section.toUpperCase();
@@ -226,48 +222,48 @@ export default function EntryPage() {
         .from("kpi_rule_productivity")
         .select("*")
         .eq("active", true)
-        .eq("section", dbSection) 
+        .eq("section", dbSection)
         .order("threshold", { ascending: false });
       if (!cancelled) {
         if (error) console.error("Load rules error:", error);
         setProdRules(data || []);
-        
+
         if (isHybridSection(section)) {
-            const opts = [...new Set((data || []).map(r => r.category).filter(Boolean))].sort();
-            setCategoryOptions(opts);
+          const opts = [...new Set((data || []).map(r => r.category).filter(Boolean))].sort();
+          setCategoryOptions(opts);
         } else {
-            setCategoryOptions([]);
+          setCategoryOptions([]);
         }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [section]); 
+  }, [section]);
 
   // ====== auto fill họ tên + approver ======
   const userCache = useRef(new Map());
   useEffect(() => {
     const id = (form.workerId || "").trim();
     if (!id) {
-        setForm((f) => ({ ...f, workerName: "", approverId: "", approverName: "" }));
-        return;
+      setForm((f) => ({ ...f, workerName: "", approverId: "", approverName: "" }));
+      return;
     }
 
     const cached = userCache.current.get(id);
     if (cached) {
-        setForm((f) => ({ ...f, workerName: cached.full_name || "", approverId: cached.approver_msnv || "", approverName: cached.approver_name || "" }));
-        return;
+      setForm((f) => ({ ...f, workerName: cached.full_name || "", approverId: cached.approver_msnv || "", approverName: cached.approver_name || "" }));
+      return;
     }
 
     const t = setTimeout(async () => {
-        const { data } = await supabase.from("users").select("msnv, full_name, approver_msnv, approver_name").eq("msnv", id).maybeSingle();
-        if (data) {
-            userCache.current.set(id, data);
-            setForm((f) => ({ ...f, workerName: data.full_name || "", approverId: data.approver_msnv || "", approverName: data.approver_name || "" }));
-        } else {
-            setForm((f) => ({ ...f, workerName: "", approverId: "", approverName: "" }));
-        }
+      const { data } = await supabase.from("users").select("msnv, full_name, approver_msnv, approver_name").eq("msnv", id).maybeSingle();
+      if (data) {
+        userCache.current.set(id, data);
+        setForm((f) => ({ ...f, workerName: data.full_name || "", approverId: data.approver_msnv || "", approverName: data.approver_name || "" }));
+      } else {
+        setForm((f) => ({ ...f, workerName: "", approverId: "", approverName: "" }));
+      }
     }, 250);
 
     return () => clearTimeout(t);
@@ -275,18 +271,18 @@ export default function EntryPage() {
 
   // ====== tính điểm động ======
   const scores = useMemo(
-    () => deriveDayScores({ 
-        section, 
-        oe: form.oe, 
-        defects: form.defects, 
-        category: form.category, 
-        output: form.output, 
-        workHours: form.workHours, 
-        stopHours: form.stopHours, 
-        ca: form.ca, 
-        line: form.line,
-        compliance: form.compliance,         // Truyền lỗi
-        compliancePairs: form.compliancePairs // Truyền số đôi lỗi
+    () => deriveDayScores({
+      section,
+      oe: form.oe,
+      defects: form.defects,
+      category: form.category,
+      output: form.output,
+      workHours: form.workHours,
+      stopHours: form.stopHours,
+      ca: form.ca,
+      line: form.line,
+      compliance: form.compliance,         // Truyền lỗi
+      compliancePairs: form.compliancePairs // Truyền số đôi lỗi
     }, prodRules),
     [section, form.oe, form.defects, form.category, form.output, form.workHours, form.stopHours, form.ca, form.line, form.compliance, form.compliancePairs, prodRules]
   );
@@ -318,7 +314,7 @@ export default function EntryPage() {
     const violationsValue = form.compliance === "NONE" ? 0 : 1;
     const isUpdate = await findExisting(form.workerId, form.date, section);
     const now = new Date().toISOString();
-    
+
     // Payload chung
     const basePayload = {
       date: form.date,
@@ -333,29 +329,31 @@ export default function EntryPage() {
       defects: Number(form.defects || 0),
       compliance_code: form.compliance,
       section,
-      status: "pending", 
+      status: "pending",
       created_at: now,
       p_score: scores.p_score,
       q_score: scores.q_score,
+      c_score: scores.c_score,
       day_score: scores.day_score,
       overflow: scores.overflow,
     };
-    
+
     let sectionPayload = {};
-    
+
     if (isHybrid) {
       sectionPayload = {
         output: Number(form.output || 0),
         category: form.category,
         working_real: scores.workingReal,
         violations: violationsValue,
+        compliance_pairs: Number(form.compliancePairs || 0),
       };
     } else {
       sectionPayload = {
         oe: Number(form.oe || 0),
       };
     }
-    
+
     const payload = { ...basePayload, ...sectionPayload };
 
     try {
@@ -439,7 +437,7 @@ export default function EntryPage() {
         <label>Người duyệt (Họ tên): <input className="input" value={form.approverName} disabled /></label>
 
         <label>Máy làm việc:
-          <select 
+          <select
             className="input"
             value={form.line}
             onChange={(e) => handleChange("line", e.target.value)}
@@ -456,7 +454,7 @@ export default function EntryPage() {
             <option value="Ca HC">Ca HC</option>
           </select>
         </label>
-        
+
         <label>Giờ làm việc:
           <input type="number" className="input" value={form.workHours} onChange={(e) => handleChange("workHours", Number(e.target.value))} />
         </label>
@@ -464,27 +462,27 @@ export default function EntryPage() {
         <label>Giờ dừng máy:
           <input type="number" className="input" value={form.stopHours} onChange={(e) => handleChange("stopHours", Number(e.target.value))} />
         </label>
-        
+
         <label>Số đôi phế:
           <input type="number" className="input" value={form.defects} onChange={(e) => handleChange("defects", Number(e.target.value))} step="0.5" />
         </label>
-        
+
         {isHybrid ? (
-            <>
+          <>
             <label>Loại năng suất (Category):
-                <select className="input" value={form.category} onChange={(e) => handleChange("category", e.target.value)}>
-                    <option value="">-- Chọn loại --</option>
-                    {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
+              <select className="input" value={form.category} onChange={(e) => handleChange("category", e.target.value)}>
+                <option value="">-- Chọn loại --</option>
+                {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
             </label>
             <label>Sản lượng (Output):
-                <input type="number" className="input" value={form.output} onChange={(e) => handleChange("output", Number(e.target.value))} />
+              <input type="number" className="input" value={form.output} onChange={(e) => handleChange("output", Number(e.target.value))} />
             </label>
-            </>
+          </>
         ) : (
-            <label>%OE:
-                <input type="number" className="input" value={form.oe} onChange={(e) => handleChange("oe", Number(e.target.value))} step="0.01" />
-            </label>
+          <label>%OE:
+            <input type="number" className="input" value={form.oe} onChange={(e) => handleChange("oe", Number(e.target.value))} step="0.01" />
+          </label>
         )}
 
         <label>Lỗi Tuân thủ:
@@ -495,35 +493,35 @@ export default function EntryPage() {
           >
             <option value="NONE">Không vi phạm</option>
             {/* Hiển thị list lỗi tương ứng theo Section */}
-            {section === "LEANLINE_MOLDED" 
+            {section === "LEANLINE_MOLDED"
               ? MOLDED_COMPLIANCE_OPTIONS.map(opt => (
-                  <option key={opt} value={opt}>{opt}</option>
-                ))
+                <option key={opt} value={opt}>{opt}</option>
+              ))
               : [
-                  "Ký mẫu đầu chuyền trước khi sử dụng",
-                  "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất",
-                  "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất",
-                  "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất",
-                  "Vi phạm nội quy bộ phận/công ty"
-                ].map(opt => <option key={opt} value={opt}>{opt}</option>)
+                "Ký mẫu đầu chuyền trước khi sử dụng",
+                "Quy định về kiểm tra điều kiện máy trước/trong khi sản xuất",
+                "Quy định về kiểm tra nguyên liệu trước/trong khi sản xuất",
+                "Quy định về kiểm tra quy cách/tiêu chuẩn sản phẩm trước/trong khi sản xuất",
+                "Vi phạm nội quy bộ phận/công ty"
+              ].map(opt => <option key={opt} value={opt}>{opt}</option>)
             }
           </select>
         </label>
 
-        {/* Ô NHẬP SỐ ĐÔI VI PHẠM (CHỈ HIỆN KHI CÓ LỖI VÀ LÀ LEANLINE_MOLDED) */}
-        {section === "LEANLINE_MOLDED" && form.compliance !== "NONE" && (
-            <label className="text-red-600 font-semibold border-l-4 border-red-500 pl-2 ml-2 bg-red-50 rounded-r">
-                Số đôi vi phạm:
-                <input
-                    type="number"
-                    className="input border-red-400 bg-white ml-2 w-32"
-                    value={form.compliancePairs}
-                    onChange={(e) => handleChange("compliancePairs", Number(e.target.value))}
-                    min="1"
-                    step="1"
-                    placeholder="Nhập số..."
-                />
-            </label>
+        {/* Ô NHẬP SỐ ĐÔI VI PHẠM */}
+        {form.compliance !== "NONE" && (
+          <label className="text-red-600 font-semibold border-l-4 border-red-500 pl-2 ml-2 bg-red-50 rounded-r">
+            Số lần/đôi vi phạm:
+            <input
+              type="number"
+              className="input border-red-400 bg-white ml-2 w-32"
+              value={form.compliancePairs}
+              onChange={(e) => handleChange("compliancePairs", Number(e.target.value))}
+              min="1"
+              step="1"
+              placeholder="Nhập số..."
+            />
+          </label>
         )}
       </div>
 
@@ -531,17 +529,18 @@ export default function EntryPage() {
         <p>Giờ làm việc nhập: <b>{Number(form.workHours || 0)}</b></p>
         <p>Giờ dừng máy: <b>{Number(form.stopHours || 0)}</b></p>
         {section === "LEANLINE_MOLDED" && (
-            <p>Rule: Line M1-M3: 77.0-109.8% | Line M4-M5: 74.5-110.9%</p>
+          <p>Rule: Line M1-M3: 77.0-109.8% | Line M4-M5: 74.5-110.9%</p>
         )}
         {isHybrid && (
-            <>
-                <p>Giờ thực tế (Quy đổi): <b>{scores.workingReal.toFixed(2)}</b></p>
-                <p>Giờ chính xác: <b>{(scores.workingReal - Number(form.stopHours || 0)).toFixed(2)}</b></p>
-                <p>Tỷ lệ năng suất: <b>{scores.prodRate.toFixed(2)}</b></p>
-            </>
+          <>
+            <p>Giờ thực tế (Quy đổi): <b>{scores.workingReal.toFixed(2)}</b></p>
+            <p>Giờ chính xác: <b>{(scores.workingReal - Number(form.stopHours || 0)).toFixed(2)}</b></p>
+            <p>Tỷ lệ năng suất: <b>{scores.prodRate.toFixed(2)}</b></p>
+          </>
         )}
         <p>Điểm Sản lượng (P): <b>{scores.p_score}</b></p>
         <p>Điểm Chất lượng (Q): <b>{scores.q_score}</b></p>
+        <p>Điểm Tuân thủ (C): <b>{scores.c_score}</b></p>
         <p>Điểm KPI ngày: <b>{scores.day_score}</b></p>
         <p>Điểm dư: <b>{scores.overflow}</b></p>
       </div>
