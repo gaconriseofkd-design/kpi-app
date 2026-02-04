@@ -528,7 +528,7 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
   const label = isSingle ? s : (s === "LEANLINE_DC" ? "LEANLINE/PREFITTING/TÁCH/BÀO" : s);
 
   // Helper to add rule
-  const handleAdd = async (severity) => {
+  const handleAdd = async (category, severity) => {
     const pass = prompt("Nhập mật khẩu:");
     if (pass !== "davidtu") return alert("Sai mật khẩu");
     const content = prompt("Nhập nội dung lỗi:");
@@ -540,6 +540,7 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
       .from("kpi_compliance_dictionary")
       .insert([{
         section: secKey,
+        category,
         severity,
         content,
       }]);
@@ -573,44 +574,48 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
 
     const defaults = [
       // 1. LAMINATION
-      { section: "LAMINATION", severity: "NORMAL", content: "Vi phạm MQAA" },
-      { section: "LAMINATION", severity: "NORMAL", content: "Lỗi Rework" },
-      { section: "LAMINATION", severity: "NORMAL", content: "Vi phạm khác" },
+      { section: "LAMINATION", category: "COMPLIANCE", severity: "NORMAL", content: "Vi phạm MQAA" },
+      { section: "LAMINATION", category: "COMPLIANCE", severity: "NORMAL", content: "Lỗi Rework" },
+      { section: "LAMINATION", category: "COMPLIANCE", severity: "NORMAL", content: "Vi phạm khác" },
 
       // 2. MOLDING
-      { section: "MOLDING", severity: "SEVERE", content: "Không kiểm soát nhiệt độ theo quy định" },
-      { section: "MOLDING", severity: "NORMAL", content: "Lỗi Tuân thủ khác" },
+      { section: "MOLDING", category: "COMPLIANCE", severity: "SEVERE", content: "Không kiểm soát nhiệt độ theo quy định" },
+      { section: "MOLDING", category: "COMPLIANCE", severity: "NORMAL", content: "Lỗi Tuân thủ khác" },
 
-      // 3. OTHERS (LEANLINE, PREFITTING, TÁCH, BÀO...)
-      // SEVERE - LOẠI A
-      { section: "OTHERS", severity: "SEVERE", content: "Không có/không có mẫu đầu chuyền" },
-      { section: "OTHERS", severity: "SEVERE", content: "Không thực hiện checklist trước khi làm việc" },
-      { section: "OTHERS", severity: "SEVERE", content: "Không thực hiện checklist dò kim" },
-      { section: "OTHERS", severity: "SEVERE", content: "Không có mộc dò kim" },
-      { section: "OTHERS", severity: "SEVERE", content: "Dao chặt không có thông tin" },
-      { section: "OTHERS", severity: "SEVERE", content: "Không tuân thủ/không đo nhiệt độ tiêu chuẩn máy" },
-      { section: "OTHERS", severity: "SEVERE", content: "Không sử dụng bảo hộ lao động, chắn lối thoát hiểm" },
-      { section: "OTHERS", severity: "SEVERE", content: "Không in logo" },
-      { section: "OTHERS", severity: "SEVERE", content: "Chặt sai dao" },
-      { section: "OTHERS", severity: "SEVERE", content: "In sai logo/ in sai phân đoạn" },
-      { section: "OTHERS", severity: "SEVERE", content: "Chặt in đóng gói sai yêu cầu đối với chỉ lệnh" },
+      // 3. OTHERS (LEANLINE, PREFITTING...)
+      // TUÂN THỦ (C) - SEVERE
+      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Không có/không có mẫu đầu chuyền" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Không thực hiện checklist trước khi làm việc" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Không thực hiện checklist dò kim" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Không có mộc dò kim" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Dao chặt không có thông tin" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Không tuân thủ/không đo nhiệt độ tiêu chuẩn máy" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Không sử dụng bảo hộ lao động, chắn lối thoát hiểm" },
 
-      // NORMAL - LOẠI B
-      { section: "OTHERS", severity: "NORMAL", content: "Sử dụng điện thoại cá nhân với mục đích riêng" },
-      { section: "OTHERS", severity: "NORMAL", content: "Nghỉ ngắn, nghỉ cuối ca trước thời gian quy định" },
-      { section: "OTHERS", severity: "NORMAL", content: "Không scan đầy đủ QR code" },
-      { section: "OTHERS", severity: "NORMAL", content: "Ngồi nằm trên vật liệu" },
-      { section: "OTHERS", severity: "NORMAL", content: "Logo lưu trữ không có tem nhãn" },
-      { section: "OTHERS", severity: "NORMAL", content: "Dụng cụ để không đúng vị trí, ko có mã số quản lý" },
-      { section: "OTHERS", severity: "NORMAL", content: "Đóng gói sai thiếu (theo đôi)" },
-      { section: "OTHERS", severity: "NORMAL", content: "Đóng dư, ghi số thiếu sai/ không ghi số thiếu" },
-      { section: "OTHERS", severity: "NORMAL", content: "Dán nhầm tem size run" },
-      { section: "OTHERS", severity: "NORMAL", content: "Lỗi in khác" },
-      { section: "OTHERS", severity: "NORMAL", content: "Lỗi đóng gói khác" },
-      { section: "OTHERS", severity: "NORMAL", content: "Các lỗi tuân thủ khác" }
+      // TUÂN THỦ (C) - NORMAL
+      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Sử dụng điện thoại cá nhân với mục đích riêng" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Nghỉ ngắn, nghỉ cuối ca trước thời gian quy định" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Không scan đầy đủ QR code" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Ngồi nằm trên vật liệu" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Logo lưu trữ không có tem nhãn" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Dụng cụ để không đúng vị trí, ko có mã số quản lý" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Các lỗi tuân thủ khác" },
+
+      // CHẤT LƯỢNG (Q)
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Đóng gói sai thiếu (theo đôi)" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Đóng dư, ghi số thiếu sai/ không ghi số thiếu" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Dán nhầm tem size run" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Không in logo" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Chặt sai dao" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "In sai logo/ in sai phân đoạn" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Chặt in đóng gói sai yêu cầu đối với chỉ lệnh" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Lỗi in khác" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Lỗi đóng gói khác" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Phàn nàn khách hàng" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Lỗi Phế" }
     ];
 
-    const { error } = await supabase.from("kpi_compliance_dictionary").upsert(defaults, { onConflict: 'section,content' });
+    const { error } = await supabase.from("kpi_compliance_dictionary").upsert(defaults, { onConflict: 'section,category,content' });
     if (error) alert(error.message);
     else {
       alert("Đã đồng bộ dữ liệu gốc lên hệ thống!");
@@ -618,9 +623,14 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
     }
   };
 
-  const getRules = (type) => {
+  const getComplianceOptions = (cat = "COMPLIANCE") => {
     const secKey = s === "MOLDING" ? "MOLDING" : (s === "LAMINATION" ? "LAMINATION" : "OTHERS");
-    return complianceDict.filter(r => r.section === secKey && r.severity === type);
+    return ["NONE", ...new Set(complianceDict.filter(r => r.section === secKey && r.category === cat).map(r => r.content))];
+  };
+
+  const getRules = (category, type) => {
+    const secKey = s === "MOLDING" ? "MOLDING" : (s === "LAMINATION" ? "LAMINATION" : "OTHERS");
+    return complianceDict.filter(r => r.section === secKey && r.category === category && r.severity === type);
   };
 
   // 1. RULES CHO LAMINATION
@@ -633,20 +643,19 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
         <div className="grid md:grid-cols-2 gap-6">
           <div className="space-y-3">
             <h4 className="font-semibold text-orange-700">1. Điểm Chất lượng (Q) - Tối đa 5 đ</h4>
-            <ul className="list-disc pl-5 text-sm space-y-2">
-              <li><b>Hàng phế (Scrap):</b>
-                <table className="text-xs border mt-1 bg-white">
-                  <thead><tr className="bg-orange-100"><th className="p-1 px-3 border">Số đôi phế</th><th className="p-1 px-3 border">Điểm Q</th></tr></thead>
-                  <tbody>
-                    <tr><td className="p-1 px-3 border">0 - 1 đôi</td><td className="p-1 px-3 border font-bold">5</td></tr>
-                    <tr><td className="p-1 px-3 border">2 - 3 đôi</td><td className="p-1 px-3 border font-bold">4</td></tr>
-                    <tr><td className="p-1 px-3 border">4 - 5 đôi</td><td className="p-1 px-3 border font-bold">2</td></tr>
-                    <tr><td className="p-1 px-3 border">&gt; 5 đôi</td><td className="p-1 px-3 border font-bold text-red-600">0</td></tr>
-                  </tbody>
-                </table>
-              </li>
-              <li><b>Fail Bonding (Dry):</b> Mặc định <b>0 điểm Q</b>.</li>
+            <ul className="list-disc pl-5 text-[11px] space-y-1 text-gray-700">
+              <li><b>Hàng phế (Scrap):</b> Theo bảng bên dưới.</li>
+              <li><b>Fail Bonding (Dry):</b> 0 điểm.</li>
             </ul>
+            <table className="text-xs border mt-1 bg-white">
+              <thead><tr className="bg-orange-100"><th className="p-1 px-3 border">Số đôi phế</th><th className="p-1 px-3 border">Điểm Q</th></tr></thead>
+              <tbody>
+                <tr><td className="p-1 px-3 border">0 - 1 đôi</td><td className="p-1 px-3 border font-bold">5</td></tr>
+                <tr><td className="p-1 px-3 border">2 - 3 đôi</td><td className="p-1 px-3 border font-bold">4</td></tr>
+                <tr><td className="p-1 px-3 border">4 - 5 đôi</td><td className="p-1 px-3 border font-bold">2</td></tr>
+                <tr><td className="p-1 px-3 border">&gt; 5 đôi</td><td className="p-1 px-3 border font-bold text-red-600">0</td></tr>
+              </tbody>
+            </table>
           </div>
 
           <div className="space-y-3">
@@ -659,13 +668,13 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
             </div>
             <ul className="list-disc pl-5 text-[11px] space-y-1 text-gray-700">
               <li>Mặc định ban đầu: <b>3 điểm</b>.</li>
-              {getRules("NORMAL").map((item, idx) => (
+              {getRules("COMPLIANCE", "NORMAL").map((item, idx) => (
                 <li key={idx} className="group flex items-center justify-between">
                   <span><b>{item.content}:</b> Trừ <b>1 điểm/lần</b>.</span>
                   <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
                 </li>
               ))}
-              {getRules("NORMAL").length === 0 && <li className="italic text-gray-400">Vui lòng nhấn Seed để nạp dữ liệu...</li>}
+              {getRules("COMPLIANCE", "NORMAL").length === 0 && <li className="italic text-gray-400">Vui lòng nhấn Seed để nạp dữ liệu...</li>}
             </ul>
           </div>
         </div>
