@@ -13,7 +13,6 @@ import AdminPage from "./pages/AdminPage";
 import ReportPage from "./pages/ReportPage";
 import RulesPage from "./pages/RulesPage";
 import HelpPage from "./pages/HelpPage";
-import ViewRulesQuality from "./pages/ViewRulesQuality";
 import MQAAEntry from "./pages/MQAAEntry";
 import MQAADashboard from "./pages/MQAADashboard";
 
@@ -44,7 +43,6 @@ function Shell() {
           { to: "/report", label: "Báo cáo" },
           { to: "/admin", label: "Quản lý User" },
           { to: "/rules", label: "Rules điểm SX" },
-          { to: "/view-rules-quality", label: "Xem Rule (Q)" },
           { to: "/mqaa-entry", label: "MQAA Nhập liệu" },
           { to: "/mqaa-dashboard", label: "MQAA Dashboard" },
           { to: "/help", label: "Hướng dẫn" },
@@ -84,7 +82,6 @@ function Shell() {
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/rules" element={<RulesPage />} />
         <Route path="/help" element={<HelpPage />} />
-        <Route path="/view-rules-quality" element={<ViewRulesQuality />} />
         <Route path="/mqaa-entry" element={<MQAAEntry />} />
         <Route path="/mqaa-dashboard" element={<MQAADashboard />} />
       </Routes>

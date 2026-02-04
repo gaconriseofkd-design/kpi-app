@@ -62,6 +62,7 @@ function RulesContent() {
   const [saving, setSaving] = useState(false);
   const [testOE, setTestOE] = useState(100);
   const [testCat, setTestCat] = useState("");
+  const [activeTab, setActiveTab] = useState("productivity"); // "productivity" or "quality"
 
   const needsCategory = requiresCategory(section.toUpperCase());
 
@@ -215,244 +216,277 @@ function RulesContent() {
   // 🖼️ Giao diện chính
   return (
     <div className="p-4 space-y-4">
-      <div className="flex items-center gap-2 flex-wrap">
-        <h2 className="text-xl font-semibold">
-          {needsCategory
-            ? "Rule điểm sản lượng (Loại hàng/Line → Điểm)"
-            : "Rule điểm sản lượng (%OE → Điểm)"}
-        </h2>
-        <span className="px-2 py-1 text-xs rounded bg-slate-100">
-          Section: {SECTIONS.find((s) => s.key === section)?.label || section}
-        </span>
-        <button className="btn" onClick={load} disabled={loading}>
-          {loading ? "Đang tải..." : "Tải lại"}
-        </button>
-        <button className="btn" onClick={addRow}>
-          + Thêm rule
-        </button>
-        <label className="btn cursor-pointer bg-green-600 hover:bg-green-700 text-white">
-          📤 Import Excel
-          <input type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleImportExcel} />
-        </label>
-        <button className="btn btn-primary" onClick={saveAll} disabled={saving}>
-          {saving ? "Đang lưu..." : "Lưu tất cả"}
-        </button>
+      <div className="flex items-center justify-between gap-4 border-b pb-2">
+        <div className="flex items-center gap-4">
+          <h2 className="text-xl font-bold text-indigo-800">Cấu hình Rule KPI</h2>
+          <span className="px-2 py-1 text-xs font-semibold rounded bg-indigo-100 text-indigo-700 border border-indigo-200">
+            {SECTIONS.find((s) => s.key === section)?.label || section}
+          </span>
+        </div>
+
+        <div className="flex bg-gray-100 p-1 rounded-lg">
+          <button
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === "productivity" ? "bg-white shadow text-indigo-700" : "text-gray-500 hover:text-gray-700"}`}
+            onClick={() => setActiveTab("productivity")}
+          >
+            1. Điểm Sản lượng (P)
+          </button>
+          <button
+            className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${activeTab === "quality" ? "bg-white shadow text-indigo-700" : "text-gray-500 hover:text-gray-700"}`}
+            onClick={() => setActiveTab("quality")}
+          >
+            2. Điểm Chất lượng & Tuân thủ (Q/C)
+          </button>
+        </div>
       </div>
 
+      {activeTab === "productivity" && (
+        <div className="space-y-4 animate-in fade-in duration-300">
+          <div className="flex items-center gap-2 flex-wrap bg-white p-3 rounded-xl border shadow-sm">
+            <h3 className="text-sm font-bold text-gray-500 uppercase mr-auto">
+              {needsCategory ? "Thiết lập Ngưỡng Sản lượng" : "Thiết lập %OE"}
+            </h3>
+            <button className="btn btn-sm" onClick={load} disabled={loading}>
+              {loading ? "Đang tải..." : "Tải lại"}
+            </button>
+            <button className="btn btn-sm bg-indigo-600 text-white hover:bg-indigo-700" onClick={addRow}>
+              + Thêm dòng
+            </button>
+            <label className="btn btn-sm cursor-pointer bg-green-600 hover:bg-green-700 text-white">
+              📤 Import Excel
+              <input type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleImportExcel} />
+            </label>
+            <button className="btn btn-sm bg-blue-600 text-white hover:bg-blue-700" onClick={saveAll} disabled={saving}>
+              {saving ? "Đang lưu..." : "Lưu tất cả"}
+            </button>
+          </div>
 
-      {/* Test nhanh */}
-      <div className="p-3 rounded border bg-white inline-flex items-center gap-2 flex-wrap">
-        {needsCategory ? (
-          <>
-            <select
-              className="input w-36"
-              value={testCat}
-              onChange={(e) => setTestCat(e.target.value)}
-            >
-              <option value="">-- Loại hàng/Line --</option>
-              {[...new Set(rows.map((r) => r.category).filter(Boolean))].map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-            <span>%OE/Tỷ lệ NS:</span>
-          </>
-        ) : (
-          <span>Test %OE:</span>
-        )}
-        <input
-          type="number"
-          className="input w-28"
-          value={testOE}
-          onChange={(e) => setTestOE(Number(e.target.value))}
-        />
-        <span>
-          → Điểm: <b>{testScore}</b>
-        </span>
-      </div>
+          {/* Test nhanh */}
+          <div className="p-3 rounded border bg-white inline-flex items-center gap-2 flex-wrap">
+            {needsCategory ? (
+              <>
+                <select
+                  className="input w-36"
+                  value={testCat}
+                  onChange={(e) => setTestCat(e.target.value)}
+                >
+                  <option value="">-- Loại hàng/Line --</option>
+                  {[...new Set(rows.map((r) => r.category).filter(Boolean))].map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+                <span>%OE/Tỷ lệ NS:</span>
+              </>
+            ) : (
+              <span>Test %OE:</span>
+            )}
+            <input
+              type="number"
+              className="input w-28"
+              value={testOE}
+              onChange={(e) => setTestOE(Number(e.target.value))}
+            />
+            <span>
+              → Điểm: <b>{testScore}</b>
+            </span>
+          </div>
 
-      {/* Bảng Rule */}
-      <div className="overflow-auto pb-4 border-b">
-        {needsCategory ? (
-          <table className="min-w-[800px] text-sm">
-            <thead>
-              <tr className="text-left border-b">
-                <th className="p-2">Loại hàng/Line</th>
-                <th className="p-2">Ngưỡng (≥)</th>
-                <th className="p-2">Điểm</th>
-                <th className="p-2">Ghi chú</th>
-                <th className="p-2">Active</th>
-                <th className="p-2">Xoá</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, idx) => (
-                <tr key={r.id ?? `new-${idx}`} className="border-b hover:bg-gray-50">
-                  <td className="p-2">
-                    <input
-                      className="input w-40"
-                      value={r.category || ""}
-                      onChange={(e) =>
-                        setRows((list) =>
-                          list.map((x, i) =>
-                            i === idx ? { ...x, category: e.target.value } : x
-                          )
-                        )
-                      }
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="number"
-                      className="input w-28"
-                      value={r.threshold}
-                      onChange={(e) =>
-                        setRows((list) =>
-                          list.map((x, i) =>
-                            i === idx ? { ...x, threshold: Number(e.target.value) } : x
-                          )
-                        )
-                      }
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="number"
-                      className="input w-20"
-                      value={r.score}
-                      onChange={(e) =>
-                        setRows((list) =>
-                          list.map((x, i) =>
-                            i === idx ? { ...x, score: Number(e.target.value) } : x
-                          )
-                        )
-                      }
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      className="input w-80"
-                      value={r.note ?? ""}
-                      onChange={(e) =>
-                        setRows((list) =>
-                          list.map((x, i) =>
-                            i === idx ? { ...x, note: e.target.value } : x
-                          )
-                        )
-                      }
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="checkbox"
-                      checked={!!r.active}
-                      onChange={(e) =>
-                        setRows((list) =>
-                          list.map((x, i) =>
-                            i === idx ? { ...x, active: e.target.checked } : x
-                          )
-                        )
-                      }
-                    />
-                  </td>
-                  <td className="p-2">
-                    <button className="btn" onClick={() => delRow(r.id, idx)}>
-                      Xoá
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {!rows.length && (
-                <tr>
-                  <td colSpan={6} className="p-4 text-center text-gray-500">
-                    Chưa có rule
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        ) : (
-          <table className="min-w-[700px] text-sm">
-            <thead>
-              <tr className="text-left border-b">
-                <th className="p-2">Ngưỡng %OE (≥)</th>
-                <th className="p-2">Điểm</th>
-                <th className="p-2">Ghi chú</th>
-                <th className="p-2">Active</th>
-                <th className="p-2">Xoá</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r, idx) => (
-                <tr key={r.id ?? `new-${idx}`} className="border-b hover:bg-gray-50">
-                  <td className="p-2">
-                    <input
-                      type="number"
-                      className="input w-28"
-                      value={r.threshold}
-                      onChange={(e) =>
-                        setRows((list) =>
-                          list.map((x, i) =>
-                            i === idx ? { ...x, threshold: Number(e.target.value) } : x
-                          )
-                        )
-                      }
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="number"
-                      className="input w-20"
-                      value={r.score}
-                      onChange={(e) =>
-                        setRows((list) =>
-                          list.map((x, i) =>
-                            i === idx ? { ...x, score: Number(e.target.value) } : x
-                          )
-                        )
-                      }
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      className="input w-80"
-                      value={r.note ?? ""}
-                      onChange={(e) =>
-                        setRows((list) =>
-                          list.map((x, i) =>
-                            i === idx ? { ...x, note: e.target.value } : x
-                          )
-                        )
-                      }
-                    />
-                  </td>
-                  <td className="p-2">
-                    <input
-                      type="checkbox"
-                      checked={!!r.active}
-                      onChange={(e) =>
-                        setRows((list) =>
-                          list.map((x, i) =>
-                            i === idx ? { ...x, active: e.target.checked } : x
-                          )
-                        )
-                      }
-                    />
-                  </td>
-                  <td className="p-2">
-                    <button className="btn" onClick={() => delRow(r.id, idx)}>
-                      Xoá
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+          {/* Bảng Rule */}
+          <div className="overflow-auto pb-4">
+            {needsCategory ? (
+              <table className="min-w-[800px] text-sm">
+                <thead>
+                  <tr className="text-left border-b">
+                    <th className="p-2">Loại hàng/Line</th>
+                    <th className="p-2">Ngưỡng (≥)</th>
+                    <th className="p-2">Điểm</th>
+                    <th className="p-2">Ghi chú</th>
+                    <th className="p-2">Active</th>
+                    <th className="p-2">Xoá</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, idx) => (
+                    <tr key={r.id ?? `new-${idx}`} className="border-b hover:bg-gray-50">
+                      <td className="p-2">
+                        <input
+                          className="input w-40"
+                          value={r.category || ""}
+                          onChange={(e) =>
+                            setRows((list) =>
+                              list.map((x, i) =>
+                                i === idx ? { ...x, category: e.target.value } : x
+                              )
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="number"
+                          className="input w-28"
+                          value={r.threshold}
+                          onChange={(e) =>
+                            setRows((list) =>
+                              list.map((x, i) =>
+                                i === idx ? { ...x, threshold: Number(e.target.value) } : x
+                              )
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="number"
+                          className="input w-20"
+                          value={r.score}
+                          onChange={(e) =>
+                            setRows((list) =>
+                              list.map((x, i) =>
+                                i === idx ? { ...x, score: Number(e.target.value) } : x
+                              )
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          className="input w-80"
+                          value={r.note ?? ""}
+                          onChange={(e) =>
+                            setRows((list) =>
+                              list.map((x, i) =>
+                                i === idx ? { ...x, note: e.target.value } : x
+                              )
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="checkbox"
+                          checked={!!r.active}
+                          onChange={(e) =>
+                            setRows((list) =>
+                              list.map((x, i) =>
+                                i === idx ? { ...x, active: e.target.checked } : x
+                              )
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="p-2">
+                        <button className="btn" onClick={() => delRow(r.id, idx)}>
+                          Xoá
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {!rows.length && (
+                    <tr>
+                      <td colSpan={6} className="p-4 text-center text-gray-500">
+                        Chưa có rule
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            ) : (
+              <table className="min-w-[700px] text-sm">
+                <thead>
+                  <tr className="text-left border-b">
+                    <th className="p-2">Ngưỡng %OE (≥)</th>
+                    <th className="p-2">Điểm</th>
+                    <th className="p-2">Ghi chú</th>
+                    <th className="p-2">Active</th>
+                    <th className="p-2">Xoá</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {rows.map((r, idx) => (
+                    <tr key={r.id ?? `new-${idx}`} className="border-b hover:bg-gray-50">
+                      <td className="p-2">
+                        <input
+                          type="number"
+                          className="input w-28"
+                          value={r.threshold}
+                          onChange={(e) =>
+                            setRows((list) =>
+                              list.map((x, i) =>
+                                i === idx ? { ...x, threshold: Number(e.target.value) } : x
+                              )
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="number"
+                          className="input w-20"
+                          value={r.score}
+                          onChange={(e) =>
+                            setRows((list) =>
+                              list.map((x, i) =>
+                                i === idx ? { ...x, score: Number(e.target.value) } : x
+                              )
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          className="input w-80"
+                          value={r.note ?? ""}
+                          onChange={(e) =>
+                            setRows((list) =>
+                              list.map((x, i) =>
+                                i === idx ? { ...x, note: e.target.value } : x
+                              )
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="p-2">
+                        <input
+                          type="checkbox"
+                          checked={!!r.active}
+                          onChange={(e) =>
+                            setRows((list) =>
+                              list.map((x, i) =>
+                                i === idx ? { ...x, active: e.target.checked } : x
+                              )
+                            )
+                          }
+                        />
+                      </td>
+                      <td className="p-2">
+                        <button className="btn" onClick={() => delRow(r.id, idx)}>
+                          Xoá
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {!rows.length && (
+                    <tr>
+                      <td colSpan={5} className="p-4 text-center text-gray-500">
+                        Chưa có rule
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
+      )}
 
-      <QualityRulesInfo section={section} />
+      {activeTab === "quality" && (
+        <div className="animate-in slide-in-from-bottom-2 duration-300">
+          <QualityRulesInfo section={section} />
+        </div>
+      )}
     </div>
   );
 }
