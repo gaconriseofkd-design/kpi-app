@@ -490,7 +490,7 @@ function RulesContent() {
               Tra cứu Quy định Q / C
             </h3>
             <button
-              className={`btn btn-sm ${showAllSections ? "bg-indigo-600 text-white" : "bg-gray-100"}`}
+              className={`btn btn-sm ${showAllSections ? "bg-indigo-500 text-black font-bold" : "bg-gray-100 text-black"}`}
               onClick={() => setShowAllSections(!showAllSections)}
             >
               {showAllSections ? "← Quay lại Section hiện tại" : "Xem tất cả bộ phận"}
