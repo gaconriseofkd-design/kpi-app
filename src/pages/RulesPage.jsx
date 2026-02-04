@@ -498,15 +498,24 @@ function RulesContent() {
         <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-500">
           <div className="flex items-center justify-between bg-white p-4 rounded-2xl border shadow-sm">
             <h3 className="text-sm font-black text-slate-400 uppercase tracking-widest">Tra cứu Quy định Chất lượng (Q) & Tuân thủ (C)</h3>
-            <button
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${showAllSections
-                ? "bg-slate-800 text-white border-slate-800 shadow-md"
-                : "bg-white text-slate-800 border-slate-300 hover:bg-slate-50"
-                }`}
-              onClick={() => setShowAllSections(!showAllSections)}
-            >
-              {showAllSections ? "← Quay lại bộ phận hiện tại" : "Xem tất cả bộ phận"}
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={loadCompliance}
+                className="btn btn-sm btn-ghost border border-slate-200"
+                title="Lấy dữ liệu mới nhất từ Database"
+              >
+                🔄 Làm mới
+              </button>
+              <button
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${showAllSections
+                  ? "bg-slate-800 text-white border-slate-800 shadow-md"
+                  : "bg-white text-slate-800 border-slate-300 hover:bg-slate-50"
+                  }`}
+                onClick={() => setShowAllSections(!showAllSections)}
+              >
+                {showAllSections ? "← Quay lại bộ phận hiện tại" : "Xem tất cả bộ phận"}
+              </button>
+            </div>
           </div>
           {showAllSections ? (
             <div className="space-y-6">
@@ -766,35 +775,54 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
           </table>
         </div>
 
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <h4 className="font-semibold text-blue-700">2. Điểm Tuân thủ (C) - Tối đa 3 đ</h4>
-            <div className="flex gap-1">
-              <button onClick={() => handleAdd("SEVERE")} className="btn btn-xs bg-red-100 text-red-700 hover:bg-red-200 border-none"> + Nghiêm trọng</button>
-              <button onClick={() => handleAdd("NORMAL")} className="btn btn-xs bg-blue-100 text-blue-700 hover:bg-blue-200 border-none"> + Thường</button>
+        <div className="grid md:grid-cols-2 gap-6">
+          {/* CỘT CHẤT LƯỢNG (Q) */}
+          <div className="p-4 bg-white rounded-xl border border-blue-100 shadow-sm space-y-3">
+            <div className="flex items-center justify-between border-b pb-2">
+              <h4 className="font-bold text-blue-700">1. Lỗi Chất lượng (Q)</h4>
+              <button onClick={() => handleAdd("QUALITY", "NORMAL")} className="btn btn-xs btn-outline btn-info text-[10px]">+ Thêm lỗi Q</button>
             </div>
+            <ul className="list-disc pl-5 text-[11px] space-y-1 text-gray-700">
+              {getRules("QUALITY", "NORMAL").map((item, idx) => (
+                <li key={idx} className="group flex items-center justify-between">
+                  <span>{item.content}</span>
+                  <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
+                </li>
+              ))}
+              {getRules("QUALITY", "NORMAL").length === 0 && <li className="italic text-gray-400">Trống</li>}
+            </ul>
           </div>
-          <ul className="list-disc pl-5 text-[11px] space-y-1 text-gray-700">
-            <li>Mặc định ban đầu: <b>3 điểm</b>.</li>
-            <li className="text-red-700 font-bold uppercase">Lỗi loại A (Nghiêm trọng - Về 0):</li>
-            <ul className="list-circle pl-5 mb-1">
-              {getRules("SEVERE").map((item, idx) => (
-                <li key={idx} className="group flex items-center justify-between">
-                  <span>{item.content}</span>
-                  <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
-                </li>
-              ))}
+
+          {/* CỘT TUÂN THỦ (C) */}
+          <div className="p-4 bg-white rounded-xl border border-red-100 shadow-sm space-y-3">
+            <div className="flex items-center justify-between border-b pb-2">
+              <h4 className="font-bold text-red-700">2. Lỗi Tuân thủ (C)</h4>
+              <div className="flex gap-1">
+                <button onClick={() => handleAdd("COMPLIANCE", "SEVERE")} className="btn btn-xs bg-red-500 text-white hover:bg-red-600 border-none"> + Nghiêm trọng</button>
+                <button onClick={() => handleAdd("COMPLIANCE", "NORMAL")} className="btn btn-xs bg-red-100 text-red-700 hover:bg-red-200 border-none"> + Thường</button>
+              </div>
+            </div>
+            <ul className="list-disc pl-5 text-[11px] space-y-1 text-gray-700">
+              <li className="text-red-700 font-bold uppercase">Lỗi loại A (Nghiêm trọng):</li>
+              <ul className="list-circle pl-5 mb-1">
+                {getRules("COMPLIANCE", "SEVERE").map((item, idx) => (
+                  <li key={idx} className="group flex items-center justify-between">
+                    <span>{item.content}</span>
+                    <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
+                  </li>
+                ))}
+              </ul>
+              <li className="text-gray-900 font-bold uppercase">Lỗi loại B (Bình thường):</li>
+              <ul className="list-circle pl-5">
+                {getRules("COMPLIANCE", "NORMAL").map((item, idx) => (
+                  <li key={idx} className="group flex items-center justify-between">
+                    <span>{item.content}</span>
+                    <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
+                  </li>
+                ))}
+              </ul>
             </ul>
-            <li className="text-blue-700 font-bold uppercase">Lỗi loại B (Thường - Trừ 1đ):</li>
-            <ul className="list-circle pl-5">
-              {getRules("NORMAL").map((item, idx) => (
-                <li key={idx} className="group flex items-center justify-between">
-                  <span>{item.content}</span>
-                  <button onClick={() => handleDelete(item.content)} className="hidden group-hover:block text-red-500 ml-2">×</button>
-                </li>
-              ))}
-            </ul>
-          </ul>
+          </div>
         </div>
       </div>
       <div className="mt-4 pt-2 border-t border-blue-200 text-sm font-medium text-blue-900">
