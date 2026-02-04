@@ -612,7 +612,9 @@ function ReportContent() {
           "Số đôi phế": Number(r.defects ?? 0),
           "Điểm chất lượng": q,
           "Điểm Sản lượng": p,
+          "Lỗi chất lượng": r.quality_code || "",
           "Tuân thủ": complianceLabel(r.compliance_code),
+          "Điểm Tuân thủ": Number(r.c_score || 0),
         };
 
         // --- CẬP NHẬT: THÊM CỘT Số đôi lỗi Tuân thủ CHO LEANLINE_MOLDED ---
@@ -1302,6 +1304,8 @@ function ReportContent() {
                   <th className="p-2 text-center">P</th>
                   <th className="p-2 text-center">Q</th>
                   <th className="p-2 text-center">KPI</th>
+                  <th className="p-2 text-center">Lỗi CL</th>
+                  <th className="p-2 text-center">C</th>
                   <th className="p-2 text-center">Tuân thủ</th>
 
                   {/* --- CỘT MỚI: Số đôi lỗi Tuân thủ (CHỈ HIỆN KHI LÀ MOLDED) --- */}
@@ -1325,6 +1329,8 @@ function ReportContent() {
                     <td className="p-2 text-center">{fmt(r.p_score, 2)}</td>
                     <td className="p-2 text-center">{fmt(r.q_score, 2)}</td>
                     <td className="p-2 text-center font-semibold">{fmt(r.day_score, 2)}</td>
+                    <td className="p-2 text-center truncate max-w-[120px]" title={r.quality_code}>{r.quality_code || ""}</td>
+                    <td className="p-2 text-center font-semibold text-orange-600">{fmt(r.c_score, 1)}</td>
                     <td className="p-2 text-center text-xs text-gray-600 max-w-[150px] truncate" title={r.compliance_code}>
                       {r.compliance_code === "NONE" ? "" : r.compliance_code}
                     </td>
@@ -1340,7 +1346,7 @@ function ReportContent() {
                   </tr>
                 ))}
                 {!pageRows.length && (
-                  <tr><td colSpan={section === "LEANLINE_MOLDED" ? 13 : 12} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>
+                  <tr><td colSpan={section === "LEANLINE_MOLDED" ? 15 : 14} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>
                 )}
               </tbody>
             </table>
