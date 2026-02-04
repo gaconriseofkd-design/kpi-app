@@ -1158,7 +1158,7 @@ function ApproverModeMolding({ section }) {
                     <td>{w.msnv}</td><td>{w.full_name}</td><td>{tplCategory}</td><td>{tplWorkingInput}</td>
                     <td>{tplMoldHours}</td><td>{tplOutput}</td><td>{tplDefects}</td>
                     <td>{tplQ}</td><td>{tplP}</td><td className="font-semibold">{tplKPI}</td>
-                    <td>{COMPLIANCE_OPTIONS.find(o => o.value === tplCompliance)?.label || tplCompliance}</td>
+                    <td>{tplCompliance === "NONE" ? "Không vi phạm" : tplCompliance}</td>
                   </tr>
                 ))}
               </tbody>
