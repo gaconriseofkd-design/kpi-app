@@ -4,7 +4,7 @@
 # === Cấu hình (Người dùng thay đổi tại đây) ===
 $SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
 $SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0"
-$ZALO_GROUP_NAME = "My Documents" # Nhập tên chính xác của nhóm Zalo
+$ZALO_GROUP_NAME = "MQAA TESTING REPORT" # Nhập tên chính xác của nhóm Zalo
 
 # === Khởi tạo thư viện ===
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -26,7 +26,7 @@ $L_TOTAL_ERRORS = "T" + [char]0x1ED5 + "ng s" + [char]0x1ED1 + " l" + [char]0x1E
 $L_STATS_SECTION = "Th" + [char]0x1ED1 + "ng k" + [char]0x00EA + " theo B" + [char]0x1ED9 + " ph" + [char]0x1EAD + "n:"
 $L_TOP_LINES = "Top 3 Line vi ph" + [char]0x1EA1 + "m nhi" + [char]0x1EC1 + "u nh" + [char]0x1EA5 + "t:"
 $L_SEP = "-----------------------"
-$L_DASHBOARD = [char]0xD83D + [char]0xDCCA + " *Xem Dashboard MQAA t" + [char]0x1EA1 + "i đ" + [char]0x00E2 + "y:*" # 📊 *Xem Dashboard MQAA tại đây:*
+$L_DASHBOARD = [char]0xD83D + [char]0xDCCA + " *Xem Dashboard MQAA t" + [char]0x1EA1 + "i " + [char]0x0111 + [char]0x00E2 + "y:*" # 📊 *Xem Dashboard MQAA tại đây:*
 $DASHBOARD_LINK = "https://kpi-app-ckg6.vercel.app/mqaa-dashboard"
 
 # Emojis (Surrogate pairs for wide characters)
@@ -122,14 +122,14 @@ try {
     # 1. Lấy cấu hình hệ thống
     $settingsUrl = "$SUPABASE_URL/rest/v1/mqaa_settings?id=eq.1"
     $IMAGE_LIMIT = 10
-    $ZALO_GROUP_NAME = "My Documents"
+    # $ZALO_GROUP_NAME được giữ từ cấu hình ở trên (dòng 7) làm mặc định
     $REPORT_TIME = "08:00"
     $LAST_RUN = ""
 
     try {
         $settings = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Get
         if ($settings) {
-            $ZALO_GROUP_NAME = if ($settings[0].zalo_group) { $settings[0].zalo_group } else { "MQAA" }
+            $ZALO_GROUP_NAME = if ($settings[0].zalo_group) { $settings[0].zalo_group } else { $ZALO_GROUP_NAME }
             $IMAGE_LIMIT = if ($settings[0].image_limit -gt 0) { [int]$settings[0].image_limit } else { 10 }
             $REPORT_TIME = if ($settings[0].report_time) { $settings[0].report_time } else { "08:00" }
             $LAST_RUN = $settings[0].last_run_date
@@ -138,10 +138,10 @@ try {
             Write-Host "Ngày chạy cuối: $LAST_RUN | Ngày hôm nay: $todayStr"
 
             # KIỂM TRA ĐIỀU KIỆN CHẠY BÁO CÁO CHI TIẾT
-            # if ($LAST_RUN -eq $todayStr) {
-            #     Write-Host "Báo cáo ngày hôm nay đã được gửi trước đó. Kết thúc."
-            #     return
-            # }
+            if ($LAST_RUN -eq $todayStr) {
+                Write-Host "Báo cáo ngày hôm nay đã được gửi trước đó. Kết thúc."
+                return
+            }
             if ($currentTime -lt $REPORT_TIME) {
                 Write-Host "Chưa đến giờ báo cáo ($REPORT_TIME). Kết thúc."
                 return
