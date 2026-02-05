@@ -100,6 +100,9 @@ function RulesContent() {
 
   // ➕ Thêm dòng mới
   function addRow() {
+    const p = prompt("Nhập mật khẩu để thêm dòng:");
+    if (p !== "davidtu") return;
+
     let category = "";
     if (section.toUpperCase() === "LEANLINE_MOLDED") category = "%OE";
 
@@ -159,6 +162,8 @@ function RulesContent() {
       }
 
       if (!confirm(`Nhập/cập nhật ${payload.length} rule vào database?`)) return;
+      const pass = prompt("Nhập mật khẩu để xác nhận Import:");
+      if (pass !== "davidtu") return alert("Sai mật khẩu");
 
       setSaving(true);
       const { error } = await supabase
@@ -180,6 +185,8 @@ function RulesContent() {
 
   // 💾 Lưu tất cả rule hiện tại..
   async function saveAll() {
+    const pass = prompt("Nhập mật khẩu để Lưu:");
+    if (pass !== "davidtu") return alert("Sai mật khẩu");
     const payload = rows.map(r => {
       const x = { ...r };
       delete x.id;
