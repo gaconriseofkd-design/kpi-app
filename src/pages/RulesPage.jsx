@@ -761,9 +761,11 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
             <table className="text-sm border bg-white">
               <thead><tr className="bg-teal-100"><th className="p-1 px-3 border">Số đôi phế</th><th className="p-1 px-3 border">Điểm Q</th></tr></thead>
               <tbody>
-                <tr><td className="p-1 px-3 border">0 - 2 đôi</td><td className="p-1 px-3 border font-bold">5</td></tr>
-                <tr><td className="p-1 px-3 border">2.5 - 3 đôi</td><td className="p-1 px-3 border font-bold">4</td></tr>
-                <tr><td className="p-1 px-3 border">3.5 - 5 đôi</td><td className="p-1 px-3 border font-bold">2</td></tr>
+                <tr><td className="p-1 px-3 border">0 - 1 đôi</td><td className="p-1 px-3 border font-bold">5</td></tr>
+                <tr><td className="p-1 px-3 border">1.5 - 2 đôi</td><td className="p-1 px-3 border font-bold">4</td></tr>
+                <tr><td className="p-1 px-3 border">2.5 - 3 đôi</td><td className="p-1 px-3 border font-bold">3</td></tr>
+                <tr><td className="p-1 px-3 border">3.5 - 4 đôi</td><td className="p-1 px-3 border font-bold">2</td></tr>
+                <tr><td className="p-1 px-3 border">4.5 - 5 đôi</td><td className="p-1 px-3 border font-bold">1</td></tr>
                 <tr><td className="p-1 px-3 border">&gt; 5 đôi</td><td className="p-1 px-3 border font-bold text-red-600">0</td></tr>
               </tbody>
             </table>
@@ -777,9 +779,11 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
                 <table className="text-[11px] border w-full bg-white text-center">
                   <thead><tr className="bg-teal-100"><th className="p-1 border text-teal-800">Số đôi phế</th><th className="p-1 border text-teal-800">Điểm Q</th></tr></thead>
                   <tbody>
-                    <tr><td className="p-1 border">0 - 2 đôi</td><td className="p-1 border font-bold">5</td></tr>
-                    <tr><td className="p-1 border">2.5 - 3 đôi</td><td className="p-1 border font-bold">4</td></tr>
-                    <tr><td className="p-1 border">3.5 - 5 đôi</td><td className="p-1 border font-bold">2</td></tr>
+                    <tr><td className="p-1 border">0 - 1 đôi</td><td className="p-1 border font-bold">5</td></tr>
+                    <tr><td className="p-1 border">1.5 - 2 đôi</td><td className="p-1 border font-bold">4</td></tr>
+                    <tr><td className="p-1 border">2.5 - 3 đôi</td><td className="p-1 border font-bold">3</td></tr>
+                    <tr><td className="p-1 border">3.5 - 4 đôi</td><td className="p-1 border font-bold">2</td></tr>
+                    <tr><td className="p-1 border">4.5 - 5 đôi</td><td className="p-1 border font-bold">1</td></tr>
                     <tr><td className="p-1 border text-red-600">&gt; 5 đôi</td><td className="p-1 border font-bold text-red-600">0</td></tr>
                   </tbody>
                 </table>
@@ -855,8 +859,10 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
             <tbody>
               <tr><td className="p-1 px-3 border">0 - 1 đôi</td><td className="p-1 px-3 border font-bold">5</td></tr>
               <tr><td className="p-1 px-3 border">1.5 - 2 đôi</td><td className="p-1 px-3 border font-bold">4</td></tr>
-              <tr><td className="p-1 px-3 border">2.5 - 3 đôi</td><td className="p-1 px-3 border font-bold">2</td></tr>
-              <tr><td className="p-1 px-3 border">&gt; 3 đôi</td><td className="p-1 px-3 border font-bold text-red-600">0</td></tr>
+              <tr><td className="p-1 px-3 border">2.5 - 3 đôi</td><td className="p-1 px-3 border font-bold">3</td></tr>
+              <tr><td className="p-1 px-3 border">3.5 - 4 đôi</td><td className="p-1 px-3 border font-bold">2</td></tr>
+              <tr><td className="p-1 px-3 border">4.5 - 5 đôi</td><td className="p-1 px-3 border font-bold">1</td></tr>
+              <tr><td className="p-1 px-3 border">&gt; 5 đôi</td><td className="p-1 px-3 border font-bold text-red-600">0</td></tr>
             </tbody>
           </table>
         </div>
@@ -871,8 +877,10 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
                 <tbody>
                   <tr><td className="p-1 border">0 - 1 đôi</td><td className="p-1 border font-bold">5</td></tr>
                   <tr><td className="p-1 border">1.5 - 2 đôi</td><td className="p-1 border font-bold">4</td></tr>
-                  <tr><td className="p-1 border">2.5 - 3 đôi</td><td className="p-1 border font-bold">2</td></tr>
-                  <tr><td className="p-1 border text-red-600">&gt; 3 đôi</td><td className="p-1 border font-bold text-red-600">0</td></tr>
+                  <tr><td className="p-1 border">2.5 - 3 đôi</td><td className="p-1 border font-bold">3</td></tr>
+                  <tr><td className="p-1 border">3.5 - 4 đôi</td><td className="p-1 border font-bold">2</td></tr>
+                  <tr><td className="p-1 border">4.5 - 5 đôi</td><td className="p-1 border font-bold">1</td></tr>
+                  <tr><td className="p-1 border text-red-600">&gt; 5 đôi</td><td className="p-1 border font-bold text-red-600">0</td></tr>
                 </tbody>
               </table>
             </div>

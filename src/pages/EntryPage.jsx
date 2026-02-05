@@ -108,7 +108,11 @@ function deriveDayScores({ section, oe, defects, category, output, workHours, st
     c = scoreByCompliance(compliancePairs);
   } else if (isHybrid) {
     const d = Number(defects || 0);
-    q = (d <= 1) ? 5 : (d <= 2) ? 4 : (d <= 3) ? 2 : 0;
+    if (section === 'LAMINATION') {
+      q = (d <= 1) ? 5 : (d <= 3) ? 4 : (d <= 5) ? 2 : 0;
+    } else {
+      q = (d <= 1) ? 5 : (d <= 2) ? 4 : (d <= 3) ? 3 : (d <= 4) ? 2 : (d <= 5) ? 1 : 0;
+    }
     c = scoreByCompliance(compliancePairs);
   }
 

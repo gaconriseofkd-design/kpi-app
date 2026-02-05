@@ -40,7 +40,9 @@ function scoreByQualityLPS(defects) {
   const d = Number(defects || 0);
   if (d <= 1) return 5;
   if (d <= 2) return 4;
-  if (d <= 3) return 2;
+  if (d <= 3) return 3;
+  if (d <= 4) return 2;
+  if (d <= 5) return 1;
   return 0;
 }
 

@@ -39,26 +39,30 @@ export function deriveDayScores({ oe, defects }, rules) {
 /**
  * Leanline / Prefitting / Tach / Bao Quality Score
  * Max 5 points.
- * 0-1: 5 | 1.5-2: 4 | 2.5-3: 2 | >3: 0
+ * 0-1: 5 | 1.5-2: 4 | 2.5-3: 3 | 3.5-4: 2 | 4.5-5: 1 | >5: 0
  */
 export function scoreByQualityLeanline(defects) {
   const d = Number(defects || 0);
   if (d <= 1) return 5;
   if (d <= 2) return 4;
-  if (d <= 3) return 2;
+  if (d <= 3) return 3;
+  if (d <= 4) return 2;
+  if (d <= 5) return 1;
   return 0;
 }
 
 /**
  * Molding Quality Score
  * Max 5 points.
- * 0-2: 5 | 2.5-3: 4 | 3.5-5: 2 | >5: 0
+ * 0-1: 5 | 1.5-2: 4 | 2.5-3: 3 | 3.5-4: 2 | 4.5-5: 1 | >5: 0
  */
 export function scoreByQualityMolding(defects) {
   const d = Number(defects || 0);
-  if (d <= 2) return 5;
-  if (d <= 3) return 4;
-  if (d <= 5) return 2;
+  if (d <= 1) return 5;
+  if (d <= 2) return 4;
+  if (d <= 3) return 3;
+  if (d <= 4) return 2;
+  if (d <= 5) return 1;
   return 0;
 }
 
