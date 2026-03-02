@@ -278,8 +278,12 @@ export default function MQAAPatrolSelection() {
                     <button onClick={handleOpenSettings} className="p-3 bg-white text-slate-400 rounded-2xl border shadow-sm hover:text-indigo-600 transition-colors">
                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 002.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
                     </button>
-                    <button onClick={() => navigate("/mqaa-patrol/dashboard")} className="bg-indigo-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg active:scale-95 transition-all text-sm">Dashboard</button>
+                    <button onClick={() => navigate("/mqaa-patrol/dashboard")} className="bg-white text-indigo-600 border border-indigo-100 px-6 py-2 rounded-xl font-extrabold shadow-sm active:scale-95 transition-all text-sm">Dashboard</button>
                     <button onClick={() => navigate("/mqaa-patrol/report")} className="bg-emerald-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg active:scale-95 transition-all text-sm">Report</button>
+                    <button onClick={() => navigate("/mqaa-patrol/guide")} className="bg-amber-500 text-white px-6 py-2 rounded-xl font-bold shadow-lg active:scale-95 transition-all text-sm flex items-center gap-1">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>
+                        Guide
+                    </button>
                 </div>
             </div>
 
