@@ -133,12 +133,26 @@ export default function MQAAPatrolEntry() {
     const { section } = useParams();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
+    const [isScoreEditable, setIsScoreEditable] = useState(false);
 
     const [headerData, setHeaderData] = useState({
         auditor: "",
         auditorId: "",
         date: new Date().toISOString().split("T")[0],
     });
+
+    const handleUnlockScore = () => {
+        if (isScoreEditable) {
+            setIsScoreEditable(false);
+            return;
+        }
+        const pw = prompt("Nhập mật mã để mở khóa chỉnh sửa điểm (Score):");
+        if (pw === "04672") {
+            setIsScoreEditable(true);
+        } else if (pw !== null) {
+            alert("Sai mật mã!");
+        }
+    };
 
     // Auto-lookup Auditor by ID
     useEffect(() => {
@@ -377,7 +391,22 @@ export default function MQAAPatrolEntry() {
                         <tr className="bg-indigo-600 text-white font-bold">
                             <th className="border p-2 w-16">No.</th>
                             <th className="border p-2">Criteria</th>
-                            <th className="border p-2 w-20 text-center">Score</th>
+                            <th className="border p-2 w-20 text-center relative group">
+                                <div className="flex items-center justify-center gap-1">
+                                    Score
+                                    <button
+                                        onClick={handleUnlockScore}
+                                        className={`p-1 rounded hover:bg-indigo-500 transition-colors ${isScoreEditable ? 'text-yellow-300' : 'text-indigo-300'}`}
+                                        title={isScoreEditable ? "Khóa chỉnh sửa" : "Mở khóa chỉnh sửa"}
+                                    >
+                                        {isScoreEditable ? (
+                                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M10 2a5 5 0 00-5 5v2a2 2 0 00-2 2v5a2 2 0 002 2h10a2 2 0 002-2v-5a2 2 0 00-2-2H7V7a3 3 0 016 0v2h2V7a5 5 0 00-5-5z" /></svg>
+                                        ) : (
+                                            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M5 9V7a5 5 0 0110 0v2a2 2 0 012 2v5a2 2 0 01-2 2H5a2 2 0 01-2-2v-5a2 2 0 012-2zm8-2v2H7V7a3 3 0 016 0z" clipRule="evenodd" /></svg>
+                                        )}
+                                    </button>
+                                </div>
+                            </th>
                             <th className="border p-2 w-24 text-center">Level</th>
                             <th className="border p-2 w-32 text-center">Reference Image</th>
                             <th className="border p-2">Description</th>
@@ -395,13 +424,14 @@ export default function MQAAPatrolEntry() {
                                     {!row.isHeader && (
                                         <input
                                             type="number"
-                                            className="w-full text-center p-1 border rounded"
+                                            className={`w-full text-center p-1 border rounded ${!isScoreEditable ? 'bg-gray-100 cursor-not-allowed text-gray-500' : 'bg-white'}`}
                                             value={row.score}
                                             onChange={(e) => handleRowChange(idx, "score", e.target.value)}
+                                            readOnly={!isScoreEditable}
                                         />
                                     )}
                                 </td>
-                                <td className={`border p-2 text-center ${row.isHeader ? 'bg-orange-400' : ''}`}>
+                                Riverside                                <td className={`border p-2 text-center ${row.isHeader ? 'bg-orange-400' : ''}`}>
                                     {!row.isHeader && (
                                         <input
                                             type="number"
