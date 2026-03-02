@@ -250,7 +250,7 @@ export default function MQAAPatrolEntry() {
                         }
                     },
                     "image/jpeg",
-                    0.7
+                    0.6
                 );
             };
             img.onerror = reject;

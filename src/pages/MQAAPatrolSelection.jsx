@@ -15,6 +15,7 @@ export default function MQAAPatrolSelection() {
     const [showSettings, setShowSettings] = useState(false);
     const [auditorList, setAuditorList] = useState([]);
     const [newAuditor, setNewAuditor] = useState({ id: "", name: "" });
+    const [cleaning, setCleaning] = useState(false);
 
     useEffect(() => {
         fetchAuditors();
@@ -42,6 +43,48 @@ export default function MQAAPatrolSelection() {
         if (!error) fetchAuditors();
     };
 
+    const handleCleanup = async () => {
+        const days = prompt("Xóa tất cả ảnh vật lý cũ hơn bao nhiêu ngày? (Ví dụ: 30)", "30");
+        if (!days) return;
+
+        setCleaning(true);
+        try {
+            const { data: files, error } = await supabase.storage.from("mqaa-images").list("mqaa_patrol");
+            if (error) throw error;
+
+            const cutoffDate = new Date();
+            cutoffDate.setDate(cutoffDate.getDate() - parseInt(days));
+
+            const filesToDelete = files
+                .filter(f => f.created_at && new Date(f.created_at) < cutoffDate)
+                .map(f => `mqaa_patrol/${f.name}`);
+
+            if (filesToDelete.length === 0) {
+                alert("Không có ảnh nào cũ hơn thời gian đã chọn.");
+                return;
+            }
+
+            if (confirm(`Tìm thấy ${filesToDelete.length} ảnh cũ. Bạn có chắc chắn muốn xóa vĩnh viễn không?`)) {
+                const { error: delError } = await supabase.storage.from("mqaa-images").remove(filesToDelete);
+                if (delError) throw delError;
+                alert(`Đã dọn dẹp thành công ${filesToDelete.length} ảnh!`);
+            }
+        } catch (error) {
+            alert("Lỗi khi dọn dẹp: " + error.message);
+        } finally {
+            setCleaning(false);
+        }
+    };
+
+    const handleOpenSettings = () => {
+        const pw = prompt("Nhập mật mã để vào Cài đặt:");
+        if (pw === "04672") {
+            setShowSettings(true);
+        } else if (pw !== null) {
+            alert("Sai mật mã!");
+        }
+    };
+
     return (
         <div className="max-w-4xl mx-auto p-6">
             <div className="flex justify-between items-center mb-8">
@@ -59,7 +102,7 @@ export default function MQAAPatrolSelection() {
                 </div>
                 <div className="flex gap-2">
                     <button
-                        onClick={() => setShowSettings(true)}
+                        onClick={handleOpenSettings}
                         className="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2.5 rounded-lg transition-all"
                         title="Cài đặt Auditor"
                     >
@@ -112,9 +155,25 @@ export default function MQAAPatrolSelection() {
                             ))}
                             {auditorList.length === 0 && <p className="p-4 text-center text-gray-400">Chưa có dữ liệu</p>}
                         </div>
+
+                        <div className="mt-6 pt-4 border-t">
+                            <h4 className="text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
+                                <svg className="w-4 h-4 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                Quản lý bộ nhớ hình ảnh (1GB Free)
+                            </h4>
+                            <p className="text-[11px] text-gray-500 mb-3 italic">* Ảnh được nén cực nhỏ (~100KB), 1GB có thể chứa ~10,000 ảnh.</p>
+                            <button
+                                onClick={handleCleanup}
+                                disabled={cleaning}
+                                className={`w-full py-2 ${cleaning ? 'bg-gray-400' : 'bg-orange-500 hover:bg-orange-600'} text-white rounded-lg font-bold text-sm transition-all shadow-md`}
+                            >
+                                {cleaning ? "ĐANG DỌN DẸP..." : "DỌN DẸP ẢNH CŨ GIẢI PHÓNG BỘ NHỚ"}
+                            </button>
+                        </div>
+
                         <button
                             onClick={() => setShowSettings(false)}
-                            className="w-full mt-6 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold"
+                            className="w-full mt-4 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold"
                         >
                             Đóng
                         </button>
