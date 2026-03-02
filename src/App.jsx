@@ -23,7 +23,7 @@ function MQAAPatrolRoutes() {
   return (
     <Routes>
       <Route path="/" element={<MQAAPatrolSelection />} />
-      <Route path="/entry/:section" element={<MQAAPatrolEntry />} />
+      <Route path="/entry/:section/:id?" element={<MQAAPatrolEntry />} />
       <Route path="/report" element={<MQAAPatrolReport />} />
     </Routes>
   );

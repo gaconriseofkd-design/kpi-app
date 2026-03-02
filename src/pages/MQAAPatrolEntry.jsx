@@ -6,7 +6,7 @@ import { ALL_CRITERIA } from "../data/mqaaPatrolCriteria";
 
 
 export default function MQAAPatrolEntry() {
-    const { section } = useParams();
+    const { section, id } = useParams();
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [isScoreEditable, setIsScoreEditable] = useState(false);
@@ -53,16 +53,48 @@ export default function MQAAPatrolEntry() {
     const [rows, setRows] = useState([]);
 
     useEffect(() => {
-        const criteria = ALL_CRITERIA[section] || [];
-        setRows(criteria.map((item) => ({
-            ...item,
-            score: item.isHeader ? 0 : 6,
-            level: item.isHeader ? 0 : 6,
-            imageFile: null,
-            imageUrl: "",
-            description: "",
-        })));
-    }, [section]);
+        const fetchRecord = async () => {
+            if (id) {
+                setLoading(true);
+                const { data, error } = await supabase
+                    .from("mqaa_patrol_logs")
+                    .select("*")
+                    .eq("id", id)
+                    .single();
+
+                if (data) {
+                    setHeaderData({
+                        auditor: data.auditor_name,
+                        auditorId: data.auditor_id,
+                        date: data.date,
+                    });
+
+                    // Use evaluation_data from DB but restore isHeader from local criteria for styling
+                    const criteria = ALL_CRITERIA[section] || [];
+                    setRows(data.evaluation_data.map((r, idx) => ({
+                        ...r,
+                        // Ensure isHeader and subLabel (if not in JSON) are restored for UI
+                        isHeader: criteria.find(c => c.no === r.no)?.isHeader || false,
+                        subLabel: criteria.find(c => c.no === r.no)?.subLabel || "",
+                        // image_url is already in row but might be renamed to imageUrl in state
+                        imageUrl: r.image_url,
+                    })));
+                }
+                setLoading(false);
+            } else {
+                const criteria = ALL_CRITERIA[section] || [];
+                setRows(criteria.map((item) => ({
+                    ...item,
+                    score: item.isHeader ? 0 : 6,
+                    level: item.isHeader ? 0 : 6,
+                    imageFile: null,
+                    imageUrl: "",
+                    description: "",
+                })));
+            }
+        };
+        fetchRecord();
+    }, [id, section]);
 
     const totals = useMemo(() => {
         let totalScore = 0;
@@ -186,7 +218,11 @@ export default function MQAAPatrolEntry() {
                 })),
             };
 
-            const { error } = await supabase.from("mqaa_patrol_logs").insert([payload]);
+            if (id) {
+                payload.id = id;
+            }
+
+            const { error } = await supabase.from("mqaa_patrol_logs").upsert([payload]);
             if (error) throw error;
 
             alert("Lưu thành công!");
@@ -212,7 +248,7 @@ export default function MQAAPatrolEntry() {
                     </svg>
                 </button>
                 <h1 className="text-2xl font-bold text-center w-full text-indigo-900 uppercase">
-                    PHIẾU ĐÁNH GIÁ MQAA - SECTION {section?.replace("_", " ")}
+                    {id ? "CHỈNH SỬA" : "PHIẾU"} ĐÁNH GIÁ MQAA - SECTION {section?.replace("_", " ")}
                 </h1>
             </div>
 
@@ -380,7 +416,7 @@ export default function MQAAPatrolEntry() {
                     disabled={loading}
                     className={`px-12 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold transition-all shadow-lg transform hover:scale-105 ${loading ? 'opacity-50' : ''}`}
                 >
-                    {loading ? "ĐANG LƯU..." : "LƯU ĐÁNH GIÁ"}
+                    {loading ? "ĐANG LƯU..." : (id ? "CẬP NHẬT ĐÁNH GIÁ" : "LƯU ĐÁNH GIÁ")}
                 </button>
             </div>
 

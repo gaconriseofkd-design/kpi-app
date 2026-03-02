@@ -9,6 +9,9 @@ const SECTIONS = [
     { id: "Molding", name: "MOLDING" },
     { id: "Leanline_DC", name: "LEANLINE DC" },
     { id: "Leanline_Molded", name: "LEANLINE MOLDED" },
+    { id: "Cutting_Die_Warehouse", name: "CUTTING DIE & BOARD WAREHOUSE" },
+    { id: "Logo_Warehouse", name: "LOGO WAREHOUSE" },
+    { id: "Finished_Goods_Warehouse", name: "FINISHED GOODS WAREHOUSE" },
 ];
 
 export default function MQAAPatrolSelection() {
