@@ -37,7 +37,8 @@ export default function MQAAEntry() {
     zalo_group: "MQAA",
     image_limit: 10,
     patrol_report_time: "",
-    patrol_zalo_group: ""
+    patrol_zalo_group: "",
+    patrol_report_days: "Friday,Saturday"
   });
 
   // Fetch settings on mount
@@ -50,7 +51,8 @@ export default function MQAAEntry() {
           zalo_group: data.zalo_group,
           image_limit: data.image_limit,
           patrol_report_time: data.patrol_report_time || "",
-          patrol_zalo_group: data.patrol_zalo_group || ""
+          patrol_zalo_group: data.patrol_zalo_group || "",
+          patrol_report_days: data.patrol_report_days || "Friday,Saturday"
         });
       }
     };
@@ -344,6 +346,29 @@ export default function MQAAEntry() {
                       placeholder="Tên nhóm Zalo riêng"
                       className="w-full p-2 border border-blue-200 rounded-lg bg-blue-50"
                     />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-semibold text-gray-600 italic">Các thứ gửi báo cáo</label>
+                    <div className="grid grid-cols-4 gap-1">
+                      {["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"].map(day => {
+                        const dayLabels = { Monday: "T2", Tuesday: "T3", Wednesday: "T4", Thursday: "T5", Friday: "T6", Saturday: "T7", Sunday: "CN" };
+                        const isSelected = settings.patrol_report_days.split(",").includes(day);
+                        return (
+                          <button
+                            key={day}
+                            type="button"
+                            onClick={() => {
+                              const days = settings.patrol_report_days.split(",").filter(d => d);
+                              const newDays = isSelected ? days.filter(d => d !== day) : [...days, day];
+                              setSettings({ ...settings, patrol_report_days: newDays.join(",") });
+                            }}
+                            className={`text-[10px] font-bold py-1 rounded border ${isSelected ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-gray-500 border-gray-200'}`}
+                          >
+                            {dayLabels[day]}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
                 </div>
                 <div className="flex gap-2 pt-2">

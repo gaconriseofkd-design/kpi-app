@@ -134,6 +134,7 @@ try {
             $REPORT_TIME = if ($settings[0].report_time) { $settings[0].report_time } else { "08:00" }
             $PATROL_ZALO_GROUP = if ($settings[0].patrol_zalo_group) { $settings[0].patrol_zalo_group } else { $ZALO_GROUP_NAME }
             $PATROL_REPORT_TIME = if ($settings[0].patrol_report_time) { $settings[0].patrol_report_time } else { $REPORT_TIME }
+            $PATROL_REPORT_DAYS = if ($settings[0].patrol_report_days) { $settings[0].patrol_report_days } else { "Friday,Saturday" }
             $LAST_RUN = $settings[0].last_run_date
             
             Write-Host "Giờ hiện tại: $currentTime | Giờ báo cáo: $REPORT_TIME"
@@ -290,10 +291,10 @@ public static extern bool IsIconic(IntPtr hWnd);
     $updateBody = '{"last_run_date":"' + $todayStr + '"}'
     $null = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Patch -Body $updateBody -ContentType "application/json"
 
-    # 7. PHIẾU TỔNG KẾT MQAA - INSOLE PRODUCTION (Gửi vào Thứ 6 hoặc Thứ 7)
-    $dayOfWeek = (Get-Date).DayOfWeek
-    if ($dayOfWeek -eq "Friday" -or $dayOfWeek -eq "Saturday") {
-        Write-Host ">>> Kiểm tra điều kiện gửi Phiếu Tổng Kết MQAA (Tuần)..." -ForegroundColor Cyan
+    # 7. PHIẾU TỔNG KẾT MQAA - INSOLE PRODUCTION
+    $dayOfWeek = (Get-Date).DayOfWeek.ToString()
+    if ($PATROL_REPORT_DAYS.Split(",") -contains $dayOfWeek) {
+        Write-Host ">>> Kiểm tra điều kiện gửi Phiếu Tổng Kết MQAA (Thứ: $dayOfWeek)..." -ForegroundColor Cyan
         
         # Kiểm tra giờ gửi riêng (nếu có)
         if ($currentTime -lt $PATROL_REPORT_TIME) {
