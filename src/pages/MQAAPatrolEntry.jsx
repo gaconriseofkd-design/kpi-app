@@ -482,6 +482,12 @@ export default function MQAAPatrolEntry() {
                 </table>
             </div>
 
+            <div className="mt-6 pt-4 border-t text-center">
+                <p className="text-2xl font-black text-indigo-900 bg-yellow-400 inline-block px-8 py-2 rounded-lg shadow-sm mb-4">
+                    Overall MQAA Performance (2): {totals.performance}%
+                </p>
+            </div>
+
             <div className="mt-8 flex justify-center gap-4">
                 <button
                     onClick={() => navigate(-1)}
@@ -498,9 +504,6 @@ export default function MQAAPatrolEntry() {
                 </button>
             </div>
 
-            <div className="mt-8 pt-4 border-t text-center">
-                <p className="text-xl font-bold text-indigo-900">Overall MQAA Performance (2): {totals.performance}%</p>
-            </div>
         </div>
     );
 }
