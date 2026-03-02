@@ -121,10 +121,6 @@ export default function MQAAPatrolGuide() {
                     </div>
                 </div>
 
-                {/* Footer Footer */}
-                <div className="text-center py-10">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Thiết kế bởi Hệ thống AI Assist • 2026</p>
-                </div>
             </div>
         </div>
     );
