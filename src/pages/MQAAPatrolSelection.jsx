@@ -2,10 +2,12 @@ import { useNavigate } from "react-router-dom";
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { ALL_CRITERIA } from "../data/mqaaPatrolCriteria";
+import PasswordModal from "../components/PasswordModal";
 
 export default function MQAAPatrolSelection() {
     const navigate = useNavigate();
     const [showSettings, setShowSettings] = useState(false);
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [activeTab, setActiveTab] = useState("auditor"); // 'auditor' or 'form'
 
     // Auditors State
@@ -257,12 +259,17 @@ export default function MQAAPatrolSelection() {
     };
 
     const handleOpenSettings = () => {
-        if (prompt("Mật mã:") === "04672") setShowSettings(true);
-        else alert("Sai mật mã!");
+        setShowPasswordModal(true);
     };
 
     return (
         <div className="max-w-4xl mx-auto p-6 min-h-screen bg-slate-50 font-sans">
+            <PasswordModal
+                isOpen={showPasswordModal}
+                onClose={() => setShowPasswordModal(false)}
+                onSuccess={() => setShowSettings(true)}
+                initialTitle="Cài đặt hệ thống"
+            />
             <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-6">
                 <div className="flex items-center gap-4">
                     <button onClick={() => navigate("/")} className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200">

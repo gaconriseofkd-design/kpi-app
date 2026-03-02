@@ -3,6 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
 import { ALL_CRITERIA } from "../data/mqaaPatrolCriteria";
+import PasswordModal from "../components/PasswordModal";
 
 
 export default function MQAAPatrolEntry() {
@@ -10,6 +11,7 @@ export default function MQAAPatrolEntry() {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const [isScoreEditable, setIsScoreEditable] = useState(false);
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
 
     const [headerData, setHeaderData] = useState({
         auditor: "",
@@ -22,12 +24,7 @@ export default function MQAAPatrolEntry() {
             setIsScoreEditable(false);
             return;
         }
-        const pw = prompt("Nhập mật mã để mở khóa chỉnh sửa điểm (Score):");
-        if (pw === "04672") {
-            setIsScoreEditable(true);
-        } else if (pw !== null) {
-            alert("Sai mật mã!");
-        }
+        setShowPasswordModal(true);
     };
 
     // Auto-lookup Auditor by ID
@@ -273,6 +270,12 @@ export default function MQAAPatrolEntry() {
 
     return (
         <div className="max-w-[1200px] mx-auto p-4 bg-white shadow-xl rounded-lg my-8">
+            <PasswordModal
+                isOpen={showPasswordModal}
+                onClose={() => setShowPasswordModal(false)}
+                onSuccess={() => setIsScoreEditable(true)}
+                initialTitle="Mở khóa chỉnh sửa điểm"
+            />
             <div className="flex items-center gap-4 mb-6 relative">
                 <button
                     onClick={() => navigate("/mqaa-patrol")}

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
+import PasswordModal from "../components/PasswordModal";
 
 const SECTIONS = ["Raw_Material_Warehouse", "Lamination", "Prefitting", "Molding", "Leanline_DC", "Leanline_Molded", "Cutting_Die_Warehouse", "Logo_Warehouse", "Finished_Goods_Warehouse"];
 
@@ -15,6 +16,8 @@ export default function MQAAPatrolReport() {
     });
     const [results, setResults] = useState([]);
     const [loading, setLoading] = useState(false);
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
+    const [selectedRecord, setSelectedRecord] = useState(null);
 
     const handleSearch = async () => {
         setLoading(true);
@@ -132,6 +135,16 @@ export default function MQAAPatrolReport() {
 
     return (
         <div className="max-w-5xl mx-auto p-6 bg-white shadow-xl rounded-xl mt-8">
+            <PasswordModal
+                isOpen={showPasswordModal}
+                onClose={() => setShowPasswordModal(false)}
+                onSuccess={() => {
+                    if (selectedRecord) {
+                        navigate(`/mqaa-patrol/entry/${selectedRecord.section}/${selectedRecord.id}`);
+                    }
+                }}
+                initialTitle="Chỉnh sửa phiếu"
+            />
             <div className="flex items-center gap-4 mb-8 border-b pb-4">
                 <button
                     onClick={() => navigate("/mqaa-patrol")}
@@ -224,11 +237,8 @@ export default function MQAAPatrolReport() {
                                     <td className="p-4 text-right flex justify-end gap-2">
                                         <button
                                             onClick={() => {
-                                                if (prompt("Nhập mật mã để chỉnh sửa phiếu:") === "04672") {
-                                                    navigate(`/mqaa-patrol/entry/${res.section}/${res.id}`);
-                                                } else {
-                                                    alert("Sai mật mã!");
-                                                }
+                                                setSelectedRecord(res);
+                                                setShowPasswordModal(true);
                                             }}
                                             className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-4 py-1.5 rounded-lg text-sm font-bold transition-all inline-flex items-center gap-1 shadow-sm border border-indigo-200"
                                         >

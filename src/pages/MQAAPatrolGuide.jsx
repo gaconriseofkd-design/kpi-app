@@ -22,7 +22,7 @@ export default function MQAAPatrolGuide() {
                 "Bấm nút 'REPORT' tại màn hình chính để xem danh sách các bản đánh giá đã lưu.",
                 "Sử dụng bộ lọc Ngày hoặc Xưởng để tìm kiếm nhanh.",
                 "Nhấn 'Xuất Excel' để tải báo cáo về máy tính.",
-                "Để chỉnh sửa một bản ghi, bấm nút 'Chỉnh sửa'. Hệ thống sẽ yêu cầu mật mã '04672' để đảm bảo tính an toàn dữ liệu."
+                "Để chỉnh sửa một bản ghi, bấm nút 'Chỉnh sửa'. Hệ thống sẽ yêu cầu mật mã bảo mật để đảm bảo tính an toàn dữ liệu."
             ]
         },
         {
@@ -39,7 +39,7 @@ export default function MQAAPatrolGuide() {
             title: "4. Quản lý hệ thống (Admin Settings)",
             icon: "⚙️",
             content: [
-                "Bấm biểu tượng Bánh răng (Gear) và nhập mật mã '04672' để vào cài đặt.",
+                "Bấm biểu tượng Bánh răng (Gear) và nhập mật mã bảo mật để vào cài đặt.",
                 "Thẻ AUDITORS: Thêm/Xóa danh sách nhân viên đánh giá hoặc dọn dẹp ảnh cũ.",
                 "Thẻ MANAGE FORMS: Thay đổi cấu trúc biểu mẫu (No., Nội dung, Điểm trọng số).",
                 "Sử dụng nút 'Sync All' để nạp nhanh toàn bộ biểu mẫu chuẩn từ hệ thống vào Database."
@@ -117,7 +117,7 @@ export default function MQAAPatrolGuide() {
                     </div>
                     <div className="flex-1 text-center md:text-left">
                         <h3 className="font-black text-amber-900 text-xl tracking-tight mb-1">Mật mã bảo mật hệ thống</h3>
-                        <p className="text-amber-700 font-bold italic">Mật mã mặc định cho các thao tác Cài đặt và Chỉnh sửa: <span className="text-2xl not-italic ml-2 bg-white px-4 py-1 rounded-xl border border-amber-300 shadow-sm">04672</span></p>
+                        <p className="text-amber-700 font-bold italic text-sm">Cần mật mã để truy cập các thao tác Cài đặt và Chỉnh sửa. Vui lòng liên hệ Người quản lý để được hỗ trợ.</p>
                     </div>
                 </div>
 
