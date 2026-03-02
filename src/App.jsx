@@ -15,6 +15,19 @@ import RulesPage from "./pages/RulesPage";
 import HelpPage from "./pages/HelpPage";
 import MQAAEntry from "./pages/MQAAEntry";
 import MQAADashboard from "./pages/MQAADashboard";
+import MQAAPatrolSelection from "./pages/MQAAPatrolSelection";
+import MQAAPatrolEntry from "./pages/MQAAPatrolEntry";
+import MQAAPatrolReport from "./pages/MQAAPatrolReport";
+
+function MQAAPatrolRoutes() {
+  return (
+    <Routes>
+      <Route path="/" element={<MQAAPatrolSelection />} />
+      <Route path="/entry/:section" element={<MQAAPatrolEntry />} />
+      <Route path="/report" element={<MQAAPatrolReport />} />
+    </Routes>
+  );
+}
 
 function Shell() {
   const { section, clearSection, SECTIONS } = useKpiSection();
@@ -44,6 +57,7 @@ function Shell() {
           { to: "/admin", label: "Quản lý User" },
           { to: "/rules", label: "Rules điểm SX" },
           { to: "/mqaa-entry", label: "MQAA Nhập liệu" },
+          { to: "/mqaa-patrol", label: "MQAA Patrol" },
           { to: "/mqaa-dashboard", label: "MQAA Dashboard" },
           { to: "/help", label: "Hướng dẫn" },
         ].map((item) => (
@@ -83,6 +97,7 @@ function Shell() {
         <Route path="/rules" element={<RulesPage />} />
         <Route path="/help" element={<HelpPage />} />
         <Route path="/mqaa-entry" element={<MQAAEntry />} />
+        <Route path="/mqaa-patrol/*" element={<MQAAPatrolRoutes />} />
         <Route path="/mqaa-dashboard" element={<MQAADashboard />} />
       </Routes>
     </>

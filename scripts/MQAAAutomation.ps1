@@ -4,7 +4,7 @@
 # === Cấu hình (Người dùng thay đổi tại đây) ===
 $SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
 $SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0"
-$ZALO_GROUP_NAME = "MQAA TESTING REPORT" # Nhập tên chính xác của nhóm Zalo
+$ZALO_GROUP_NAME = "My Documents" # Nhập tên chính xác của nhóm Zalo
 
 # === Khởi tạo thư viện ===
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -138,6 +138,8 @@ try {
             Write-Host "Ngày chạy cuối: $LAST_RUN | Ngày hôm nay: $todayStr"
 
             # KIỂM TRA ĐIỀU KIỆN CHẠY BÁO CÁO CHI TIẾT
+            # TẠM THỜI BỎ NGĂN CHẶN ĐỂ TEST (Comment 2 block dưới đây)
+            <#
             if ($LAST_RUN -eq $todayStr) {
                 Write-Host "Báo cáo ngày hôm nay đã được gửi trước đó. Kết thúc."
                 return
@@ -146,6 +148,7 @@ try {
                 Write-Host "Chưa đến giờ báo cáo ($REPORT_TIME). Kết thúc."
                 return
             }
+            #>
             Write-Host "Bắt đầu xử lý báo cáo..."
         }
     }
@@ -184,7 +187,7 @@ public static extern bool SetForegroundWindow(IntPtr hWnd);
 [DllImport("user32.dll")]
 public static extern bool IsIconic(IntPtr hWnd);
 "@
-    $type = Add-Type -MemberDefinition $signature -Name "Win32Utils" -Namespace "Win32" -PassThru -ErrorAction SilentlyContinue
+    $null = Add-Type -MemberDefinition $signature -Name "Win32Utils" -Namespace "Win32" -PassThru -ErrorAction SilentlyContinue
     $hWnd = $zaloProcess.MainWindowHandle
     if ([Win32.Win32Utils]::IsIconic($hWnd)) {
         [Win32.Win32Utils]::ShowWindow($hWnd, 9)
@@ -290,3 +293,5 @@ public static extern bool IsIconic(IntPtr hWnd);
 catch {
     Write-Error "Lỗi thực thi: $($_.Exception.Message)"
 }
+
+
