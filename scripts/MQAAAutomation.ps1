@@ -132,6 +132,8 @@ try {
             $ZALO_GROUP_NAME = if ($settings[0].zalo_group) { $settings[0].zalo_group } else { $ZALO_GROUP_NAME }
             $IMAGE_LIMIT = if ($settings[0].image_limit -gt 0) { [int]$settings[0].image_limit } else { 10 }
             $REPORT_TIME = if ($settings[0].report_time) { $settings[0].report_time } else { "08:00" }
+            $PATROL_ZALO_GROUP = if ($settings[0].patrol_zalo_group) { $settings[0].patrol_zalo_group } else { $ZALO_GROUP_NAME }
+            $PATROL_REPORT_TIME = if ($settings[0].patrol_report_time) { $settings[0].patrol_report_time } else { $REPORT_TIME }
             $LAST_RUN = $settings[0].last_run_date
             
             Write-Host "Giờ hiện tại: $currentTime | Giờ báo cáo: $REPORT_TIME"
@@ -284,10 +286,88 @@ public static extern bool IsIconic(IntPtr hWnd);
         Write-Host "Đã gửi báo cáo tổng kết tuần."
     }
 
-    # 6. Cập nhật ngày chạy cuối
+    # 6. Cập nhật ngày chạy cuối bản tin hàng ngày
     $updateBody = '{"last_run_date":"' + $todayStr + '"}'
     $null = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Patch -Body $updateBody -ContentType "application/json"
-    Write-Host "Hoàn thành gửi báo cáo!"
+
+    # 7. PHIẾU TỔNG KẾT MQAA - INSOLE PRODUCTION (Gửi vào Thứ 6 hoặc Thứ 7)
+    $dayOfWeek = (Get-Date).DayOfWeek
+    if ($dayOfWeek -eq "Friday" -or $dayOfWeek -eq "Saturday") {
+        Write-Host ">>> Kiểm tra điều kiện gửi Phiếu Tổng Kết MQAA (Tuần)..." -ForegroundColor Cyan
+        
+        # Kiểm tra giờ gửi riêng (nếu có)
+        if ($currentTime -lt $PATROL_REPORT_TIME) {
+            Write-Host "--- Chưa đến giờ gửi Tổng kết tuần ($PATROL_REPORT_TIME). Bỏ qua."
+        }
+        else {
+            # Lấy ngày Thứ 2 của tuần hiện tại
+            $mondayDate = (Get-Date).AddDays( - (([int](Get-Date).DayOfWeek - 1 + 7) % 7)).Date
+            $mondayStr = $mondayDate.ToString("yyyy-MM-dd")
+        
+            # Lấy trạng thái gửi từ database
+            $lastPatrolMonday = $settings[0].last_patrol_report_monday
+
+            if ($lastPatrolMonday -ne $mondayStr) {
+                Write-Host "--- Đang kiểm tra dữ liệu Patrol cho tuần từ $mondayStr..."
+                # Truy vấn tất cả đánh giá Patrol trong tuần (từ Thứ 2 đến hôm nay)
+                $patrolUrl = "$SUPABASE_URL/rest/v1/mqaa_patrol_logs?date=gte.$mondayStr&date=lte.$todayStr&select=section,overall_performance"
+                $patrolData = Invoke-RestMethod -Uri $patrolUrl -Headers $headers -Method Get
+            
+                if ($patrolData -and $patrolData.Count -gt 0) {
+                    Write-Host "--- Tìm thấy $($patrolData.Count) bản đánh giá. Đang tính toán điểm trung bình..."
+                
+                    # Gom nhóm và tính trung bình theo xưởng
+                    $patrolStats = $patrolData | Group-Object section | ForEach-Object {
+                        [PSCustomObject]@{
+                            Section  = $_.Name
+                            AvgScore = [Math]::Round(($_.Group | Measure-Object overall_performance -Average).Average, 1)
+                        }
+                    } | Sort-Object AvgScore -Descending
+
+                    $totalAvg = [Math]::Round(($patrolStats | Measure-Object AvgScore -Average).Average, 1)
+
+                    # Xây dựng tin nhắn
+                    $titlePatrol = [char]0xD83D + [char]0xDCCB + " *PHI" + [char]0x1EBF + "U T" + [char]0x1ED4 + "NG K" + [char]0x1EBF + "T MQAA - INSOLE PRODUCTION*"
+                    $subTitle = "*(Tu" + [char]0x1EA7 + "n t" + [char]0x1EEB + " " + $mondayDate.ToString("dd/MM") + " " + [char]0x0111 + [char]0x1EBF + "n " + (Get-Date).ToString("dd/MM") + ")*"
+                
+                    $patrolMsg = $titlePatrol + "`n" + $subTitle + "`n" + $L_SEP + "`n"
+                
+                    foreach ($stat in $patrolStats) {
+                        $diamondEmoji = [char]0xD83D + [char]0xDD39 # 🔹 Small Blue Diamond
+                        $patrolMsg += $diamondEmoji + " **" + $stat.Section + "**: " + $stat.AvgScore + "%`n"
+                    }
+
+                    $patrolMsg += $L_SEP + "`n" + [char]0xD83D + [char]0xDCAF + " **Overall Performance: " + $totalAvg + "%**"
+                
+                    # Gửi tin nhắn vào Zalo
+                    Write-Host "--- Đang chuyển sang nhóm Zalo: $PATROL_ZALO_GROUP"
+                    [System.Windows.Forms.SendKeys]::SendWait("^f")
+                    Start-Sleep -Milliseconds 800
+                    [System.Windows.Forms.Clipboard]::SetText($PATROL_ZALO_GROUP, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+                    [System.Windows.Forms.SendKeys]::SendWait("^v")
+                    Start-Sleep -Seconds 1
+                    [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+                    Start-Sleep -Seconds 1
+
+                    Write-Host "--- Đang gửi Phiếu Tổng Kết Tuần..."
+                    Send-ZaloMessage -text $patrolMsg
+                    Write-Host ">>> Đã gửi Phiếu Tổng Kết MQAA tuần thành công." -ForegroundColor Green
+
+                    # Đánh dấu đã gửi (Cập nhật cột last_patrol_report_monday)
+                    $updatePatrolBody = '{"last_patrol_report_monday":"' + $mondayStr + '"}'
+                    $null = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Patch -Body $updatePatrolBody -ContentType "application/json"
+                }
+                else {
+                    Write-Host "--- Không tìm thấy dữ liệu Patrol tuần này. Sẽ kiểm tra lại vào ngày mai."
+                }
+            }
+            else {
+                Write-Host "--- Phiếu tổng kết tuần này đã được gửi trước đó ($lastPatrolMonday)."
+            }
+        }
+    }
+
+    Write-Host "Hoàn thành gửi tất cả báo cáo!"
 
 }
 catch {

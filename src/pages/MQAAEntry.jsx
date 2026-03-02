@@ -35,7 +35,9 @@ export default function MQAAEntry() {
   const [settings, setSettings] = useState({
     report_time: "08:00",
     zalo_group: "MQAA",
-    image_limit: 10
+    image_limit: 10,
+    patrol_report_time: "",
+    patrol_zalo_group: ""
   });
 
   // Fetch settings on mount
@@ -46,7 +48,9 @@ export default function MQAAEntry() {
         setSettings({
           report_time: data.report_time,
           zalo_group: data.zalo_group,
-          image_limit: data.image_limit
+          image_limit: data.image_limit,
+          patrol_report_time: data.patrol_report_time || "",
+          patrol_zalo_group: data.patrol_zalo_group || ""
         });
       }
     };
@@ -316,6 +320,29 @@ export default function MQAAEntry() {
                       value={settings.image_limit}
                       onChange={(e) => setSettings({ ...settings, image_limit: parseInt(e.target.value) })}
                       className="w-full p-2 border border-gray-300 rounded-lg"
+                    />
+                  </div>
+
+                  <hr className="my-2 border-dashed" />
+                  <h4 className="text-xs font-black text-indigo-600 uppercase tracking-wider">Cấu hình Tổng Kết Tuần (Optional)</h4>
+
+                  <div className="space-y-1">
+                    <label className="text-sm font-semibold text-gray-600 italic">Giờ gửi Tổng kết (Bỏ trống = Gửi chung)</label>
+                    <input
+                      type="time"
+                      value={settings.patrol_report_time}
+                      onChange={(e) => setSettings({ ...settings, patrol_report_time: e.target.value })}
+                      className="w-full p-2 border border-blue-200 rounded-lg bg-blue-50"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-sm font-semibold text-gray-600 italic">Nhóm Zalo Tổng kết (Bỏ trống = Gửi chung)</label>
+                    <input
+                      type="text"
+                      value={settings.patrol_zalo_group}
+                      onChange={(e) => setSettings({ ...settings, patrol_zalo_group: e.target.value })}
+                      placeholder="Tên nhóm Zalo riêng"
+                      className="w-full p-2 border border-blue-200 rounded-lg bg-blue-50"
                     />
                   </div>
                 </div>
