@@ -1,4 +1,6 @@
 import { useNavigate } from "react-router-dom";
+import { useState, useEffect } from "react";
+import { supabase } from "../lib/supabaseClient";
 
 const SECTIONS = [
     { id: "Lamination", name: "LAMINATION" },
@@ -10,6 +12,35 @@ const SECTIONS = [
 
 export default function MQAAPatrolSelection() {
     const navigate = useNavigate();
+    const [showSettings, setShowSettings] = useState(false);
+    const [auditorList, setAuditorList] = useState([]);
+    const [newAuditor, setNewAuditor] = useState({ id: "", name: "" });
+
+    useEffect(() => {
+        fetchAuditors();
+    }, []);
+
+    const fetchAuditors = async () => {
+        const { data, error } = await supabase.from("mqaa_patrol_auditors").select("*");
+        if (data) setAuditorList(data);
+    };
+
+    const handleAddAuditor = async () => {
+        if (!newAuditor.id || !newAuditor.name) return alert("Vui lòng nhập đủ ID và Tên");
+        const { error } = await supabase.from("mqaa_patrol_auditors").insert([newAuditor]);
+        if (error) {
+            alert("Lỗi: " + error.message);
+        } else {
+            setNewAuditor({ id: "", name: "" });
+            fetchAuditors();
+        }
+    };
+
+    const handleDeleteAuditor = async (id) => {
+        if (!confirm("Xóa auditor này?")) return;
+        const { error } = await supabase.from("mqaa_patrol_auditors").delete().eq("id", id);
+        if (!error) fetchAuditors();
+    };
 
     return (
         <div className="max-w-4xl mx-auto p-6">
@@ -26,13 +57,70 @@ export default function MQAAPatrolSelection() {
                     </button>
                     <h1 className="text-3xl font-bold text-indigo-900">MQAA Patrol Selection</h1>
                 </div>
-                <button
-                    onClick={() => navigate("/mqaa-patrol/report")}
-                    className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition-all"
-                >
-                    Xuất báo cáo
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => setShowSettings(true)}
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2.5 rounded-lg transition-all"
+                        title="Cài đặt Auditor"
+                    >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 002.572-1.065z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
+                    </button>
+                    <button
+                        onClick={() => navigate("/mqaa-patrol/report")}
+                        className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition-all"
+                    >
+                        Xuất báo cáo
+                    </button>
+                </div>
             </div>
+
+            {showSettings && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+                        <h3 className="text-xl font-bold text-gray-800 mb-4 text-indigo-800">Cài đặt Danh sách Auditor</h3>
+                        <div className="flex gap-2 mb-4">
+                            <input
+                                type="text"
+                                placeholder="ID (MSNV)"
+                                className="w-1/3 p-2 border rounded"
+                                value={newAuditor.id}
+                                onChange={(e) => setNewAuditor({ ...newAuditor, id: e.target.value })}
+                            />
+                            <input
+                                type="text"
+                                placeholder="Tên Auditor"
+                                className="flex-1 p-2 border rounded"
+                                value={newAuditor.name}
+                                onChange={(e) => setNewAuditor({ ...newAuditor, name: e.target.value })}
+                            />
+                            <button
+                                onClick={handleAddAuditor}
+                                className="bg-indigo-600 text-white px-4 py-2 rounded font-bold"
+                            >
+                                Thêm
+                            </button>
+                        </div>
+                        <div className="max-h-60 overflow-y-auto border rounded divide-y">
+                            {auditorList.map((a) => (
+                                <div key={a.id} className="p-2 flex justify-between items-center text-sm">
+                                    <span><strong>{a.id}</strong> - {a.name}</span>
+                                    <button onClick={() => handleDeleteAuditor(a.id)} className="text-red-500 font-bold px-2">X</button>
+                                </div>
+                            ))}
+                            {auditorList.length === 0 && <p className="p-4 text-center text-gray-400">Chưa có dữ liệu</p>}
+                        </div>
+                        <button
+                            onClick={() => setShowSettings(false)}
+                            className="w-full mt-6 py-2 bg-gray-200 text-gray-700 rounded-lg font-bold"
+                        >
+                            Đóng
+                        </button>
+                    </div>
+                </div>
+            )}
 
             <p className="text-gray-600 mb-6 italic text-center text-lg">
                 Vui lòng chọn Section để bắt đầu đánh giá

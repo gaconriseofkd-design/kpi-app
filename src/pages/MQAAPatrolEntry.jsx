@@ -140,6 +140,25 @@ export default function MQAAPatrolEntry() {
         date: new Date().toISOString().split("T")[0],
     });
 
+    // Auto-lookup Auditor by ID
+    useEffect(() => {
+        const fetchAuditor = async () => {
+            if (headerData.auditorId.length >= 4) {
+                const { data } = await supabase
+                    .from("mqaa_patrol_auditors")
+                    .select("name")
+                    .eq("id", headerData.auditorId)
+                    .single();
+
+                if (data) {
+                    setHeaderData(prev => ({ ...prev, auditor: data.name }));
+                }
+            }
+        };
+        const timer = setTimeout(fetchAuditor, 500);
+        return () => clearTimeout(timer);
+    }, [headerData.auditorId]);
+
     // Initialize rows state
     const [rows, setRows] = useState(() => {
         return LAMINATION_CRITERIA.map((item) => ({
@@ -305,23 +324,23 @@ export default function MQAAPatrolEntry() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 bg-gray-50 p-6 rounded-lg border">
                 <div className="flex flex-col gap-2">
-                    <label className="font-semibold text-gray-700">Auditor:</label>
-                    <input
-                        type="text"
-                        className="p-2 border rounded shadow-sm focus:ring-2 focus:ring-indigo-500"
-                        value={headerData.auditor}
-                        onChange={(e) => setHeaderData({ ...headerData, auditor: e.target.value })}
-                        placeholder="Nhập tên người đánh giá"
-                    />
-                </div>
-                <div className="flex flex-col gap-2">
                     <label className="font-semibold text-gray-700">ID:</label>
                     <input
                         type="text"
                         className="p-2 border rounded shadow-sm focus:ring-2 focus:ring-indigo-500"
                         value={headerData.auditorId}
                         onChange={(e) => setHeaderData({ ...headerData, auditorId: e.target.value })}
-                        placeholder="Mã số nhân viên"
+                        placeholder="Nhập ID (Ví dụ: 04126)"
+                    />
+                </div>
+                <div className="flex flex-col gap-2">
+                    <label className="font-semibold text-gray-700">Auditor:</label>
+                    <input
+                        type="text"
+                        className="p-2 border rounded shadow-sm focus:ring-2 focus:ring-indigo-500"
+                        value={headerData.auditor}
+                        onChange={(e) => setHeaderData({ ...headerData, auditor: e.target.value })}
+                        placeholder="Tên người đánh giá (Tự động nếu có trong hệ thống)"
                     />
                 </div>
                 <div className="flex flex-col gap-2">

@@ -21,3 +21,14 @@ create policy "Allow all for mqaa_patrol_logs" on mqaa_patrol_logs for all using
 -- Ensure storage bucket exists (mqaa-images) and has policies
 -- This was already mentioned in setup_mqaa.sql
 -- If adding a new folder structure, policies usually apply to the whole bucket.
+
+-- Create table for Auditor list (Pre-defined)
+create table if not exists mqaa_patrol_auditors (
+  id text primary key, -- MSNV
+  name text not null,
+  created_at timestamp with time zone default now()
+);
+
+-- Enable RLS for auditors
+alter table mqaa_patrol_auditors enable row level security;
+create policy "Allow all for auditors" on mqaa_patrol_auditors for all using (true) with check (true);
