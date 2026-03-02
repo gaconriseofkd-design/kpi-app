@@ -116,10 +116,16 @@ export default function MQAAPatrolSelection() {
                         </svg>
                     </button>
                     <button
+                        onClick={() => navigate("/mqaa-patrol/dashboard")}
+                        className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition-all"
+                    >
+                        Xem Dashboard
+                    </button>
+                    <button
                         onClick={() => navigate("/mqaa-patrol/report")}
                         className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition-all"
                     >
-                        Xuất báo cáo
+                        Báo cáo & Chỉnh sửa
                     </button>
                 </div>
             </div>

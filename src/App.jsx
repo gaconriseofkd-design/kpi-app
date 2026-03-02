@@ -18,6 +18,7 @@ import MQAADashboard from "./pages/MQAADashboard";
 import MQAAPatrolSelection from "./pages/MQAAPatrolSelection";
 import MQAAPatrolEntry from "./pages/MQAAPatrolEntry";
 import MQAAPatrolReport from "./pages/MQAAPatrolReport";
+import MQAAPatrolDashboard from "./pages/MQAAPatrolDashboard";
 
 function MQAAPatrolRoutes() {
   return (
@@ -25,6 +26,7 @@ function MQAAPatrolRoutes() {
       <Route path="/" element={<MQAAPatrolSelection />} />
       <Route path="/entry/:section/:id?" element={<MQAAPatrolEntry />} />
       <Route path="/report" element={<MQAAPatrolReport />} />
+      <Route path="/dashboard" element={<MQAAPatrolDashboard />} />
     </Routes>
   );
 }
