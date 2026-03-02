@@ -164,6 +164,9 @@ export default function MQAAPatrolSelection() {
         const items = ALL_CRITERIA[targetSid];
         if (!items) return alert("Không tìm thấy dữ liệu mẫu cho Section này.");
 
+        // Clear existing for this section
+        await supabase.from("mqaa_patrol_criteria").delete().eq("section_id", targetSid);
+
         const payload = items.map((item, idx) => ({
             section_id: targetSid,
             no: item.no,
@@ -177,6 +180,35 @@ export default function MQAAPatrolSelection() {
         const { error } = await supabase.from("mqaa_patrol_criteria").insert(payload);
         if (error) alert(error.message);
         else fetchCriteria(targetSid);
+    };
+
+    const handleSyncAll = async () => {
+        if (!confirm("Hệ thống sẽ nạp dữ liệu mẫu cho TẤT CẢ 9 Section vào Database. Bạn chắc chắn chứ?")) return;
+        setLoadingCriteria(true);
+        try {
+            for (const sid in ALL_CRITERIA) {
+                const items = ALL_CRITERIA[sid];
+                // Optional: clear existing for each section
+                await supabase.from("mqaa_patrol_criteria").delete().eq("section_id", sid);
+
+                const payload = items.map((item, idx) => ({
+                    section_id: sid,
+                    no: item.no,
+                    label: item.label,
+                    sub_label: item.subLabel,
+                    is_header: item.isHeader || false,
+                    max_score: item.isHeader ? 0 : 6,
+                    sort_order: idx * 10
+                }));
+                await supabase.from("mqaa_patrol_criteria").insert(payload);
+            }
+            alert("Đã đồng bộ toàn bộ dữ liệu thành công!");
+            fetchCriteria(selectedSectionId);
+        } catch (e) {
+            alert("Lỗi: " + e.message);
+        } finally {
+            setLoadingCriteria(false);
+        }
     };
 
     const handleCleanup = async () => {
@@ -355,9 +387,14 @@ export default function MQAAPatrolSelection() {
                                                 <h4 className="text-xl font-black text-slate-800 tracking-tight">Form Preview: {sections.find(s => s.id === selectedSectionId)?.name}</h4>
                                                 <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">{currentCriteria.length} items configured</p>
                                             </div>
-                                            <button onClick={handleImportDefaults} className="bg-indigo-50 text-indigo-600 px-6 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm">
-                                                Import Default Setup
-                                            </button>
+                                            <div className="flex gap-2">
+                                                <button onClick={handleSyncAll} className="bg-amber-50 text-amber-700 px-6 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase hover:bg-amber-600 hover:text-white transition-all active:scale-95 shadow-sm border border-amber-100">
+                                                    Sync All 9 Sections
+                                                </button>
+                                                <button onClick={handleImportDefaults} className="bg-indigo-50 text-indigo-600 px-6 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm">
+                                                    Import This Section
+                                                </button>
+                                            </div>
                                         </div>
 
                                         <div className="space-y-3">

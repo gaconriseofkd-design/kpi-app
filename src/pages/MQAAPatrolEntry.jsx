@@ -65,12 +65,22 @@ export default function MQAAPatrolEntry() {
 
                 if (critError) throw critError;
 
-                const formattedCriteria = dbCriteria.map(c => ({
-                    ...c,
-                    subLabel: c.sub_label,
-                    maxScore: c.max_score,
-                    isHeader: c.is_header
-                }));
+                let formattedCriteria = [];
+                if (dbCriteria && dbCriteria.length > 0) {
+                    formattedCriteria = dbCriteria.map(c => ({
+                        ...c,
+                        subLabel: c.sub_label,
+                        maxScore: c.max_score,
+                        isHeader: c.is_header
+                    }));
+                } else {
+                    // FALLBACK: Use static data if DB is empty
+                    const staticData = ALL_CRITERIA[section] || [];
+                    formattedCriteria = staticData.map(c => ({
+                        ...c,
+                        maxScore: c.isHeader ? 0 : 6
+                    }));
+                }
 
                 if (id) {
                     // Edit Mode: Fetch existing record
@@ -88,23 +98,24 @@ export default function MQAAPatrolEntry() {
                         date: record.date,
                     });
 
-                    // Merge record data with current criteria (in case criteria changed or for subLabels)
+                    // Merge record data with current criteria
                     const mergedRows = record.evaluation_data.map(r => {
                         const original = formattedCriteria.find(c => c.no === r.no);
                         return {
                             ...r,
                             isHeader: original?.isHeader ?? r.is_header,
-                            subLabel: original?.subLabel || "",
+                            subLabel: original?.subLabel || (original?.sub_label) || "",
                             imageUrl: r.image_url,
                         };
                     });
+                    // Sort mergedRows by no according to criteria order if possible, or just keep as is
                     setRows(mergedRows);
                 } else {
                     // New Entry Mode: Load criteria
                     setRows(formattedCriteria.map((item) => ({
                         ...item,
-                        score: item.isHeader ? 0 : item.maxScore,
-                        level: item.isHeader ? 0 : item.maxScore, // Default to full points
+                        score: item.isHeader ? 0 : (item.maxScore || 6),
+                        level: item.isHeader ? 0 : (item.maxScore || 6),
                         imageFile: null,
                         imageUrl: "",
                         description: "",
