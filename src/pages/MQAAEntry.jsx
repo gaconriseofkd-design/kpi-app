@@ -324,7 +324,7 @@ export default function MQAAEntry() {
                   </div>
 
                   <hr className="my-2 border-dashed" />
-                  <h4 className="text-xs font-black text-indigo-600 uppercase tracking-wider">Cấu hình Tổng Kết Tuần (Optional)</h4>
+                  <h4 className="text-xs font-black text-indigo-600 uppercase tracking-wider">Cấu hình Gửi PHIẾU TỔNG KẾT MQAA</h4>
 
                   <div className="space-y-1">
                     <label className="text-sm font-semibold text-gray-600 italic">Giờ gửi Tổng kết (Bỏ trống = Gửi chung)</label>
