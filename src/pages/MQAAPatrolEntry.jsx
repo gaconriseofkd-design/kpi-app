@@ -431,7 +431,7 @@ export default function MQAAPatrolEntry() {
                                         />
                                     )}
                                 </td>
-                                Riverside                                <td className={`border p-2 text-center ${row.isHeader ? 'bg-orange-400' : ''}`}>
+                                <td className={`border p-2 text-center ${row.isHeader ? 'bg-orange-400' : ''}`}>
                                     {!row.isHeader && (
                                         <input
                                             type="number"
