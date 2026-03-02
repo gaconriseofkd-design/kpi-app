@@ -53,47 +53,72 @@ export default function MQAAPatrolEntry() {
     const [rows, setRows] = useState([]);
 
     useEffect(() => {
-        const fetchRecord = async () => {
-            if (id) {
-                setLoading(true);
-                const { data, error } = await supabase
-                    .from("mqaa_patrol_logs")
+        const fetchRecordAndCriteria = async () => {
+            setLoading(true);
+            try {
+                // Fetch dynamic criteria for this section
+                const { data: dbCriteria, error: critError } = await supabase
+                    .from("mqaa_patrol_criteria")
                     .select("*")
-                    .eq("id", id)
-                    .single();
+                    .eq("section_id", section)
+                    .order("sort_order", { ascending: true });
 
-                if (data) {
+                if (critError) throw critError;
+
+                const formattedCriteria = dbCriteria.map(c => ({
+                    ...c,
+                    subLabel: c.sub_label,
+                    maxScore: c.max_score,
+                    isHeader: c.is_header
+                }));
+
+                if (id) {
+                    // Edit Mode: Fetch existing record
+                    const { data: record, error: recError } = await supabase
+                        .from("mqaa_patrol_logs")
+                        .select("*")
+                        .eq("id", id)
+                        .single();
+
+                    if (recError) throw recError;
+
                     setHeaderData({
-                        auditor: data.auditor_name,
-                        auditorId: data.auditor_id,
-                        date: data.date,
+                        auditor: record.auditor_name,
+                        auditorId: record.auditor_id,
+                        date: record.date,
                     });
 
-                    // Use evaluation_data from DB but restore isHeader from local criteria for styling
-                    const criteria = ALL_CRITERIA[section] || [];
-                    setRows(data.evaluation_data.map((r, idx) => ({
-                        ...r,
-                        // Ensure isHeader and subLabel (if not in JSON) are restored for UI
-                        isHeader: criteria.find(c => c.no === r.no)?.isHeader || false,
-                        subLabel: criteria.find(c => c.no === r.no)?.subLabel || "",
-                        // image_url is already in row but might be renamed to imageUrl in state
-                        imageUrl: r.image_url,
+                    // Merge record data with current criteria (in case criteria changed or for subLabels)
+                    const mergedRows = record.evaluation_data.map(r => {
+                        const original = formattedCriteria.find(c => c.no === r.no);
+                        return {
+                            ...r,
+                            isHeader: original?.isHeader ?? r.is_header,
+                            subLabel: original?.subLabel || "",
+                            imageUrl: r.image_url,
+                        };
+                    });
+                    setRows(mergedRows);
+                } else {
+                    // New Entry Mode: Load criteria
+                    setRows(formattedCriteria.map((item) => ({
+                        ...item,
+                        score: item.isHeader ? 0 : item.maxScore,
+                        level: item.isHeader ? 0 : item.maxScore, // Default to full points
+                        imageFile: null,
+                        imageUrl: "",
+                        description: "",
                     })));
                 }
+            } catch (error) {
+                console.error("Error loading criteria:", error);
+                alert("Lỗi khi tải biểu mẫu: " + error.message);
+            } finally {
                 setLoading(false);
-            } else {
-                const criteria = ALL_CRITERIA[section] || [];
-                setRows(criteria.map((item) => ({
-                    ...item,
-                    score: item.isHeader ? 0 : 6,
-                    level: item.isHeader ? 0 : 6,
-                    imageFile: null,
-                    imageUrl: "",
-                    description: "",
-                })));
             }
         };
-        fetchRecord();
+
+        fetchRecordAndCriteria();
     }, [id, section]);
 
     const totals = useMemo(() => {
