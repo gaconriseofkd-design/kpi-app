@@ -1,5 +1,5 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route, Link, NavLink } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Link, NavLink, useLocation } from "react-router-dom";
 import { KpiSectionProvider, useKpiSection } from "./context/KpiSectionContext";
 import SectionGate from "./pages/SectionGate";
 
@@ -35,9 +35,15 @@ function MQAAPatrolRoutes() {
 
 function Shell() {
   const { section, clearSection, SECTIONS } = useKpiSection();
+  const location = useLocation();
   const label = SECTIONS.find(s => s.key === section)?.label || section;
 
-  if (!section) return <SectionGate />;
+  // Bypass SectionGate for standalone MQAA routes
+  const isMQAARoute = location.pathname.startsWith("/mqaa-patrol") ||
+    location.pathname.startsWith("/mqaa-dashboard") ||
+    location.pathname.startsWith("/mqaa-entry");
+
+  if (!section && !isMQAARoute) return <SectionGate />;
 
   // Chọn EntryPage theo section
   const EntryComponent = section === "MOLDING" ? EntryPageMolding : EntryPage;
