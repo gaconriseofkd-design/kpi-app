@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -6,6 +7,7 @@ import { saveAs } from "file-saver";
 const SECTIONS = ["Lamination", "Prefitting", "Molding", "Leanline_DC", "Leanline_Molded"];
 
 export default function MQAAPatrolReport() {
+    const navigate = useNavigate();
     const [filters, setFilters] = useState({
         section: "Lamination",
         startDate: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split("T")[0],
@@ -130,7 +132,18 @@ export default function MQAAPatrolReport() {
 
     return (
         <div className="max-w-5xl mx-auto p-6 bg-white shadow-xl rounded-xl mt-8">
-            <h2 className="text-3xl font-bold font-bold text-indigo-900 mb-8 border-b pb-4">Xuất Báo Cáo MQAA Patrol</h2>
+            <div className="flex items-center gap-4 mb-8 border-b pb-4">
+                <button
+                    onClick={() => navigate("/mqaa-patrol")}
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-lg transition-all"
+                    title="Quay lại"
+                >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                </button>
+                <h2 className="text-3xl font-bold text-indigo-900">Xuất Báo Cáo MQAA Patrol</h2>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10 p-6 bg-indigo-50 rounded-xl border border-indigo-100 shadow-sm">
                 <div className="flex flex-col gap-2">

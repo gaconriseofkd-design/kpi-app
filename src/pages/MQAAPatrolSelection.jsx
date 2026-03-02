@@ -14,7 +14,18 @@ export default function MQAAPatrolSelection() {
     return (
         <div className="max-w-4xl mx-auto p-6">
             <div className="flex justify-between items-center mb-8">
-                <h1 className="text-3xl font-bold text-indigo-900">MQAA Patrol Selection</h1>
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={() => navigate("/")}
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-lg transition-all"
+                        title="Quay lại trang chủ"
+                    >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                    </button>
+                    <h1 className="text-3xl font-bold text-indigo-900">MQAA Patrol Selection</h1>
+                </div>
                 <button
                     onClick={() => navigate("/mqaa-patrol/report")}
                     className="bg-green-600 hover:bg-green-700 text-white px-6 py-2 rounded-lg font-bold shadow-lg transition-all"
