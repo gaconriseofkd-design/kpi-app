@@ -19,6 +19,8 @@ export default function MQAAPatrolSelection() {
     const [currentCriteria, setCurrentCriteria] = useState([]);
     const [loadingCriteria, setLoadingCriteria] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
+    const [lastDeletedItem, setLastDeletedItem] = useState(null);
+    const [showUndo, setShowUndo] = useState(false);
 
     // Split forms for Header and Item
     const [headerInput, setHeaderInput] = useState({ no: "", label: "", subLabel: "" });
@@ -150,10 +152,41 @@ export default function MQAAPatrolSelection() {
         }
     };
 
-    const handleDeleteCriteriaItem = async (id) => {
-        if (!confirm("Xóa mục này?")) return;
-        const { error } = await supabase.from("mqaa_patrol_criteria").delete().eq("id", id);
-        if (!error) fetchCriteria(selectedSectionId);
+    const handleDeleteCriteriaItem = async (item) => {
+        if (!confirm(`Xóa mục "${item.no}"?`)) return;
+
+        // Save for undo
+        setLastDeletedItem(item);
+
+        const { error } = await supabase.from("mqaa_patrol_criteria").delete().eq("id", item.id);
+        if (!error) {
+            fetchCriteria(selectedSectionId);
+            setShowUndo(true);
+            setTimeout(() => setShowUndo(false), 8000); // Hide after 8s
+        }
+    };
+
+    const handleUndoDelete = async () => {
+        if (!lastDeletedItem) return;
+
+        const payload = {
+            section_id: lastDeletedItem.section_id,
+            no: lastDeletedItem.no,
+            label: lastDeletedItem.label,
+            sub_label: lastDeletedItem.subLabel,
+            is_header: lastDeletedItem.isHeader,
+            max_score: lastDeletedItem.maxScore || 0,
+            sort_order: lastDeletedItem.sort_order
+        };
+
+        const { error } = await supabase.from("mqaa_patrol_criteria").insert([payload]);
+        if (!error) {
+            setLastDeletedItem(null);
+            setShowUndo(false);
+            fetchCriteria(selectedSectionId);
+        } else {
+            alert("Lỗi khi hoàn tác: " + error.message);
+        }
     };
 
     const handleImportDefaults = async () => {
@@ -427,7 +460,7 @@ export default function MQAAPatrolSelection() {
                                                         <button onClick={() => handleEditCriteriaItem(item)} className={`p-3 rounded-2xl transition-all ${item.isHeader ? 'bg-white/20 text-white hover:bg-white hover:text-indigo-600' : 'bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600'}`} title="Edit">
                                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
                                                         </button>
-                                                        <button onClick={() => handleDeleteCriteriaItem(item.id)} className={`p-3 rounded-2xl transition-all ${item.isHeader ? 'bg-white/20 text-white hover:bg-red-500 hover:text-white' : 'bg-red-50 text-red-400 hover:bg-red-500 hover:text-white'}`} title="Delete">
+                                                        <button onClick={() => handleDeleteCriteriaItem(item)} className={`p-3 rounded-2xl transition-all ${item.isHeader ? 'bg-white/20 text-white hover:bg-red-500 hover:text-white' : 'bg-red-50 text-red-400 hover:bg-red-500 hover:text-white'}`} title="Delete">
                                                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                                         </button>
                                                     </div>
@@ -435,6 +468,24 @@ export default function MQAAPatrolSelection() {
                                             ))}
                                         </div>
                                     </div>
+
+                                    {/* Floating Undo Notification */}
+                                    {showUndo && (
+                                        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[60] animate-bounce">
+                                            <div className="bg-indigo-900 text-white px-8 py-4 rounded-[24px] shadow-2xl flex items-center gap-6 border border-white/20 backdrop-blur-md">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[10px] font-black uppercase opacity-60">Action performed</span>
+                                                    <span className="font-bold">Đã xóa mục {lastDeletedItem?.no}</span>
+                                                </div>
+                                                <button
+                                                    onClick={handleUndoDelete}
+                                                    className="bg-white text-indigo-900 px-6 py-2 rounded-xl font-black text-xs uppercase hover:bg-indigo-100 transition-all active:scale-95"
+                                                >
+                                                    Hoàn tác (Undo)
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
