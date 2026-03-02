@@ -288,9 +288,20 @@ export default function MQAAPatrolEntry() {
 
     return (
         <div className="max-w-[1200px] mx-auto p-4 bg-white shadow-xl rounded-lg my-8">
-            <h1 className="text-2xl font-bold text-center text-indigo-900 mb-6 uppercase">
-                PHIẾU ĐÁNH GIÁ MQAA - SECTION {section?.replace("_", " ")}
-            </h1>
+            <div className="flex items-center gap-4 mb-6 relative">
+                <button
+                    onClick={() => navigate("/mqaa-patrol")}
+                    className="absolute left-0 bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-lg transition-all"
+                    title="Quay lại"
+                >
+                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                    </svg>
+                </button>
+                <h1 className="text-2xl font-bold text-center w-full text-indigo-900 uppercase">
+                    PHIẾU ĐÁNH GIÁ MQAA - SECTION {section?.replace("_", " ")}
+                </h1>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 bg-gray-50 p-6 rounded-lg border">
                 <div className="flex flex-col gap-2">
