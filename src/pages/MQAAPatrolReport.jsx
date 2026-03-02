@@ -5,12 +5,12 @@ import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import PasswordModal from "../components/PasswordModal";
 
-const SECTIONS = ["Raw_Material_Warehouse", "Lamination", "Prefitting", "Molding", "Leanline_DC", "Leanline_Molded", "Cutting_Die_Warehouse", "Logo_Warehouse", "Finished_Goods_Warehouse"];
+const SECTIONS = ["All", "Raw_Material_Warehouse", "Lamination", "Prefitting", "Molding", "Leanline_DC", "Leanline_Molded", "Cutting_Die_Warehouse", "Logo_Warehouse", "Finished_Goods_Warehouse"];
 
 export default function MQAAPatrolReport() {
     const navigate = useNavigate();
     const [filters, setFilters] = useState({
-        section: "Raw_Material_Warehouse",
+        section: "All",
         startDate: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split("T")[0],
         endDate: new Date().toISOString().split("T")[0],
     });
@@ -18,17 +18,23 @@ export default function MQAAPatrolReport() {
     const [loading, setLoading] = useState(false);
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [selectedRecord, setSelectedRecord] = useState(null);
+    const [modalMode, setModalMode] = useState("edit"); // 'edit' or 'delete'
 
     const handleSearch = async () => {
         setLoading(true);
         try {
-            const { data, error } = await supabase
+            let query = supabase
                 .from("mqaa_patrol_logs")
                 .select("*")
-                .eq("section", filters.section)
                 .gte("date", filters.startDate)
                 .lte("date", filters.endDate)
                 .order("date", { ascending: false });
+
+            if (filters.section && filters.section !== "All") {
+                query = query.eq("section", filters.section);
+            }
+
+            const { data, error } = await query;
 
             if (error) throw error;
             setResults(data || []);
@@ -133,17 +139,39 @@ export default function MQAAPatrolReport() {
         saveAs(new Blob([buffer]), `MQAA_Patrol_${record.section}_${record.date}.xlsx`);
     };
 
+    const confirmDeleteRecord = async () => {
+        if (!selectedRecord) return;
+        try {
+            const { error } = await supabase
+                .from("mqaa_patrol_logs")
+                .delete()
+                .eq("id", selectedRecord.id);
+
+            if (error) throw error;
+
+            // Refresh results
+            setResults(prev => prev.filter(r => r.id !== selectedRecord.id));
+            alert("Đã xóa bản lưu thành công.");
+        } catch (error) {
+            alert("Lỗi khi xóa: " + error.message);
+        } finally {
+            setSelectedRecord(null);
+        }
+    };
+
     return (
         <div className="max-w-5xl mx-auto p-6 bg-white shadow-xl rounded-xl mt-8">
             <PasswordModal
                 isOpen={showPasswordModal}
                 onClose={() => setShowPasswordModal(false)}
                 onSuccess={() => {
-                    if (selectedRecord) {
+                    if (modalMode === "edit" && selectedRecord) {
                         navigate(`/mqaa-patrol/entry/${selectedRecord.section}/${selectedRecord.id}`);
+                    } else if (modalMode === "delete") {
+                        confirmDeleteRecord();
                     }
                 }}
-                initialTitle="Chỉnh sửa phiếu"
+                initialTitle={modalMode === "edit" ? "Chỉnh sửa phiếu" : "Xác nhận xóa phiếu"}
             />
             <div className="flex items-center gap-4 mb-8 border-b pb-4">
                 <button
@@ -244,6 +272,18 @@ export default function MQAAPatrolReport() {
                                         >
                                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                                             Chỉnh sửa
+                                        </button>
+                                        <button
+                                            onClick={() => {
+                                                setSelectedRecord(res);
+                                                setModalMode("delete");
+                                                setShowPasswordModal(true);
+                                            }}
+                                            className="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-1.5 rounded-lg text-sm font-bold transition-all inline-flex items-center gap-1 shadow-sm border border-red-100"
+                                            title="Xóa bản lưu"
+                                        >
+                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                            Xóa
                                         </button>
                                         <button
                                             onClick={() => exportToExcel(res)}
