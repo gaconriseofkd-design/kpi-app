@@ -4,12 +4,12 @@ import { supabase } from "../lib/supabaseClient";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 
-const SECTIONS = ["Lamination", "Prefitting", "Molding", "Leanline_DC", "Leanline_Molded"];
+const SECTIONS = ["Raw_Material_Warehouse", "Lamination", "Prefitting", "Molding", "Leanline_DC", "Leanline_Molded"];
 
 export default function MQAAPatrolReport() {
     const navigate = useNavigate();
     const [filters, setFilters] = useState({
-        section: "Lamination",
+        section: "Raw_Material_Warehouse",
         startDate: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split("T")[0],
         endDate: new Date().toISOString().split("T")[0],
     });
@@ -95,8 +95,8 @@ export default function MQAAPatrolReport() {
                 item.description || ""
             ]);
 
-            // Highlight main headers (e.g. 2.1, 2.2)
-            if (item.no.length === 3) {
+            // Highlight main headers
+            if (item.is_header) {
                 row.eachCell((cell) => {
                     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFDBA74" } }; // Orange
                     cell.font = { bold: true };

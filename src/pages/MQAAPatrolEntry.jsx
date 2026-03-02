@@ -2,132 +2,8 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 
-const LAMINATION_CRITERIA = [
-    {
-        no: "2.1",
-        label: "Đảm bảo tuân thủ nghiêm ngặt quy trình dán và kiểm soát chất lượng nguyên liệu để đảm bảo chất lượng sản phẩm đầu ra đạt yêu cầu",
-        subLabel: "Ensure strict compliance with the gluing process and control the quality of raw materials to ensure the quality of output products meets requirements.",
-        isHeader: true,
-    },
-    {
-        no: "2.1.1",
-        label: "Có chỉ lệnh sản xuất/ mẫu đầu chuyền/ đặc điểm kỹ thuật nguyên liệu của việc cán màng đã được xác nhận có sẵn trên chuyền sản xuất.",
-        subLabel: "Confirmed P.O/ first sample/ specifications of upper for lamination available in producion the line.",
-    },
-    {
-        no: "2.1.2",
-        label: "Quy trình cán màng cho vật liệu tuân thủ theo chỉ định trên P.O/ đặc điểm kỹ thuật vật liệu.",
-        subLabel: "Process for lamination of material follows standards as specified on P.O/ material specifications.",
-    },
-    {
-        no: "2.1.3",
-        label: "Nguyên vật liệu được kiểm tra đầy đủ theo tiêu chuẩn trước khi tiến hành dán",
-        subLabel: "Raw materials are fully inspected according to standards before proceeding with laminating.",
-    },
-    {
-        no: "2.1.4",
-        label: "Vật liệu đã được dán màng có kết quả đạt, khi được kiểm tra bởi QC và các thí nghiệm từ phòng Lab",
-        subLabel: "Upper material being laminated confirmed with the specification manual, had passed the QC and lab test.",
-    },
-    {
-        no: "2.1.5",
-        label: "Thường xuyên kiểm tra độ bám dính sản phẩm làm ra, cắt mẫu A4 gửi đến Lab thí nghiệm và có ghi chú kết quả rõ ràng",
-        subLabel: "QC check adhesive of product, cut A4 size sample send to Lab for experiment and clear take note result.",
-    },
-    {
-        no: "2.1.6",
-        label: "Độ dày tổng thể của foam có dung sai là +/- 0.3 mm so với độ dày chuẩn trong biểu đồ minh họa quy trình.",
-        subLabel: "Thickness of total Foam laminate is within +/- 0.3 mm of standard PFC",
-    },
-    {
-        no: "2.2",
-        label: "Kiểm soát điều kiện nhiệt độ/tốc độ, kiểm soát điều kiện máy móc hoạt động ổn định và tuân thủ quy định kiểm soát kim loại.",
-        subLabel: "Control temperature/speed conditions, control stable machine operating conditions and comply with needle type control regulations.",
-        isHeader: true,
-    },
-    {
-        no: "2.2.1",
-        label: "Tốc độ, nhiệt độ trục cán màng được kiểm tra và ghi nhận và kiểm tra.",
-        subLabel: "The speed and temperature of the laminating roller are checked and recorded.",
-    },
-    {
-        no: "2.2.2",
-        label: "Có đủ hệ thống làm mát sau quy trình cán màng để ổn định tình trạng của thành phẩm.",
-        subLabel: "Enough cooling system set after the lamination process to stabilize condition of finished products.",
-    },
-    {
-        no: "2.2.3",
-        label: "Sử dụng dụng cụ chuyên dụng để kiểm tra nhiệt độ thực tế trống nhiệt của máy dán.",
-        subLabel: "Use a special tool to check the actual temperature of the thermal drum of the laminator.",
-    },
-    {
-        no: "2.2.4",
-        label: "Nhiệt độ của trục máy lamination được thực hiện theo như hướng dẫn trong bảng quy định về nhiệt độ cho các loại nguyên vật liệu",
-        subLabel: "The temperature of the lamination machine shaft is set according to the guidelines in the temperature regulation table for different types of materials.",
-    },
-    {
-        no: "2.2.5",
-        label: "Gió của quạt không được thổi trực tiếp vào hệ thống trống nhiệt của máy dán",
-        subLabel: "The fan's wind must not blow directly into the laminating machine's thermal drum system.",
-    },
-    {
-        no: "2.2.6",
-        label: "Máy móc thiết bị đo lường phải được kiểm tra và hiệu chuẩn định kỳ : Cân điện tử, thước đo điện tử, thước lá, ….",
-        subLabel: "Measuring equipment must be regularly inspected and calibrated, including electronic scales, digital calipers, steel rulers, etc.",
-    },
-    {
-        no: "2.2.7",
-        label: "Tuân thủ quy định về sử dụng và kiểm soát các công cụ kim loại",
-        subLabel: "Compliance with regulations on the use and control of metal tools.",
-    },
-    {
-        no: "2.3",
-        label: "Tuân thủ quy định đặt để hàng hóa đúng vị trí và có tem nhãn nhận diện đầy đủ",
-        subLabel: "Comply with regulations on placing goods in the correct position and with full identification labels.",
-        isHeader: true,
-    },
-    {
-        no: "2.3.1",
-        label: "Hàng không đạt phải được để tại khu vực riêng biệt, có tem nhận diện và ghi nhận hàng ngày.",
-        subLabel: "Non-conformity goods must isolation and have identity label and record daily.",
-    },
-    {
-        no: "2.3.2",
-        label: "Nguyên liệu được để trên pallet tại khu vực quy định và có tem nhãn nhận diện rõ ràng",
-        subLabel: "Raw materials are placed on pallets in designated areas and have clear identification labels.",
-    },
-    {
-        no: "2.3.3",
-        label: "Mỗi đơn hàng thành phẩm phải có giấy tờ thông tin đơn hàng và tem nhãn đầy đủ",
-        subLabel: "Each finished product order must have complete order documentation and labeling.",
-    },
-    {
-        no: "2.4",
-        label: "Keo cán màng: Khả năng lưu trữ, chuẩn bị và sử dụng đúng keo trong suốt quá trình cán màng",
-        subLabel: "Lamination cement: The ability to store, prepare and correct use of cement during lamination process.",
-        isHeader: true,
-    },
-    {
-        no: "2.4.1",
-        label: "Keo cán màng cho vật liệu trong quy trình được xác nhận trong hướng dẫn đặc điểm kỹ thuật. MSDS có sẵn và được treo tại nơi làm việc.",
-        subLabel: "Lamination cement for materials had been in process confirmed in the specification manual, MSDS is being available and posted.",
-    },
-    {
-        no: "2.4.2",
-        label: "Keo trên bồn tối thiểu đủ để phủ toàn bộ vật liệu trong quá trính cán màng.",
-        subLabel: "Level of lamination cement on the hoofer minimum enough to cover the whole surface of material during lamination process.",
-    },
-    {
-        no: "2.4.3",
-        label: "Có công cụ điều chỉnh kiểm soát độ dày của keo được áp dụng ở phía trên trục keo",
-        subLabel: "A tool for adjusting and controlling glue thickness is applied above the glue roller.",
-    },
-    {
-        no: "2.4.4",
-        label: "Keo trải đều trên bề mặt vật liệu bao phủ toàn bộ khu vực trong suốt quá trình cán màng.",
-        subLabel: "Cenment evenly spread on the surface of upper materials covering the whole area during lamination process.",
-    },
-];
+import { ALL_CRITERIA } from "../data/mqaaPatrolCriteria";
+
 
 export default function MQAAPatrolEntry() {
     const { section } = useParams();
@@ -174,16 +50,19 @@ export default function MQAAPatrolEntry() {
     }, [headerData.auditorId]);
 
     // Initialize rows state
-    const [rows, setRows] = useState(() => {
-        return LAMINATION_CRITERIA.map((item) => ({
+    const [rows, setRows] = useState([]);
+
+    useEffect(() => {
+        const criteria = ALL_CRITERIA[section] || [];
+        setRows(criteria.map((item) => ({
             ...item,
             score: item.isHeader ? 0 : 6,
             level: item.isHeader ? 0 : 6,
             imageFile: null,
             imageUrl: "",
             description: "",
-        }));
-    });
+        })));
+    }, [section]);
 
     const totals = useMemo(() => {
         let totalScore = 0;
@@ -299,6 +178,7 @@ export default function MQAAPatrolEntry() {
                 evaluation_data: rowsWithRemoteUrls.map(r => ({
                     no: r.no,
                     label: r.label,
+                    is_header: r.isHeader,
                     score: r.score,
                     level: r.level,
                     image_url: r.imageUrl,

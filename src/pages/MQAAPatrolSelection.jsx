@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 
 const SECTIONS = [
+    { id: "Raw_Material_Warehouse", name: "RAW MATERIAL WAREHOUSE" },
     { id: "Lamination", name: "LAMINATION" },
     { id: "Prefitting", name: "PREFITTING" },
     { id: "Molding", name: "MOLDING" },
