@@ -140,9 +140,6 @@ try {
             Write-Host "Giờ hiện tại: $currentTime | Giờ báo cáo: $REPORT_TIME"
             Write-Host "Ngày chạy cuối: $LAST_RUN | Ngày hôm nay: $todayStr"
 
-            # KIỂM TRA ĐIỀU KIỆN CHẠY BÁO CÁO CHI TIẾT
-            # TẠM THỜI BỎ NGĂN CHẶN ĐỂ TEST (Comment 2 block dưới đây)
-            <#
             if ($LAST_RUN -eq $todayStr) {
                 Write-Host "Báo cáo ngày hôm nay đã được gửi trước đó. Kết thúc."
                 return
@@ -151,7 +148,6 @@ try {
                 Write-Host "Chưa đến giờ báo cáo ($REPORT_TIME). Kết thúc."
                 return
             }
-            #>
             Write-Host "Bắt đầu xử lý báo cáo..."
         }
     }
@@ -317,26 +313,42 @@ public static extern bool IsIconic(IntPtr hWnd);
                 if ($patrolData -and $patrolData.Count -gt 0) {
                     Write-Host "--- Tìm thấy $($patrolData.Count) bản đánh giá. Đang tính toán điểm trung bình..."
                 
-                    # Gom nhóm và tính trung bình theo xưởng
-                    $patrolStats = $patrolData | Group-Object section | ForEach-Object {
-                        [PSCustomObject]@{
+                    # 1. Lấy danh sách tất cả các bộ phận để show đủ các dòng
+                    $allSectionsUrl = "$SUPABASE_URL/rest/v1/mqaa_patrol_sections?select=name&order=sort_order.asc"
+                    $allSections = Invoke-RestMethod -Uri $allSectionsUrl -Headers $headers -Method Get
+
+                    # Tính trung bình điểm thực tế
+                    $actualStats = $patrolData | Group-Object section | ForEach-Object {
+                        @{
                             Section  = $_.Name
                             AvgScore = [Math]::Round(($_.Group | Measure-Object overall_performance -Average).Average, 1)
                         }
-                    } | Sort-Object AvgScore -Descending
+                    }
 
-                    $totalAvg = [Math]::Round(($patrolStats | Measure-Object AvgScore -Average).Average, 1)
+                    $totalScoreSum = 0
+                    $scoreCount = 0
 
-                    # Xây dựng tin nhắn
-                    $titlePatrol = [char]0xD83D + [char]0xDCCB + " *PHI" + [char]0x1EBF + "U T" + [char]0x1ED4 + "NG K" + [char]0x1EBF + "T MQAA - INSOLE PRODUCTION*"
+                    $titlePatrol = [char]0xD83D + [char]0xDCCB + " *PHI" + [char]0x1EBE + "U T" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T MQAA - INSOLE PRODUCTION*"
                     $subTitle = "*(Tu" + [char]0x1EA7 + "n t" + [char]0x1EEB + " " + $mondayDate.ToString("dd/MM") + " " + [char]0x0111 + [char]0x1EBF + "n " + (Get-Date).ToString("dd/MM") + ")*"
                 
                     $patrolMsg = $titlePatrol + "`n" + $subTitle + "`n" + $L_SEP + "`n"
                 
-                    foreach ($stat in $patrolStats) {
+                    foreach ($sec in $allSections) {
+                        $secName = $sec.name
+                        $stat = $actualStats | Where-Object { $_.Section -eq $secName }
                         $diamondEmoji = [char]0xD83D + [char]0xDD39 # 🔹 Small Blue Diamond
-                        $patrolMsg += $diamondEmoji + " **" + $stat.Section + "**: " + $stat.AvgScore + "%`n"
+                        
+                        if ($stat) {
+                            $patrolMsg += $diamondEmoji + " **" + $secName + "**: " + $stat.AvgScore + "%`n"
+                            $totalScoreSum += $stat.AvgScore
+                            $scoreCount++
+                        }
+                        else {
+                            $patrolMsg += $diamondEmoji + " **" + $secName + "**: ...`n"
+                        }
                     }
+
+                    $totalAvg = if ($scoreCount -gt 0) { [Math]::Round($totalScoreSum / $scoreCount, 1) } else { 0 }
 
                     $patrolMsg += $L_SEP + "`n" + [char]0xD83D + [char]0xDCAF + " **Overall Performance: " + $totalAvg + "%**"
                 
