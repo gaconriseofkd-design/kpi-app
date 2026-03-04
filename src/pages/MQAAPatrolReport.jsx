@@ -94,7 +94,7 @@ export default function MQAAPatrolReport() {
         });
 
         // Data Rows
-        record.evaluation_data.forEach((item, idx) => {
+        record.evaluation_data.forEach((item) => {
             const row = worksheet.addRow([
                 item.no,
                 item.label,
@@ -112,10 +112,15 @@ export default function MQAAPatrolReport() {
                 });
             }
 
+            if (item.image_url) {
+                row.getCell(5).font = { color: { argb: '0000FF' }, underline: true };
+            }
+
             row.eachCell((cell) => {
                 cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
                 cell.alignment = { wrapText: true, vertical: "middle" };
             });
+            row.getCell(5).alignment = { horizontal: 'center' };
         });
 
         // Totals Row
@@ -237,6 +242,9 @@ export default function MQAAPatrolReport() {
                             <th className="p-4 border-b">STT</th>
                             <th className="p-4 border-b">Ngày</th>
                             <th className="p-4 border-b">Auditor</th>
+                            <th className="p-4 border-b text-center">Section</th>
+                            <th className="p-4 border-b text-center">Score</th>
+                            <th className="p-4 border-b text-center">Level</th>
                             <th className="p-4 border-b text-center">Hiệu suất</th>
                             <th className="p-4 border-b text-right">Thao tác</th>
                         </tr>
@@ -244,7 +252,7 @@ export default function MQAAPatrolReport() {
                     <tbody className="divide-y">
                         {results.length === 0 ? (
                             <tr>
-                                <td colSpan="5" className="p-10 text-center text-gray-500 italic">
+                                <td colSpan="8" className="p-10 text-center text-gray-500 italic">
                                     Không tìm thấy dữ liệu trong khoảng thời gian này
                                 </td>
                             </tr>
@@ -257,6 +265,13 @@ export default function MQAAPatrolReport() {
                                         <div className="font-bold text-indigo-900">{res.auditor_name}</div>
                                         <div className="text-xs text-gray-400">ID: {res.auditor_id}</div>
                                     </td>
+                                    <td className="p-4 text-center">
+                                        <span className="text-xs font-bold bg-slate-100 px-2 py-1 rounded text-slate-600 border border-slate-200">
+                                            {res.section?.replace(/_/g, " ")}
+                                        </span>
+                                    </td>
+                                    <td className="p-4 text-center font-black text-red-600">{res.total_score}</td>
+                                    <td className="p-4 text-center font-black text-red-600">{res.total_level}</td>
                                     <td className="p-4 text-center">
                                         <span className={`px-3 py-1 rounded-full text-xs font-black ${Number(res.overall_performance) >= 90 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                             {res.overall_performance}%

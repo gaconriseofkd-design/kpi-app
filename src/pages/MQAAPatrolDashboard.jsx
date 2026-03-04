@@ -215,11 +215,12 @@ export default function MQAAPatrolDashboard() {
                 detailSheet.getColumn(2).width = 50;
                 detailSheet.getColumn(3).width = 15;
                 detailSheet.getColumn(4).width = 15;
-                detailSheet.getColumn(5).width = 40;
+                detailSheet.getColumn(5).width = 20;
+                detailSheet.getColumn(6).width = 40;
 
                 const dTitleRow = detailSheet.addRow([`PHIẾU ĐÁNH GIÁ MQAA - SECTION ${SECTION_MAP[id]}`]);
                 dTitleRow.getCell(1).font = { bold: true, size: 14, color: { argb: '4F46E5' } };
-                detailSheet.mergeCells(`A${dTitleRow.number}:E${dTitleRow.number}`);
+                detailSheet.mergeCells(`A${dTitleRow.number}:F${dTitleRow.number}`);
                 dTitleRow.getCell(1).alignment = { horizontal: 'center' };
 
                 detailSheet.addRow(["Auditor:", data.auditor_name]);
@@ -228,7 +229,7 @@ export default function MQAAPatrolDashboard() {
                 detailSheet.addRow(["Section Performance:", `${data.overall_performance}%`]);
                 detailSheet.addRow([]);
 
-                const dHeaderRow = detailSheet.addRow(["No.", "Criteria", "Score", "Level", "Description"]);
+                const dHeaderRow = detailSheet.addRow(["No.", "Criteria", "Score", "Level", "Image Link", "Description"]);
                 dHeaderRow.eachCell(c => {
                     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '4F46E5' } };
                     c.font = { color: { argb: 'FFFFFF' }, bold: true };
@@ -242,6 +243,7 @@ export default function MQAAPatrolDashboard() {
                         row.label,
                         row.score,
                         row.level,
+                        row.image_url ? { text: "Link hình ảnh", hyperlink: row.image_url } : "",
                         row.description || ""
                     ]);
                     if (row.is_header) {
@@ -250,6 +252,9 @@ export default function MQAAPatrolDashboard() {
                             c.font = { bold: true };
                         });
                     }
+                    if (row.image_url) {
+                        r.getCell(5).font = { color: { argb: '0000FF' }, underline: true };
+                    }
                     r.eachCell(c => {
                         c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
                         c.alignment = { vertical: 'middle', wrapText: true };
@@ -257,9 +262,10 @@ export default function MQAAPatrolDashboard() {
                     r.getCell(1).alignment = { horizontal: 'center' };
                     r.getCell(3).alignment = { horizontal: 'center' };
                     r.getCell(4).alignment = { horizontal: 'center' };
+                    r.getCell(5).alignment = { horizontal: 'center' };
                 });
 
-                const dTotalRow = detailSheet.addRow(["TOTAL:", "", data.total_score, data.total_level, `${data.overall_performance}%`]);
+                const dTotalRow = detailSheet.addRow(["TOTAL:", "", data.total_score, data.total_level, "", `${data.overall_performance}%`]);
                 dTotalRow.eachCell(c => {
                     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF08A' } };
                     c.font = { bold: true };
