@@ -145,19 +145,21 @@ export default function MQAAPatrolDashboard() {
         const worksheet = workbook.addWorksheet("MQAA Summary");
 
         worksheet.getColumn(1).width = 45;
-        worksheet.getColumn(2).width = 25;
+        worksheet.getColumn(2).width = 15;
+        worksheet.getColumn(3).width = 15;
+        worksheet.getColumn(4).width = 25;
 
         const titleRow = worksheet.addRow(["PHIẾU TỔNG KẾT MQAA - INSOLE PRODUCTION"]);
         titleRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '4F46E5' } };
         titleRow.getCell(1).font = { color: { argb: 'FFFFFF' }, bold: true, size: 14 };
         titleRow.getCell(1).alignment = { horizontal: 'center' };
-        worksheet.mergeCells(`A${titleRow.number}:B${titleRow.number}`);
+        worksheet.mergeCells(`A${titleRow.number}:D${titleRow.number}`);
 
         const subTitleRow = worksheet.addRow(["(tổng hợp theo ID và theo ngày)"]);
         subTitleRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'DC2626' } };
         subTitleRow.getCell(1).font = { color: { argb: 'FFFFFF' }, bold: true, size: 9 };
         subTitleRow.getCell(1).alignment = { horizontal: 'center' };
-        worksheet.mergeCells(`A${subTitleRow.number}:B${subTitleRow.number}`);
+        worksheet.mergeCells(`A${subTitleRow.number}:D${subTitleRow.number}`);
 
         const auditors = [...new Set(SECTION_IDS.map(id => summaryData[id]?.auditor_name).filter(Boolean))].join(", ") || "***";
         const auditorIds = [...new Set(SECTION_IDS.map(id => summaryData[id]?.auditor_id).filter(Boolean))].join(", ") || "***";
