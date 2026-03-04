@@ -170,7 +170,7 @@ export default function MQAAPatrolDashboard() {
         worksheet.addRow(["Production:", "Insole"]);
 
         // Header for subsections
-        const headerRow = worksheet.addRow(["Section", "Level", "Score", "Section Performance"]);
+        const headerRow = worksheet.addRow(["Section", "Score", "Level", "Section Performance"]);
         headerRow.font = { bold: true, color: { argb: 'EF4444' } };
         headerRow.eachCell(c => {
             c.alignment = { horizontal: 'center' };
@@ -181,9 +181,9 @@ export default function MQAAPatrolDashboard() {
             const data = summaryData[id];
             const row = worksheet.addRow([
                 SECTION_MAP[id],
-                data ? data.total_level : 0,
                 data ? data.total_score : 0,
-                data ? `${data.overall_performance}%` : "0%"
+                data ? data.total_level : 0,
+                data ? (Number(data.overall_performance) / 100) : 0
             ]);
 
             row.eachCell((c, colNumber) => {
@@ -195,9 +195,10 @@ export default function MQAAPatrolDashboard() {
                     c.font = { color: { argb: 'CBD5E1' } };
                 }
             });
+            row.getCell(4).numFmt = '0%';
         });
 
-        const summaryRow = worksheet.addRow(["Overall Insole Performance:", overallTotals.level, overallTotals.score, `${overallTotals.performance}%`]);
+        const summaryRow = worksheet.addRow(["Overall Insole Performance:", overallTotals.score, overallTotals.level, Number(overallTotals.performance) / 100]);
         summaryRow.eachCell(c => {
             c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FDE68A' } };
             c.font = { bold: true, size: 12, color: { argb: '92400E' } };
@@ -205,6 +206,7 @@ export default function MQAAPatrolDashboard() {
             c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
         });
         summaryRow.getCell(1).alignment = { horizontal: 'left' };
+        summaryRow.getCell(4).numFmt = '0%';
 
         // ADD DETAIL SHEETS FOR EACH SECTION
         SECTION_IDS.forEach(id => {
@@ -233,8 +235,9 @@ export default function MQAAPatrolDashboard() {
                 detailSheet.addRow(["ID:", data.auditor_id]);
                 detailSheet.addRow(["Date of Audit:", selectedDate]);
                 detailSheet.addRow(["Section:", SECTION_MAP[id]]);
-                const dPerfRow = detailSheet.addRow(["Overall Performance:", "", `${data.overall_performance}%`]);
+                const dPerfRow = detailSheet.addRow(["Overall Performance:", "", Number(data.overall_performance) / 100]);
                 dPerfRow.getCell(3).font = { bold: true, color: { argb: "FFEF4444" } };
+                dPerfRow.getCell(3).numFmt = '0%';
                 detailSheet.addRow([]);
 
                 const dHeaderRow = detailSheet.addRow(["No.", "Criteria", "Score", "Level", "Image Link", "Description"]);
@@ -276,7 +279,7 @@ export default function MQAAPatrolDashboard() {
                     r.getCell(5).alignment = { horizontal: 'center' };
                 });
 
-                const dTotalRow = detailSheet.addRow(["", "TOTAL", data.total_score, data.total_level, "", ""]);
+                const dTotalRow = detailSheet.addRow(["", "TOTAL", data.total_score, data.total_level, "", Number(data.overall_performance) / 100]);
                 dTotalRow.font = { bold: true };
                 dTotalRow.eachCell(c => {
                     c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } };
@@ -284,6 +287,7 @@ export default function MQAAPatrolDashboard() {
                     c.alignment = { horizontal: 'center' };
                 });
                 dTotalRow.getCell(2).alignment = { horizontal: 'center' };
+                dTotalRow.getCell(6).numFmt = '0%';
             }
         });
 
@@ -351,24 +355,24 @@ export default function MQAAPatrolDashboard() {
 
                                     <tr className="bg-slate-50 text-red-600 font-black uppercase text-[10px] tracking-wider">
                                         <td className="border border-slate-200 p-3 text-left">Section</td>
-                                        <td className="border border-slate-200 p-3 text-center">Level</td>
                                         <td className="border border-slate-200 p-3 text-center">Score</td>
+                                        <td className="border border-slate-200 p-3 text-center">Level</td>
                                         <td className="border border-slate-200 p-3 text-center">Section Performance</td>
                                     </tr>
 
                                     {sections.map((s) => (
                                         <tr key={s.id} className="border border-slate-200 hover:bg-slate-50 transition-colors">
                                             <td className="p-4 text-slate-700 font-bold">{s.name}</td>
-                                            <td className="p-4 text-center font-black text-red-600 border border-slate-200">{summaryData[s.id]?.total_level || 0}</td>
                                             <td className="p-4 text-center font-black text-red-600 border border-slate-200">{summaryData[s.id]?.total_score || 0}</td>
+                                            <td className="p-4 text-center font-black text-red-600 border border-slate-200">{summaryData[s.id]?.total_level || 0}</td>
                                             <td className="p-4 text-center font-black text-red-600 border border-slate-200">{summaryData[s.id] ? `${summaryData[s.id].overall_performance}%` : "0%"}</td>
                                         </tr>
                                     ))}
 
                                     <tr className="bg-amber-400 border border-slate-300">
                                         <td className="p-4 font-black text-amber-900 text-lg">Overall Insole Performance:</td>
-                                        <td className="p-4 text-center text-amber-900 font-black text-xl border border-slate-300">{overallTotals.level}</td>
                                         <td className="p-4 text-center text-amber-900 font-black text-xl border border-slate-300">{overallTotals.score}</td>
+                                        <td className="p-4 text-center text-amber-900 font-black text-xl border border-slate-300">{overallTotals.level}</td>
                                         <td className="p-4 text-center text-amber-900 font-black text-xl border border-slate-300">{overallTotals.performance}%</td>
                                     </tr>
                                 </tbody>

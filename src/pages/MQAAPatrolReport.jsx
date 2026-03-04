@@ -106,8 +106,10 @@ export default function MQAAPatrolReport() {
         worksheet.mergeCells("A7:B7");
         worksheet.getCell("A7").value = "Overall Performance:";
         worksheet.mergeCells("C7:F7");
-        worksheet.getCell("C7").value = `${record.overall_performance}%`;
-        worksheet.getCell("C7").font = { bold: true, color: { argb: "FFEF4444" } };
+        const perfCell = worksheet.getCell("C7");
+        perfCell.value = Number(record.overall_performance) / 100;
+        perfCell.font = { bold: true, color: { argb: "FFEF4444" } };
+        perfCell.numFmt = '0%';
 
         // Table Header
         const headerRow = worksheet.getRow(9);
