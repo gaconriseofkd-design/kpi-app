@@ -223,19 +223,18 @@ export default function MQAAPatrolDashboard() {
 
                         <div className="p-8 overflow-x-auto">
                             <table className="w-full border-collapse border border-slate-200">
-                                <thead>
-                                    <tr className="bg-slate-50 text-red-600 font-black uppercase text-xs">
-                                        <th className="border border-slate-200 p-4 text-left">Section</th>
-                                        <th className="border border-slate-200 p-4 text-center">Level</th>
-                                        <th className="border border-slate-200 p-4 text-center">Score</th>
-                                        <th className="border border-slate-200 p-4 text-center">Section Performance</th>
-                                    </tr>
-                                </thead>
                                 <tbody>
                                     <tr className="border-b border-slate-100"><td className="p-4 font-bold text-slate-500">Auditor:</td><td colSpan="3" className="p-4 text-slate-900 font-black">{[...new Set(SECTION_IDS.map(id => summaryData[id]?.auditor_name).filter(Boolean))].join(", ") || "***"}</td></tr>
                                     <tr className="border-b border-slate-100"><td className="p-4 font-bold text-slate-500">ID:</td><td colSpan="3" className="p-4 text-slate-900 font-black">{[...new Set(SECTION_IDS.map(id => summaryData[id]?.auditor_id).filter(Boolean))].join(", ") || "***"}</td></tr>
                                     <tr className="border-b border-slate-100"><td className="p-4 font-bold text-slate-500">Date of Audit:</td><td colSpan="3" className="p-4 text-slate-900 font-black">{selectedDate}</td></tr>
                                     <tr className="border-b border-slate-100"><td className="p-4 font-bold text-slate-500">Production:</td><td colSpan="3" className="p-4 text-slate-900 font-black">Insole</td></tr>
+
+                                    <tr className="bg-slate-50 text-red-600 font-black uppercase text-[10px] tracking-wider">
+                                        <td className="border border-slate-200 p-3 text-left">Section</td>
+                                        <td className="border border-slate-200 p-3 text-center">Level</td>
+                                        <td className="border border-slate-200 p-3 text-center">Score</td>
+                                        <td className="border border-slate-200 p-3 text-center">Section Performance</td>
+                                    </tr>
 
                                     {sections.map((s) => (
                                         <tr key={s.id} className="border border-slate-200 hover:bg-slate-50 transition-colors">
