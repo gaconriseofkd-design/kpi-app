@@ -83,10 +83,32 @@ export default function MQAAPatrolDashboard() {
 
             if (dayError) throw dayError;
 
-            const summary = {};
+            const grouped = {};
             dayData.forEach(row => {
-                if (!summary[row.section] || row.id > summary[row.section].id) {
-                    summary[row.section] = row;
+                if (!grouped[row.section]) grouped[row.section] = [];
+                grouped[row.section].push(row);
+            });
+
+            const summary = {};
+            Object.keys(grouped).forEach(sectionId => {
+                const logs = grouped[sectionId];
+                if (logs.length === 1) {
+                    summary[sectionId] = logs[0];
+                } else {
+                    const avgScore = logs.reduce((sum, l) => sum + (Number(l.total_score) || 0), 0) / logs.length;
+                    const avgLevel = logs.reduce((sum, l) => sum + (Number(l.total_level) || 0), 0) / logs.length;
+                    const avgPerf = avgScore > 0 ? (avgLevel / avgScore) * 100 : 0;
+
+                    summary[sectionId] = {
+                        ...logs[logs.length - 1], // Dữ liệu metadata lấy từ bản mới nhất
+                        total_score: avgScore,
+                        total_level: avgLevel,
+                        overall_performance: avgPerf.toFixed(0),
+                        auditor_name: [...new Set(logs.map(l => l.auditor_name))].join(", "),
+                        auditor_id: [...new Set(logs.map(l => l.auditor_id))].join(", "),
+                        is_average: true,
+                        logs: logs // Lưu lại danh sách log để xuất Excel chi tiết
+                    };
                 }
             });
             setSummaryData(summary);
@@ -161,8 +183,16 @@ export default function MQAAPatrolDashboard() {
         subTitleRow.getCell(1).alignment = { horizontal: 'center' };
         worksheet.mergeCells(`A${subTitleRow.number}:D${subTitleRow.number}`);
 
-        const auditors = [...new Set(SECTION_IDS.map(id => summaryData[id]?.auditor_name).filter(Boolean))].join(", ") || "***";
-        const auditorIds = [...new Set(SECTION_IDS.map(id => summaryData[id]?.auditor_id).filter(Boolean))].join(", ") || "***";
+        const allNames = [];
+        const allIds = [];
+        SECTION_IDS.forEach(id => {
+            if (summaryData[id]) {
+                summaryData[id].auditor_name?.split(", ").forEach(n => allNames.push(n));
+                summaryData[id].auditor_id?.split(", ").forEach(i => allIds.push(i));
+            }
+        });
+        const auditors = [...new Set(allNames)].join(", ") || "***";
+        const auditorIds = [...new Set(allIds)].join(", ") || "***";
 
         worksheet.addRow(["Auditor:", auditors]);
         worksheet.addRow(["ID:", auditorIds]);
@@ -208,11 +238,30 @@ export default function MQAAPatrolDashboard() {
         summaryRow.getCell(1).alignment = { horizontal: 'left' };
         summaryRow.getCell(4).numFmt = '0%';
 
-        // ADD DETAIL SHEETS FOR EACH SECTION
+        // ADD DETAIL SHEETS FOR EACH LOG
+        const logsToExport = [];
         SECTION_IDS.forEach(id => {
             const data = summaryData[id];
-            if (data && data.evaluation_data) {
-                const sheetName = SECTION_MAP[id].substring(0, 31);
+            if (data) {
+                if (data.is_average && data.logs) {
+                    data.logs.forEach(log => logsToExport.push(log));
+                } else if (data.evaluation_data) {
+                    logsToExport.push(data);
+                }
+            }
+        });
+
+        logsToExport.forEach(data => {
+            const id = data.section;
+            if (data.evaluation_data) {
+                // Đảm bảo tên sheet không trùng và không chứa ký tự cấm
+                let sheetName = `${SECTION_MAP[id]} - ${data.auditor_name}`.substring(0, 31).replace(/[\\\?\*\[\]\/]/g, "");
+
+                // Nếu vẫn trùng tên sheet (do cùng auditor audit 2 lần cùng section), thêm ID bản ghi
+                if (workbook.getWorksheet(sheetName)) {
+                    sheetName = `${SECTION_MAP[id]} - ${data.id}`.substring(0, 31);
+                }
+
                 const detailSheet = workbook.addWorksheet(sheetName);
 
                 detailSheet.getColumn(1).width = 10;
@@ -348,8 +397,18 @@ export default function MQAAPatrolDashboard() {
                         <div className="p-8 overflow-x-auto">
                             <table className="w-full border-collapse border border-slate-200">
                                 <tbody>
-                                    <tr className="border-b border-slate-100"><td className="p-4 font-bold text-slate-500">Auditor:</td><td colSpan="3" className="p-4 text-slate-900 font-black">{[...new Set(SECTION_IDS.map(id => summaryData[id]?.auditor_name).filter(Boolean))].join(", ") || "***"}</td></tr>
-                                    <tr className="border-b border-slate-100"><td className="p-4 font-bold text-slate-500">ID:</td><td colSpan="3" className="p-4 text-slate-900 font-black">{[...new Set(SECTION_IDS.map(id => summaryData[id]?.auditor_id).filter(Boolean))].join(", ") || "***"}</td></tr>
+                                    <tr className="border-b border-slate-100">
+                                        <td className="p-4 font-bold text-slate-500">Auditor:</td>
+                                        <td colSpan="3" className="p-4 text-slate-900 font-black">
+                                            {[...new Set(SECTION_IDS.flatMap(id => summaryData[id]?.auditor_name?.split(", ") || []))].join(", ") || "***"}
+                                        </td>
+                                    </tr>
+                                    <tr className="border-b border-slate-100">
+                                        <td className="p-4 font-bold text-slate-500">ID:</td>
+                                        <td colSpan="3" className="p-4 text-slate-900 font-black">
+                                            {[...new Set(SECTION_IDS.flatMap(id => summaryData[id]?.auditor_id?.split(", ") || []))].join(", ") || "***"}
+                                        </td>
+                                    </tr>
                                     <tr className="border-b border-slate-100"><td className="p-4 font-bold text-slate-500">Date of Audit:</td><td colSpan="3" className="p-4 text-slate-900 font-black">{selectedDate}</td></tr>
                                     <tr className="border-b border-slate-100"><td className="p-4 font-bold text-slate-500">Production:</td><td colSpan="3" className="p-4 text-slate-900 font-black">Insole</td></tr>
 

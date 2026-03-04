@@ -15,7 +15,7 @@ export default function MQAAPatrolReport() {
         startDate: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split("T")[0],
         endDate: new Date().toISOString().split("T")[0],
     });
-    const [auditors, setAuditors] = useState([]);
+    const [auditorList, setAuditorList] = useState([]);
     const [results, setResults] = useState([]);
     const [loading, setLoading] = useState(false);
     const [showPasswordModal, setShowPasswordModal] = useState(false);
