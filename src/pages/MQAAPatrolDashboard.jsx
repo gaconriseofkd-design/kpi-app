@@ -11,6 +11,8 @@ import {
 export default function MQAAPatrolDashboard() {
     const navigate = useNavigate();
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+    const [selectedAuditorId, setSelectedAuditorId] = useState("");
+    const [availableAuditors, setAvailableAuditors] = useState([]);
     const [summaryData, setSummaryData] = useState({});
     const [historyData, setHistoryData] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -28,10 +30,37 @@ export default function MQAAPatrolDashboard() {
     useEffect(() => {
         const loadAll = async () => {
             await fetchSections();
-            await fetchData();
+            await fetchAvailableAuditors();
         }
         loadAll();
     }, [selectedDate]);
+
+    useEffect(() => {
+        fetchData();
+    }, [selectedDate, selectedAuditorId]);
+
+    const fetchAvailableAuditors = async () => {
+        const { data, error } = await supabase
+            .from("mqaa_patrol_logs")
+            .select("auditor_id, auditor_name")
+            .eq("date", selectedDate);
+
+        if (data) {
+            const unique = [];
+            const ids = new Set();
+            data.forEach(item => {
+                if (!ids.has(item.auditor_id)) {
+                    ids.add(item.auditor_id);
+                    unique.push(item);
+                }
+            });
+            setAvailableAuditors(unique);
+            // If current selected ID is not in new list, reset it
+            if (!ids.has(selectedAuditorId)) {
+                setSelectedAuditorId("");
+            }
+        }
+    };
 
     const fetchSections = async () => {
         const { data } = await supabase.from("mqaa_patrol_sections").select("*").order("sort_order", { ascending: true });
@@ -41,10 +70,16 @@ export default function MQAAPatrolDashboard() {
     const fetchData = async () => {
         setLoading(true);
         try {
-            const { data: dayData, error: dayError } = await supabase
+            let query = supabase
                 .from("mqaa_patrol_logs")
-                .select("section, overall_performance, total_score, total_level, auditor_name, auditor_id, id")
+                .select("section, overall_performance, total_score, total_level, auditor_name, auditor_id, id, evaluation_data")
                 .eq("date", selectedDate);
+
+            if (selectedAuditorId) {
+                query = query.eq("auditor_id", selectedAuditorId);
+            }
+
+            const { data: dayData, error: dayError } = await query;
 
             if (dayError) throw dayError;
 
@@ -169,16 +204,75 @@ export default function MQAAPatrolDashboard() {
         });
         summaryRow.getCell(1).alignment = { horizontal: 'left' };
 
-        worksheet.eachRow((row) => {
-            row.eachCell((cell) => {
-                cell.border = {
-                    top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' }
-                };
-            });
+        // ADD DETAIL SHEETS FOR EACH SECTION
+        SECTION_IDS.forEach(id => {
+            const data = summaryData[id];
+            if (data && data.evaluation_data) {
+                const sheetName = SECTION_MAP[id].substring(0, 31);
+                const detailSheet = workbook.addWorksheet(sheetName);
+
+                detailSheet.getColumn(1).width = 10;
+                detailSheet.getColumn(2).width = 50;
+                detailSheet.getColumn(3).width = 15;
+                detailSheet.getColumn(4).width = 15;
+                detailSheet.getColumn(5).width = 40;
+
+                const dTitleRow = detailSheet.addRow([`PHIẾU ĐÁNH GIÁ MQAA - SECTION ${SECTION_MAP[id]}`]);
+                dTitleRow.getCell(1).font = { bold: true, size: 14, color: { argb: '4F46E5' } };
+                detailSheet.mergeCells(`A${dTitleRow.number}:E${dTitleRow.number}`);
+                dTitleRow.getCell(1).alignment = { horizontal: 'center' };
+
+                detailSheet.addRow(["Auditor:", data.auditor_name]);
+                detailSheet.addRow(["ID:", data.auditor_id]);
+                detailSheet.addRow(["Date:", selectedDate]);
+                detailSheet.addRow(["Section Performance:", `${data.overall_performance}%`]);
+                detailSheet.addRow([]);
+
+                const dHeaderRow = detailSheet.addRow(["No.", "Criteria", "Score", "Level", "Description"]);
+                dHeaderRow.eachCell(c => {
+                    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '4F46E5' } };
+                    c.font = { color: { argb: 'FFFFFF' }, bold: true };
+                    c.alignment = { horizontal: 'center' };
+                    c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                });
+
+                data.evaluation_data.forEach(row => {
+                    const r = detailSheet.addRow([
+                        row.no,
+                        row.label,
+                        row.score,
+                        row.level,
+                        row.description || ""
+                    ]);
+                    if (row.is_header) {
+                        r.eachCell(c => {
+                            c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FB923C' } };
+                            c.font = { bold: true };
+                        });
+                    }
+                    r.eachCell(c => {
+                        c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                        c.alignment = { vertical: 'middle', wrapText: true };
+                    });
+                    r.getCell(1).alignment = { horizontal: 'center' };
+                    r.getCell(3).alignment = { horizontal: 'center' };
+                    r.getCell(4).alignment = { horizontal: 'center' };
+                });
+
+                const dTotalRow = detailSheet.addRow(["TOTAL:", "", data.total_score, data.total_level, `${data.overall_performance}%`]);
+                dTotalRow.eachCell(c => {
+                    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF08A' } };
+                    c.font = { bold: true };
+                    c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                    c.alignment = { horizontal: 'center' };
+                });
+                dTotalRow.getCell(1).alignment = { horizontal: 'right' };
+                detailSheet.mergeCells(`A${dTotalRow.number}:B${dTotalRow.number}`);
+            }
         });
 
         const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), `MQAA_Summary_Insole_${selectedDate}.xlsx`);
+        saveAs(new Blob([buffer]), `MQAA_Summary_${selectedAuditorId || 'All'}_${selectedDate}.xlsx`);
     };
 
     return (
@@ -210,6 +304,16 @@ export default function MQAAPatrolDashboard() {
                     </div>
 
                     <div className="flex items-center gap-4">
+                        <select
+                            value={selectedAuditorId}
+                            onChange={(e) => setSelectedAuditorId(e.target.value)}
+                            className="bg-slate-100 border-none rounded-xl px-4 py-2 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500"
+                        >
+                            <option value="">Tất cả Auditor ID</option>
+                            {availableAuditors.map(a => (
+                                <option key={a.auditor_id} value={a.auditor_id}>{a.auditor_id} - {a.auditor_name}</option>
+                            ))}
+                        </select>
                         <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-slate-100 border-none rounded-xl px-4 py-2 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500" />
                     </div>
                 </div>
