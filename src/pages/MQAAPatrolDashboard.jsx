@@ -43,7 +43,7 @@ export default function MQAAPatrolDashboard() {
         try {
             const { data: dayData, error: dayError } = await supabase
                 .from("mqaa_patrol_logs")
-                .select("section, overall_performance, auditor_name, auditor_id, id")
+                .select("section, overall_performance, total_score, total_level, auditor_name, auditor_id, id")
                 .eq("date", selectedDate);
 
             if (dayError) throw dayError;
@@ -81,10 +81,19 @@ export default function MQAAPatrolDashboard() {
         }
     };
 
-    const overallInsoleScore = useMemo(() => {
-        const scores = SECTION_IDS.map(id => summaryData[id]?.overall_performance).filter(s => s !== undefined);
-        if (scores.length === 0) return 0;
-        return (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
+    const overallTotals = useMemo(() => {
+        let level = 0;
+        let score = 0;
+        let count = 0;
+        SECTION_IDS.forEach(id => {
+            if (summaryData[id]) {
+                level += Number(summaryData[id].total_level) || 0;
+                score += Number(summaryData[id].total_score) || 0;
+                count++;
+            }
+        });
+        const performance = score > 0 ? ((level / score) * 100).toFixed(0) : 0;
+        return { level, score, performance };
     }, [summaryData, SECTION_IDS]);
 
     const topSectionData = useMemo(() => {
@@ -123,20 +132,42 @@ export default function MQAAPatrolDashboard() {
         worksheet.addRow(["Date of Audit:", selectedDate]);
         worksheet.addRow(["Production:", "Insole"]);
 
-        const overallRow = worksheet.addRow(["Overall Insole Performance:", `${overallInsoleScore}%`]);
-        overallRow.getCell(1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FDE68A' } };
-        overallRow.getCell(2).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FDE68A' } };
-        overallRow.font = { bold: true, size: 12 };
+        // Header for subsections
+        const headerRow = worksheet.addRow(["Section", "Level", "Score", "Section Performance"]);
+        headerRow.font = { bold: true, color: { argb: 'EF4444' } };
+        headerRow.eachCell(c => {
+            c.alignment = { horizontal: 'center' };
+            c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        });
 
         SECTION_IDS.forEach(id => {
-            const score = summaryData[id] ? `${summaryData[id].overall_performance}%` : "0% (No data)";
-            const row = worksheet.addRow([SECTION_MAP[id], score]);
-            if (summaryData[id]) {
-                row.getCell(2).font = { color: { argb: '16A34A' }, bold: true };
-            } else {
-                row.getCell(2).font = { color: { argb: 'CBD5E1' } };
-            }
+            const data = summaryData[id];
+            const row = worksheet.addRow([
+                SECTION_MAP[id],
+                data ? data.total_level : 0,
+                data ? data.total_score : 0,
+                data ? `${data.overall_performance}%` : "0%"
+            ]);
+
+            row.eachCell((c, colNumber) => {
+                c.alignment = { horizontal: colNumber === 1 ? 'left' : 'center' };
+                c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+                if (data) {
+                    c.font = { color: { argb: 'EF4444' }, bold: true };
+                } else {
+                    c.font = { color: { argb: 'CBD5E1' } };
+                }
+            });
         });
+
+        const summaryRow = worksheet.addRow(["Overall Insole Performance:", overallTotals.level, overallTotals.score, `${overallTotals.performance}%`]);
+        summaryRow.eachCell(c => {
+            c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FDE68A' } };
+            c.font = { bold: true, size: 12, color: { argb: '92400E' } };
+            c.alignment = { horizontal: 'center' };
+            c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
+        });
+        summaryRow.getCell(1).alignment = { horizontal: 'left' };
 
         worksheet.eachRow((row) => {
             row.eachCell((cell) => {
@@ -191,19 +222,36 @@ export default function MQAAPatrolDashboard() {
                         <div className="bg-red-600 p-2 text-center text-white text-[10px] uppercase font-black tracking-widest">(tổng hợp theo ID và theo ngày)</div>
 
                         <div className="p-8 overflow-x-auto">
-                            <table className="w-full border-collapse">
+                            <table className="w-full border-collapse border border-slate-200">
+                                <thead>
+                                    <tr className="bg-slate-50 text-red-600 font-black uppercase text-xs">
+                                        <th className="border border-slate-200 p-4 text-left">Section</th>
+                                        <th className="border border-slate-200 p-4 text-center">Level</th>
+                                        <th className="border border-slate-200 p-4 text-center">Score</th>
+                                        <th className="border border-slate-200 p-4 text-center">Section Performance</th>
+                                    </tr>
+                                </thead>
                                 <tbody>
-                                    <tr className="border-b border-slate-100"><td className="py-4 font-bold text-slate-500 w-1/3">Auditor:</td><td className="py-4 text-slate-900 font-black">{[...new Set(SECTION_IDS.map(id => summaryData[id]?.auditor_name).filter(Boolean))].join(", ") || "***"}</td></tr>
-                                    <tr className="border-b border-slate-100"><td className="py-4 font-bold text-slate-500">ID:</td><td className="py-4 text-slate-900 font-black">{[...new Set(SECTION_IDS.map(id => summaryData[id]?.auditor_id).filter(Boolean))].join(", ") || "***"}</td></tr>
-                                    <tr className="border-b border-slate-100"><td className="py-4 font-bold text-slate-500">Date of Audit:</td><td className="py-4 text-slate-900 font-black">{selectedDate}</td></tr>
-                                    <tr className="border-b border-slate-100"><td className="py-4 font-bold text-slate-500">Production:</td><td className="py-4 text-slate-900 font-black">Insole</td></tr>
-                                    <tr className="bg-amber-100"><td className="p-6 font-black text-amber-900 text-lg">Overall Performance:</td><td className="p-6 text-amber-900 font-black text-3xl">{overallInsoleScore}%</td></tr>
+                                    <tr className="border-b border-slate-100"><td className="p-4 font-bold text-slate-500">Auditor:</td><td colSpan="3" className="p-4 text-slate-900 font-black">{[...new Set(SECTION_IDS.map(id => summaryData[id]?.auditor_name).filter(Boolean))].join(", ") || "***"}</td></tr>
+                                    <tr className="border-b border-slate-100"><td className="p-4 font-bold text-slate-500">ID:</td><td colSpan="3" className="p-4 text-slate-900 font-black">{[...new Set(SECTION_IDS.map(id => summaryData[id]?.auditor_id).filter(Boolean))].join(", ") || "***"}</td></tr>
+                                    <tr className="border-b border-slate-100"><td className="p-4 font-bold text-slate-500">Date of Audit:</td><td colSpan="3" className="p-4 text-slate-900 font-black">{selectedDate}</td></tr>
+                                    <tr className="border-b border-slate-100"><td className="p-4 font-bold text-slate-500">Production:</td><td colSpan="3" className="p-4 text-slate-900 font-black">Insole</td></tr>
+
                                     {sections.map((s) => (
-                                        <tr key={s.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors">
-                                            <td className="py-4 px-6 text-slate-700 font-bold">{s.name}</td>
-                                            <td className={`py-4 px-6 font-black text-lg ${summaryData[s.id] ? 'text-green-600' : 'text-slate-200'}`}>{summaryData[s.id] ? `${summaryData[s.id].overall_performance}%` : "0%"}</td>
+                                        <tr key={s.id} className="border border-slate-200 hover:bg-slate-50 transition-colors">
+                                            <td className="p-4 text-slate-700 font-bold">{s.name}</td>
+                                            <td className="p-4 text-center font-black text-red-600 border border-slate-200">{summaryData[s.id]?.total_level || 0}</td>
+                                            <td className="p-4 text-center font-black text-red-600 border border-slate-200">{summaryData[s.id]?.total_score || 0}</td>
+                                            <td className="p-4 text-center font-black text-red-600 border border-slate-200">{summaryData[s.id] ? `${summaryData[s.id].overall_performance}%` : "0%"}</td>
                                         </tr>
                                     ))}
+
+                                    <tr className="bg-amber-400 border border-slate-300">
+                                        <td className="p-4 font-black text-amber-900 text-lg">Overall Insole Performance:</td>
+                                        <td className="p-4 text-center text-amber-900 font-black text-xl border border-slate-300">{overallTotals.level}</td>
+                                        <td className="p-4 text-center text-amber-900 font-black text-xl border border-slate-300">{overallTotals.score}</td>
+                                        <td className="p-4 text-center text-amber-900 font-black text-xl border border-slate-300">{overallTotals.performance}%</td>
+                                    </tr>
                                 </tbody>
                             </table>
                         </div>
@@ -249,7 +297,7 @@ export default function MQAAPatrolDashboard() {
                         <div className="grid grid-cols-1 gap-4">
                             <div className="bg-indigo-600 p-8 rounded-3xl text-white shadow-xl shadow-indigo-200 flex flex-col justify-center">
                                 <p className="opacity-70 font-bold uppercase tracking-widest text-xs mb-2">Trung Bình Insole</p>
-                                <p className="text-6xl font-black">{overallInsoleScore}%</p>
+                                <p className="text-6xl font-black">{overallTotals.performance}%</p>
                             </div>
                             <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm flex flex-col justify-center">
                                 <p className="text-slate-400 font-bold uppercase tracking-widest text-xs mb-2">Đã Hoàn Thành</p>
