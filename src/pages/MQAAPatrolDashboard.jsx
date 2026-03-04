@@ -212,49 +212,58 @@ export default function MQAAPatrolDashboard() {
                 const detailSheet = workbook.addWorksheet(sheetName);
 
                 detailSheet.getColumn(1).width = 10;
-                detailSheet.getColumn(2).width = 50;
-                detailSheet.getColumn(3).width = 15;
-                detailSheet.getColumn(4).width = 15;
+                detailSheet.getColumn(2).width = 60;
+                detailSheet.getColumn(3).width = 10;
+                detailSheet.getColumn(4).width = 10;
                 detailSheet.getColumn(5).width = 20;
-                detailSheet.getColumn(6).width = 40;
+                detailSheet.getColumn(6).width = 30;
 
                 const dTitleRow = detailSheet.addRow([`PHIẾU ĐÁNH GIÁ MQAA - SECTION ${SECTION_MAP[id]}`]);
-                dTitleRow.getCell(1).font = { bold: true, size: 14, color: { argb: '4F46E5' } };
                 detailSheet.mergeCells(`A${dTitleRow.number}:F${dTitleRow.number}`);
-                dTitleRow.getCell(1).alignment = { horizontal: 'center' };
+                const dTitleCell = dTitleRow.getCell(1);
+                dTitleCell.font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
+                dTitleCell.alignment = { vertical: "middle", horizontal: "center" };
+                dTitleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } };
+                dTitleRow.height = 30;
 
+                detailSheet.addRow([]);
                 detailSheet.addRow(["Auditor:", data.auditor_name]);
                 detailSheet.addRow(["ID:", data.auditor_id]);
-                detailSheet.addRow(["Date:", selectedDate]);
-                detailSheet.addRow(["Section Performance:", `${data.overall_performance}%`]);
+                detailSheet.addRow(["Date of Audit:", selectedDate]);
+                detailSheet.addRow(["Section:", SECTION_MAP[id]]);
+                const dPerfRow = detailSheet.addRow(["Overall Performance:", "", `${data.overall_performance}%`]);
+                dPerfRow.getCell(3).font = { bold: true, color: { argb: "FFEF4444" } };
                 detailSheet.addRow([]);
 
                 const dHeaderRow = detailSheet.addRow(["No.", "Criteria", "Score", "Level", "Image Link", "Description"]);
+                dHeaderRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
                 dHeaderRow.eachCell(c => {
-                    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: '4F46E5' } };
-                    c.font = { color: { argb: 'FFFFFF' }, bold: true };
+                    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF4F46E5' } };
                     c.alignment = { horizontal: 'center' };
                     c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
                 });
 
-                data.evaluation_data.forEach(row => {
+                data.evaluation_data.forEach(item => {
                     const r = detailSheet.addRow([
-                        row.no,
-                        row.label,
-                        row.score,
-                        row.level,
-                        row.image_url ? { text: "Link hình ảnh", hyperlink: row.image_url } : "",
-                        row.description || ""
+                        item.no,
+                        item.label,
+                        item.score || "",
+                        item.level || "",
+                        item.image_url ? { text: "Link hình ảnh", hyperlink: item.image_url } : "",
+                        item.description || ""
                     ]);
-                    if (row.is_header) {
+
+                    if (item.is_header) {
                         r.eachCell(c => {
-                            c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FB923C' } };
+                            c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDBA74' } };
                             c.font = { bold: true };
                         });
                     }
-                    if (row.image_url) {
-                        r.getCell(5).font = { color: { argb: '0000FF' }, underline: true };
+
+                    if (item.image_url) {
+                        r.getCell(5).font = { color: { argb: 'FF0000FF' }, underline: true };
                     }
+
                     r.eachCell(c => {
                         c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
                         c.alignment = { vertical: 'middle', wrapText: true };
@@ -265,15 +274,14 @@ export default function MQAAPatrolDashboard() {
                     r.getCell(5).alignment = { horizontal: 'center' };
                 });
 
-                const dTotalRow = detailSheet.addRow(["TOTAL:", "", data.total_score, data.total_level, "", `${data.overall_performance}%`]);
+                const dTotalRow = detailSheet.addRow(["", "TOTAL", data.total_score, data.total_level, "", ""]);
+                dTotalRow.font = { bold: true };
                 dTotalRow.eachCell(c => {
-                    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FEF08A' } };
-                    c.font = { bold: true };
+                    c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFEF9C3' } };
                     c.border = { top: { style: 'thin' }, left: { style: 'thin' }, bottom: { style: 'thin' }, right: { style: 'thin' } };
                     c.alignment = { horizontal: 'center' };
                 });
-                dTotalRow.getCell(1).alignment = { horizontal: 'right' };
-                detailSheet.mergeCells(`A${dTotalRow.number}:B${dTotalRow.number}`);
+                dTotalRow.getCell(2).alignment = { horizontal: 'center' };
             }
         });
 

@@ -11,14 +11,35 @@ export default function MQAAPatrolReport() {
     const navigate = useNavigate();
     const [filters, setFilters] = useState({
         section: "All",
+        auditor: "All",
         startDate: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().split("T")[0],
         endDate: new Date().toISOString().split("T")[0],
     });
+    const [auditors, setAuditors] = useState([]);
     const [results, setResults] = useState([]);
     const [loading, setLoading] = useState(false);
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [selectedRecord, setSelectedRecord] = useState(null);
     const [modalMode, setModalMode] = useState("edit"); // 'edit' or 'delete'
+
+    useState(() => {
+        const fetchAuditors = async () => {
+            const { data } = await supabase.from("mqaa_patrol_logs").select("auditor_name, auditor_id");
+            if (data) {
+                const unique = [];
+                const seen = new Set();
+                data.forEach(item => {
+                    const label = `${item.auditor_id} - ${item.auditor_name}`;
+                    if (!seen.has(label)) {
+                        seen.add(label);
+                        unique.push({ id: item.auditor_id, name: item.auditor_name, label });
+                    }
+                });
+                setAuditors(unique);
+            }
+        };
+        fetchAuditors();
+    }, []);
 
     const handleSearch = async () => {
         setLoading(true);
@@ -32,6 +53,10 @@ export default function MQAAPatrolReport() {
 
             if (filters.section && filters.section !== "All") {
                 query = query.eq("section", filters.section);
+            }
+
+            if (filters.auditor && filters.auditor !== "All") {
+                query = query.eq("auditor_id", filters.auditor);
             }
 
             const { data, error } = await query;
@@ -165,7 +190,7 @@ export default function MQAAPatrolReport() {
     };
 
     return (
-        <div className="max-w-5xl mx-auto p-6 bg-white shadow-xl rounded-xl mt-8">
+        <div className="max-w-[1200px] mx-auto p-6 bg-white shadow-xl rounded-xl mt-8">
             <PasswordModal
                 isOpen={showPasswordModal}
                 onClose={() => setShowPasswordModal(false)}
@@ -191,7 +216,7 @@ export default function MQAAPatrolReport() {
                 <h2 className="text-3xl font-bold text-indigo-900">Xuất Báo Cáo MQAA Patrol</h2>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-10 p-6 bg-indigo-50 rounded-xl border border-indigo-100 shadow-sm">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-10 p-6 bg-indigo-50 rounded-xl border border-indigo-100 shadow-sm">
                 <div className="flex flex-col gap-2">
                     <label className="text-sm font-bold text-indigo-700">Section</label>
                     <select
@@ -201,6 +226,19 @@ export default function MQAAPatrolReport() {
                     >
                         {SECTIONS.map((s) => (
                             <option key={s} value={s}>{s}</option>
+                        ))}
+                    </select>
+                </div>
+                <div className="flex flex-col gap-2">
+                    <label className="text-sm font-bold text-indigo-700">Auditor</label>
+                    <select
+                        className="p-2.5 border rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none"
+                        value={filters.auditor}
+                        onChange={(e) => setFilters({ ...filters, auditor: e.target.value })}
+                    >
+                        <option value="All">All Auditors</option>
+                        {auditors.map((a) => (
+                            <option key={a.id} value={a.id}>{a.label}</option>
                         ))}
                     </select>
                 </div>
