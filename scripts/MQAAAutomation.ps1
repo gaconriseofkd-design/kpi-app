@@ -140,37 +140,26 @@ try {
             Write-Host "Giờ hiện tại: $currentTime | Giờ báo cáo: $REPORT_TIME"
             Write-Host "Ngày chạy cuối: $LAST_RUN | Ngày hôm nay: $todayStr"
 
+            # Kiểm tra điều kiện cho báo cáo vi phạm hàng ngày
+            $skipDailyReport = $false
             if ($LAST_RUN -eq $todayStr) {
-                Write-Host "Báo cáo ngày hôm nay đã được gửi trước đó. Kết thúc."
-                return
+                Write-Host "Báo cáo vi phạm ngày hôm nay đã được gửi trước đó. Bỏ qua phần báo cáo hàng ngày."
+                $skipDailyReport = $true
             }
-            if ($currentTime -lt $REPORT_TIME) {
-                Write-Host "Chưa đến giờ báo cáo ($REPORT_TIME). Kết thúc."
-                return
+            elseif ($currentTime -lt $REPORT_TIME) {
+                Write-Host "Chưa đến giờ báo cáo ($REPORT_TIME). Bỏ qua phần báo cáo hàng ngày."
+                $skipDailyReport = $true
             }
-            Write-Host "Bắt đầu xử lý báo cáo..."
+            else {
+                Write-Host "Bắt đầu xử lý báo cáo..."
+            }
         }
     }
     catch {
         Write-Warning "Không thể lấy cấu hình chi tiết, dùng mặc định."
     }
 
-    # 2. Truy vấn dữ liệu vi phạm
-    $url = "$SUPABASE_URL/rest/v1/mqaa_logs?date=eq.$yesterday&select=*"
-    Write-Host "URL: $url"
-    
-    $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Get
-    if ($response.Count -eq 0) {
-        Write-Host "Không có vi phạm nào trong ngày $yesterday."
-        # Cập nhật ngày chạy để không kiểm tra lại
-        $updateBody = '{"last_run_date":"' + $todayStr + '"}'
-        $null = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Patch -Body $updateBody -ContentType "application/json"
-        return
-    }
-
-    Write-Host "Tìm thấy $($response.Count) bản ghi. Bắt đầu gửi Zalo..."
-
-    # 3. Kích hoạt Zalo
+    # 3. Kích hoạt Zalo (cần cho cả báo cáo hàng ngày và phiếu tổng kết)
     $zaloProcess = Get-Process -Name Zalo -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle } | Select-Object -First 1
     if (-not $zaloProcess) {
         Write-Error "Không tìm thấy Zalo PC. Vui lòng mở Zalo trước."
@@ -195,99 +184,121 @@ public static extern bool IsIconic(IntPtr hWnd);
     [Win32.Win32Utils]::SetForegroundWindow($hWnd)
     Start-Sleep -Seconds 2
 
-    # Tìm nhóm Zalo
-    [System.Windows.Forms.SendKeys]::SendWait("^f")
-    Start-Sleep -Milliseconds 800
-    [System.Windows.Forms.Clipboard]::SetText($ZALO_GROUP_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
-    [System.Windows.Forms.SendKeys]::SendWait("^v")
-    Start-Sleep -Seconds 1
-    [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-    Start-Sleep -Seconds 1
-
-    # 4. Gửi từng bản ghi
-    foreach ($log in $response) {
-        $msg = $E_ANNOUNCE + " " + $L_HEADER + "`n" +
-        $L_SEP + "`n" +
-        $E_CALENDAR + " " + $L_DATE + " " + $log.date + "`n" +
-        $E_SECTION + " " + $L_SECTION + " " + $log.section + "`n" +
-        $E_CLOCK + " " + $L_SHIFT + " " + $log.shift + "`n" +
-        $E_LOCATION + " " + $L_LINE + " " + $log.line + "`n" +
-        $E_OFFICER + " " + $L_LEADER + " " + $log.leader_name + "`n"
-
-        if ($log.worker_name) {
-            $msg += $E_USER + " " + $L_WORKER + " " + $log.worker_name + " (" + $log.worker_id + ")`n"
+    # ============================================
+    # PHẦN A: BÁO CÁO VI PHẠM MQAA HÀNG NGÀY
+    # ============================================
+    if (-not $skipDailyReport) {
+        # 2. Truy vấn dữ liệu vi phạm
+        $url = "$SUPABASE_URL/rest/v1/mqaa_logs?date=eq.$yesterday&select=*"
+        Write-Host "URL: $url"
+        
+        $response = Invoke-RestMethod -Uri $url -Headers $headers -Method Get
+        if ($response.Count -eq 0) {
+            Write-Host "Không có vi phạm nào trong ngày $yesterday. Bỏ qua phần báo cáo hàng ngày."
         }
+        else {
+            Write-Host "Tìm thấy $($response.Count) bản ghi. Bắt đầu gửi Zalo..."
 
-        $msg += $E_WARNING + " " + $L_ISSUE_TYPE + " " + $log.issue_type + "`n" +
-        $E_NOTE + " " + $L_DESCRIPTION + " " + $log.description + "`n" +
-        $L_SEP
+            # Tìm nhóm Zalo cho báo cáo hàng ngày
+            [System.Windows.Forms.SendKeys]::SendWait("^f")
+            Start-Sleep -Milliseconds 800
+            [System.Windows.Forms.Clipboard]::SetText($ZALO_GROUP_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+            [System.Windows.Forms.SendKeys]::SendWait("^v")
+            Start-Sleep -Seconds 1
+            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+            Start-Sleep -Seconds 1
 
-        Send-ZaloMessage -text $msg
+            # 4. Gửi từng bản ghi
+            foreach ($log in $response) {
+                $msg = $E_ANNOUNCE + " " + $L_HEADER + "`n" +
+                $L_SEP + "`n" +
+                $E_CALENDAR + " " + $L_DATE + " " + $log.date + "`n" +
+                $E_SECTION + " " + $L_SECTION + " " + $log.section + "`n" +
+                $E_CLOCK + " " + $L_SHIFT + " " + $log.shift + "`n" +
+                $E_LOCATION + " " + $L_LINE + " " + $log.line + "`n" +
+                $E_OFFICER + " " + $L_LEADER + " " + $log.leader_name + "`n"
 
-        if ($log.image_url) {
-            $urls = @()
-            if ($log.image_url -is [array]) { $urls = $log.image_url }
-            elseif ($log.image_url -is [string] -and $log.image_url -ne "") { $urls = @($log.image_url) }
-            
-            if ($urls.Count -gt 0) {
-                if ($IMAGE_LIMIT -gt 0 -and $urls.Count -gt $IMAGE_LIMIT) {
-                    $urls = $urls[0..($IMAGE_LIMIT - 1)]
+                if ($log.worker_name) {
+                    $msg += $E_USER + " " + $L_WORKER + " " + $log.worker_name + " (" + $log.worker_id + ")`n"
                 }
-                Send-ZaloImageGroup -imageUrls $urls
+
+                $msg += $E_WARNING + " " + $L_ISSUE_TYPE + " " + $log.issue_type + "`n" +
+                $E_NOTE + " " + $L_DESCRIPTION + " " + $log.description + "`n" +
+                $L_SEP
+
+                Send-ZaloMessage -text $msg
+
+                if ($log.image_url) {
+                    $urls = @()
+                    if ($log.image_url -is [array]) { $urls = $log.image_url }
+                    elseif ($log.image_url -is [string] -and $log.image_url -ne "") { $urls = @($log.image_url) }
+                    
+                    if ($urls.Count -gt 0) {
+                        if ($IMAGE_LIMIT -gt 0 -and $urls.Count -gt $IMAGE_LIMIT) {
+                            $urls = $urls[0..($IMAGE_LIMIT - 1)]
+                        }
+                        Send-ZaloImageGroup -imageUrls $urls
+                    }
+                }
+            }
+
+            # 5. Báo cáo tổng kết tuần (vi phạm)
+            Write-Host ">>> Đã gửi xong tất cả báo cáo chi tiết. Đợi 2 giây trước khi gửi tổng kết tuần..."
+            Start-Sleep -Seconds 2
+            Write-Host "-------------------------------------------"
+            Write-Host "Đang tạo báo cáo tổng kết tuần..."
+            $mondayDate = (Get-Date).AddDays( - (([int](Get-Date).DayOfWeek - 1 + 7) % 7)).Date
+            $mondayStr = $mondayDate.ToString("yyyy-MM-dd")
+            $weeklyUrl = "$SUPABASE_URL/rest/v1/mqaa_logs?date=gte.$mondayStr&date=lte.$yesterday&select=*"
+            
+            $weeklyData = Invoke-RestMethod -Uri $weeklyUrl -Headers $headers -Method Get
+            if ($weeklyData.Count -gt 0) {
+                $totalCount = $weeklyData.Count
+                $sectionStats = $weeklyData | Group-Object section | Select-Object Name, Count | Sort-Object Count -Descending
+                $topLines = $weeklyData | Group-Object line | ForEach-Object {
+                    [PSCustomObject]@{
+                        Line    = $_.Name
+                        Count   = $_.Count
+                        Section = $_.Group[0].section
+                    }
+                } | Sort-Object Count -Descending | Select-Object -First 3
+                
+                $summaryMsg = $E_CHART + " " + $L_WEEKLY_TITLE + "`n" +
+                "*(T" + [char]0x1EEB + " Th" + [char]0x1EE9 + " 2, " + $mondayDate.ToString("dd/MM") + " " + [char]0x0111 + [char]0x1EBF + "n " + (Get-Date).ToString("dd/MM") + ")*`n" +
+                $L_SEP + "`n" +
+                $E_CHART + " " + $L_TOTAL_ERRORS + " **$totalCount** " + "l" + [char]0x1ED7 + "i`n`n" +
+                $E_LOCATION + " " + $L_STATS_SECTION + "`n"
+
+                foreach ($stat in $sectionStats) {
+                    $percent = [Math]::Round(($stat.Count / $totalCount) * 100, 1)
+                    $summaryMsg += $E_BLUE_DOT + " **" + $stat.Name + "**: " + $stat.Count + " l" + [char]0x1ED7 + "i ($percent%)`n"
+                }
+                
+                $summaryMsg += "`n" + $E_FIRE + " " + $L_TOP_LINES + "`n"
+                $rankEmojis = @($E_NUM1, $E_NUM2, $E_NUM3)
+                for ($i = 0; $i -lt $topLines.Count; $i++) {
+                    $lineInfo = $topLines[$i]
+                    $summaryMsg += $rankEmojis[$i] + " **Line " + $lineInfo.Line + "** (" + $lineInfo.Section + "): " + $lineInfo.Count + " l" + [char]0x1ED7 + "i`n"
+                }
+                $summaryMsg += $L_SEP + "`n" +
+                $L_DASHBOARD + "`n" +
+                $DASHBOARD_LINK
+                Send-ZaloMessage -text $summaryMsg
+                Write-Host "Đã gửi báo cáo tổng kết tuần."
             }
         }
+
+        # 6. Cập nhật ngày chạy cuối bản tin hàng ngày
+        $updateBody = '{"last_run_date":"' + $todayStr + '"}'
+        $null = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Patch -Body $updateBody -ContentType "application/json"
+    }
+    else {
+        Write-Host ">>> Bỏ qua phần báo cáo vi phạm hàng ngày (đã gửi hoặc chưa đến giờ)."
     }
 
-    # 5. Báo cáo tổng kết tuần
-    Write-Host ">>> Đã gửi xong tất cả báo cáo chi tiết. Đợi 2 giây trước khi gửi tổng kết tuần..."
-    Start-Sleep -Seconds 2
-    Write-Host "-------------------------------------------"
-    Write-Host "Đang tạo báo cáo tổng kết tuần..."
-    $mondayDate = (Get-Date).AddDays( - (([int](Get-Date).DayOfWeek - 1 + 7) % 7)).Date
-    $mondayStr = $mondayDate.ToString("yyyy-MM-dd")
-    $weeklyUrl = "$SUPABASE_URL/rest/v1/mqaa_logs?date=gte.$mondayStr&date=lte.$yesterday&select=*"
-    
-    $weeklyData = Invoke-RestMethod -Uri $weeklyUrl -Headers $headers -Method Get
-    if ($weeklyData.Count -gt 0) {
-        $totalCount = $weeklyData.Count
-        $sectionStats = $weeklyData | Group-Object section | Select-Object Name, Count | Sort-Object Count -Descending
-        $topLines = $weeklyData | Group-Object line | ForEach-Object {
-            [PSCustomObject]@{
-                Line    = $_.Name
-                Count   = $_.Count
-                Section = $_.Group[0].section
-            }
-        } | Sort-Object Count -Descending | Select-Object -First 3
-        
-        $summaryMsg = $E_CHART + " " + $L_WEEKLY_TITLE + "`n" +
-        "*(T" + [char]0x1EEB + " Th" + [char]0x1EE9 + " 2, " + $mondayDate.ToString("dd/MM") + " " + [char]0x0111 + [char]0x1EBF + "n " + (Get-Date).ToString("dd/MM") + ")*`n" +
-        $L_SEP + "`n" +
-        $E_CHART + " " + $L_TOTAL_ERRORS + " **$totalCount** " + "l" + [char]0x1ED7 + "i`n`n" +
-        $E_LOCATION + " " + $L_STATS_SECTION + "`n"
-
-        foreach ($stat in $sectionStats) {
-            $percent = [Math]::Round(($stat.Count / $totalCount) * 100, 1)
-            $summaryMsg += $E_BLUE_DOT + " **" + $stat.Name + "**: " + $stat.Count + " l" + [char]0x1ED7 + "i ($percent%)`n"
-        }
-        
-        $summaryMsg += "`n" + $E_FIRE + " " + $L_TOP_LINES + "`n"
-        $rankEmojis = @($E_NUM1, $E_NUM2, $E_NUM3)
-        for ($i = 0; $i -lt $topLines.Count; $i++) {
-            $lineInfo = $topLines[$i]
-            $summaryMsg += $rankEmojis[$i] + " **Line " + $lineInfo.Line + "** (" + $lineInfo.Section + "): " + $lineInfo.Count + " l" + [char]0x1ED7 + "i`n"
-        }
-        $summaryMsg += $L_SEP + "`n" +
-        $L_DASHBOARD + "`n" +
-        $DASHBOARD_LINK
-        Send-ZaloMessage -text $summaryMsg
-        Write-Host "Đã gửi báo cáo tổng kết tuần."
-    }
-
-    # 6. Cập nhật ngày chạy cuối bản tin hàng ngày
-    $updateBody = '{"last_run_date":"' + $todayStr + '"}'
-    $null = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Patch -Body $updateBody -ContentType "application/json"
-
-    # 7. PHIẾU TỔNG KẾT MQAA - INSOLE PRODUCTION
+    # ============================================
+    # PHẦN B: PHIẾU TỔNG KẾT MQAA - INSOLE PRODUCTION (Gửi riêng từng Auditor)
+    # ============================================
     $dayOfWeek = (Get-Date).DayOfWeek.ToString()
     if ($PATROL_REPORT_DAYS.Split(",") -contains $dayOfWeek) {
         Write-Host ">>> Kiểm tra điều kiện gửi Phiếu Tổng Kết MQAA (Thứ: $dayOfWeek)..." -ForegroundColor Cyan
@@ -306,53 +317,38 @@ public static extern bool IsIconic(IntPtr hWnd);
 
             if ($lastPatrolMonday -ne $mondayStr) {
                 Write-Host "--- Đang kiểm tra dữ liệu Patrol cho tuần từ $mondayStr..."
-                # Truy vấn tất cả đánh giá Patrol trong tuần (từ Thứ 2 đến hôm nay)
-                $patrolUrl = "$SUPABASE_URL/rest/v1/mqaa_patrol_logs?date=gte.$mondayStr&date=lte.$todayStr&select=section,overall_performance"
+                # Truy vấn tất cả đánh giá Patrol trong tuần (kèm thông tin auditor và ngày)
+                $patrolUrl = "$SUPABASE_URL/rest/v1/mqaa_patrol_logs?date=gte.$mondayStr&date=lte.$todayStr&select=auditor_name,auditor_id,date,section,overall_performance"
                 $patrolData = Invoke-RestMethod -Uri $patrolUrl -Headers $headers -Method Get
             
                 if ($patrolData -and $patrolData.Count -gt 0) {
-                    Write-Host "--- Tìm thấy $($patrolData.Count) bản đánh giá. Đang tính toán điểm trung bình..."
+                    Write-Host "--- Tìm thấy $($patrolData.Count) bản đánh giá." -ForegroundColor Cyan
                 
                     # 1. Lấy danh sách tất cả các bộ phận để show đủ các dòng
                     $allSectionsUrl = "$SUPABASE_URL/rest/v1/mqaa_patrol_sections?select=name&order=sort_order.asc"
                     $allSections = Invoke-RestMethod -Uri $allSectionsUrl -Headers $headers -Method Get
 
-                    # Tính trung bình điểm thực tế
-                    $actualStats = $patrolData | Group-Object section | ForEach-Object {
-                        @{
-                            Section  = $_.Name
-                            AvgScore = [Math]::Round(($_.Group | Measure-Object overall_performance -Average).Average, 1)
-                        }
+                    # 2. Tính trung bình cho các bản lưu CÙNG NGÀY + CÙNG SECTION (nhiều auditor)
+                    $dateSectionAvg = @{}
+                    $dateSectionGroups = $patrolData | Group-Object { "$($_.date)|$($_.section)" }
+                    foreach ($group in $dateSectionGroups) {
+                        $avgScore = [Math]::Round(($group.Group | Measure-Object overall_performance -Average).Average, 1)
+                        $dateSectionAvg[$group.Name] = $avgScore
                     }
 
-                    $totalScoreSum = 0
-                    $scoreCount = 0
+                    # 3. Xác định danh sách Auditor duy nhất
+                    $auditorGroups = $patrolData | Group-Object auditor_id
 
+                    Write-Host "--- Phát hiện $($auditorGroups.Count) auditor(s). Bắt đầu gửi phiếu tổng kết..." -ForegroundColor Cyan
+
+                    # Chuẩn bị tiêu đề dùng chung
                     $titlePatrol = [char]0xD83D + [char]0xDCCB + " *PHI" + [char]0x1EBE + "U T" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T MQAA - INSOLE PRODUCTION*"
                     $subTitle = "*(Tu" + [char]0x1EA7 + "n t" + [char]0x1EEB + " " + $mondayDate.ToString("dd/MM") + " " + [char]0x0111 + [char]0x1EBF + "n " + (Get-Date).ToString("dd/MM") + ")*"
-                
-                    $patrolMsg = $titlePatrol + "`n" + $subTitle + "`n" + $L_SEP + "`n"
-                
-                    foreach ($sec in $allSections) {
-                        $secName = $sec.name
-                        $stat = $actualStats | Where-Object { $_.Section -eq $secName }
-                        $diamondEmoji = [char]0xD83D + [char]0xDD39 # 🔹 Small Blue Diamond
-                        
-                        if ($stat) {
-                            $patrolMsg += $diamondEmoji + " **" + $secName + "**: " + $stat.AvgScore + "%`n"
-                            $totalScoreSum += $stat.AvgScore
-                            $scoreCount++
-                        }
-                        else {
-                            $patrolMsg += $diamondEmoji + " **" + $secName + "**: ...`n"
-                        }
-                    }
+                    $diamondEmoji = [char]0xD83D + [char]0xDD39  # 🔹
+                    $userEmoji = [char]0xD83D + [char]0xDC64      # 👤
+                    $starEmoji = [char]0xD83D + [char]0xDCAF      # 💯
 
-                    $totalAvg = if ($scoreCount -gt 0) { [Math]::Round($totalScoreSum / $scoreCount, 1) } else { 0 }
-
-                    $patrolMsg += $L_SEP + "`n" + [char]0xD83D + [char]0xDCAF + " **Overall Performance: " + $totalAvg + "%**"
-                
-                    # Gửi tin nhắn vào Zalo
+                    # Chuyển sang nhóm Zalo cho Patrol (chỉ cần 1 lần)
                     Write-Host "--- Đang chuyển sang nhóm Zalo: $PATROL_ZALO_GROUP"
                     [System.Windows.Forms.SendKeys]::SendWait("^f")
                     Start-Sleep -Milliseconds 800
@@ -362,9 +358,53 @@ public static extern bool IsIconic(IntPtr hWnd);
                     [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
                     Start-Sleep -Seconds 1
 
-                    Write-Host "--- Đang gửi Phiếu Tổng Kết Tuần..."
-                    Send-ZaloMessage -text $patrolMsg
-                    Write-Host ">>> Đã gửi Phiếu Tổng Kết MQAA tuần thành công." -ForegroundColor Green
+                    # 4. Gửi từng Auditor riêng biệt
+                    foreach ($auditorGroup in $auditorGroups) {
+                        $auditorName = $auditorGroup.Group[0].auditor_name
+                        $auditorId = $auditorGroup.Group[0].auditor_id
+
+                        Write-Host "--- Đang tạo phiếu cho Auditor: $auditorName ($auditorId)..."
+
+                        # Lấy danh sách section mà auditor này đã chấm (theo date|section key)
+                        $auditorSections = @{}
+                        foreach ($record in $auditorGroup.Group) {
+                            $key = "$($record.date)|$($record.section)"
+                            # Dùng điểm trung bình nếu cùng ngày+section có nhiều auditor
+                            $auditorSections[$record.section] = $dateSectionAvg[$key]
+                        }
+
+                        # Xây dựng tin nhắn cho Auditor này
+                        $patrolMsg = $titlePatrol + "`n"
+                        $patrolMsg += $userEmoji + " *Auditor: " + $auditorName + " (" + $auditorId + ")*`n"
+                        $patrolMsg += $subTitle + "`n" + $L_SEP + "`n"
+
+                        $totalScoreSum = 0
+                        $scoreCount = 0
+
+                        foreach ($sec in $allSections) {
+                            $secName = $sec.name
+                            if ($auditorSections.ContainsKey($secName)) {
+                                $score = $auditorSections[$secName]
+                                $patrolMsg += $diamondEmoji + " **" + $secName + "**: " + $score + "%`n"
+                                $totalScoreSum += $score
+                                $scoreCount++
+                            }
+                            else {
+                                $patrolMsg += $diamondEmoji + " **" + $secName + "**: ...`n"
+                            }
+                        }
+
+                        $totalAvg = if ($scoreCount -gt 0) { [Math]::Round($totalScoreSum / $scoreCount, 1) } else { 0 }
+                        $patrolMsg += $L_SEP + "`n" + $starEmoji + " **Overall Performance: " + $totalAvg + "%**"
+
+                        # Gửi phiếu của Auditor này
+                        Write-Host "--- Đang gửi phiếu của $auditorName..."
+                        Send-ZaloMessage -text $patrolMsg
+                        Write-Host ">>> Đã gửi phiếu Auditor $auditorName thành công." -ForegroundColor Green
+                        Start-Sleep -Seconds 1
+                    }
+
+                    Write-Host ">>> Đã gửi xong tất cả $($auditorGroups.Count) phiếu tổng kết." -ForegroundColor Green
 
                     # Đánh dấu đã gửi (Cập nhật cột last_patrol_report_monday)
                     $updatePatrolBody = '{"last_patrol_report_monday":"' + $mondayStr + '"}'

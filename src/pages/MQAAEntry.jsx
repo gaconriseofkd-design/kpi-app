@@ -146,8 +146,8 @@ export default function MQAAEntry() {
         img.src = event.target.result;
         img.onload = () => {
           const canvas = document.createElement("canvas");
-          const MAX_WIDTH = 1200;
-          const MAX_HEIGHT = 1200;
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
           let width = img.width;
           let height = img.height;
 
@@ -183,13 +183,44 @@ export default function MQAAEntry() {
               }
             },
             "image/jpeg",
-            0.75
+            0.6
           );
         };
         img.onerror = (err) => reject(err);
       };
       reader.onerror = (err) => reject(err);
     });
+  };
+
+  // Helper: upload a single image with retry logic
+  const uploadWithRetry = async (file, maxRetries = 3) => {
+    const compressedFile = await compressImage(file);
+    const fileName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
+
+    let lastError = null;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("mqaa-images")
+          .upload(fileName, compressedFile);
+
+        if (uploadError) throw uploadError;
+
+        const { data: publicUrlData } = supabase.storage
+          .from("mqaa-images")
+          .getPublicUrl(fileName);
+
+        return publicUrlData.publicUrl;
+      } catch (err) {
+        lastError = err;
+        console.warn(`Upload attempt ${attempt}/${maxRetries} failed:`, err.message);
+        if (attempt < maxRetries) {
+          // Exponential backoff: 1s, 2s, 4s...
+          await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt - 1)));
+        }
+      }
+    }
+    throw lastError;
   };
 
   const handleSubmit = async (e) => {
@@ -200,25 +231,23 @@ export default function MQAAEntry() {
     try {
       let image_urls = [];
 
-      // 1. Upload all images
+      // 1. Upload all images with retry
       if (formData.images.length > 0) {
-        for (const file of formData.images) {
-          const compressedFile = await compressImage(file);
-          const fileName = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}.jpg`;
-
-          const { data: uploadData, error: uploadError } = await supabase.storage
-            .from("mqaa-images")
-            .upload(fileName, compressedFile);
-
-          if (uploadError) throw uploadError;
-
-          const { data: publicUrlData } = supabase.storage
-            .from("mqaa-images")
-            .getPublicUrl(fileName);
-
-          image_urls.push(publicUrlData.publicUrl);
+        for (let i = 0; i < formData.images.length; i++) {
+          setMessage({ type: "info", text: `Đang tải ảnh ${i + 1}/${formData.images.length}...` });
+          try {
+            const url = await uploadWithRetry(formData.images[i]);
+            image_urls.push(url);
+          } catch (uploadErr) {
+            const errMsg = uploadErr.message === "Load failed"
+              ? `Ảnh ${i + 1} tải lên thất bại do lỗi mạng (Load failed). Hãy kiểm tra kết nối internet và thử lại.`
+              : `Ảnh ${i + 1} tải lên thất bại: ${uploadErr.message}`;
+            throw new Error(errMsg);
+          }
         }
       }
+
+      setMessage({ type: "info", text: "Đang lưu dữ liệu..." });
 
       // 2. Insert record into mqaa_logs
       const { error: insertError } = await supabase.from("mqaa_logs").insert([
@@ -382,7 +411,7 @@ export default function MQAAEntry() {
       )}
 
       {message.text && (
-        <div className={`p-3 mb-4 rounded-lg text-sm font-medium ${message.type === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+        <div className={`p-3 mb-4 rounded-lg text-sm font-medium ${message.type === 'success' ? 'bg-green-100 text-green-700' : message.type === 'info' ? 'bg-blue-100 text-blue-700' : 'bg-red-100 text-red-700'}`}>
           {message.text}
         </div>
       )}

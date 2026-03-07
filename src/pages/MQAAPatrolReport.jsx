@@ -35,7 +35,7 @@ export default function MQAAPatrolReport() {
                         unique.push({ id: item.auditor_id, name: item.auditor_name, label });
                     }
                 });
-                setAuditors(unique);
+                 setAuditors(unique);
             }
         };
         fetchAuditors();
