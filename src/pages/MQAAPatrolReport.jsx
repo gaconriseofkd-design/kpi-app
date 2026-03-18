@@ -122,8 +122,9 @@ export default function MQAAPatrolReport() {
 
         // Data Rows
         record.evaluation_data.forEach((item) => {
-            const scoreVal = (!item.is_header && item.score !== null && item.score !== undefined && item.score !== "") ? Number(item.score) : "";
-            const levelVal = (!item.is_header && item.level !== null && item.level !== undefined && item.level !== "") ? Number(item.level) : "";
+            const isHeader = item.is_header || item.isHeader;
+            const scoreVal = (!isHeader && item.score !== null && item.score !== undefined && item.score !== "") ? Number(item.score) : "";
+            const levelVal = (!isHeader && item.level !== null && item.level !== undefined && item.level !== "") ? Number(item.level) : "";
 
             const englishText = item.sub_label || item.subLabel || criteriaMap[item.no] || "";
 
@@ -131,7 +132,7 @@ export default function MQAAPatrolReport() {
                 item.no,
                 englishText ? {
                     richText: [
-                        { text: item.label, font: { bold: !!item.is_header, size: 10, color: { argb: 'FF000000' } } },
+                        { text: item.label, font: { bold: !!isHeader, size: 10, color: { argb: 'FF000000' } } },
                         { text: "\n" + englishText, font: { italic: true, size: 9, color: { argb: 'FF2563EB' } } }
                     ]
                 } : item.label,
@@ -142,7 +143,7 @@ export default function MQAAPatrolReport() {
             ]);
 
             // Highlight main headers
-            if (item.is_header) {
+            if (isHeader) {
                 row.eachCell((cell, colNumber) => {
                     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFDBA74" } }; // Orange
                     // Only apply cell-level font bold if it's not the rich-text criteria cell to avoid overwriting rich styles

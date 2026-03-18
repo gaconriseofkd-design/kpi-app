@@ -303,8 +303,9 @@ export default function MQAAPatrolDashboard() {
                 });
 
                 data.evaluation_data.forEach(item => {
-                    const scoreVal = (!item.is_header && item.score !== null && item.score !== undefined && item.score !== "") ? Number(item.score) : "";
-                    const levelVal = (!item.is_header && item.level !== null && item.level !== undefined && item.level !== "") ? Number(item.level) : "";
+                    const isItemHeader = item.is_header || item.isHeader;
+                    const scoreVal = (!isItemHeader && item.score !== null && item.score !== undefined && item.score !== "") ? Number(item.score) : "";
+                    const levelVal = (!isItemHeader && item.level !== null && item.level !== undefined && item.level !== "") ? Number(item.level) : "";
 
                     const englishText = item.sub_label || item.subLabel || criteriaMap[item.no] || "";
 
@@ -322,7 +323,7 @@ export default function MQAAPatrolDashboard() {
                         item.description || ""
                     ]);
 
-                    if (item.is_header) {
+                    if (isItemHeader) {
                         r.eachCell((c, colNumber) => {
                             c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDBA74' } };
                             if (colNumber !== 2) {
