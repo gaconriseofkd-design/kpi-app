@@ -106,6 +106,11 @@ export default function MQAAPatrolReport() {
         perfCell.font = { bold: true, color: { argb: "FFEF4444" } };
         perfCell.numFmt = '0%';
 
+        // Fetch subLabel if missing (for old records)
+        const { data: dbCriteria } = await supabase.from("mqaa_patrol_criteria").select("no, sub_label").eq("section_id", record.section);
+        const criteriaMap = {};
+        (dbCriteria || []).forEach(c => criteriaMap[c.no] = c.sub_label);
+
         // Table Header
         const headerRow = worksheet.getRow(9);
         headerRow.values = ["No.", "Criteria", "Score", "Level", "Image Link", "Description"];
@@ -120,9 +125,11 @@ export default function MQAAPatrolReport() {
             const scoreVal = (item.score !== null && item.score !== undefined && item.score !== "") ? Number(item.score) : "";
             const levelVal = (item.level !== null && item.level !== undefined && item.level !== "") ? Number(item.level) : "";
 
+            const englishText = item.sub_label || item.subLabel || criteriaMap[item.no] || "";
+
             const row = worksheet.addRow([
                 item.no,
-                item.label + (item.sub_label || item.subLabel ? "\n" + (item.sub_label || item.subLabel) : ""),
+                item.label + (englishText ? "\n" + englishText : ""),
                 scoreVal,
                 levelVal,
                 item.image_url ? { text: "Link hình ảnh", hyperlink: item.image_url } : "",

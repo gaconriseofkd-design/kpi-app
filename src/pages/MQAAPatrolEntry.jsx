@@ -243,6 +243,7 @@ export default function MQAAPatrolEntry() {
                 evaluation_data: rowsWithRemoteUrls.map(r => ({
                     no: r.no,
                     label: r.label,
+                    sub_label: r.subLabel || r.sub_label || "",
                     is_header: r.isHeader,
                     score: r.score,
                     level: r.level,

@@ -252,7 +252,7 @@ export default function MQAAPatrolDashboard() {
             }
         });
 
-        logsToExport.forEach(data => {
+        for (const data of logsToExport) {
             const id = data.section;
             if (data.evaluation_data) {
                 // Đảm bảo tên sheet không trùng và không chứa ký tự cấm
@@ -290,6 +290,10 @@ export default function MQAAPatrolDashboard() {
                 dPerfRow.getCell(3).numFmt = '0%';
                 detailSheet.addRow([]);
 
+                const { data: dbCriteria } = await supabase.from("mqaa_patrol_criteria").select("no, sub_label").eq("section_id", id);
+                const criteriaMap = {};
+                (dbCriteria || []).forEach(c => criteriaMap[c.no] = c.sub_label);
+
                 const dHeaderRow = detailSheet.addRow(["No.", "Criteria", "Score", "Level", "Image Link", "Description"]);
                 dHeaderRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
                 dHeaderRow.eachCell(c => {
@@ -302,9 +306,11 @@ export default function MQAAPatrolDashboard() {
                     const scoreVal = (item.score !== null && item.score !== undefined && item.score !== "") ? Number(item.score) : "";
                     const levelVal = (item.level !== null && item.level !== undefined && item.level !== "") ? Number(item.level) : "";
 
+                    const englishText = item.sub_label || item.subLabel || criteriaMap[item.no] || "";
+
                     const r = detailSheet.addRow([
                         item.no,
-                        item.label + (item.sub_label || item.subLabel ? "\n" + (item.sub_label || item.subLabel) : ""),
+                        item.label + (englishText ? "\n" + englishText : ""),
                         scoreVal,
                         levelVal,
                         item.image_url ? { text: "Link hình ảnh", hyperlink: item.image_url } : "",
@@ -342,7 +348,7 @@ export default function MQAAPatrolDashboard() {
                 dTotalRow.getCell(2).alignment = { horizontal: 'center' };
                 dTotalRow.getCell(6).numFmt = '0%';
             }
-        });
+        }
 
         const buffer = await workbook.xlsx.writeBuffer();
         saveAs(new Blob([buffer]), `MQAA_Summary_${selectedAuditorId || 'All'}_${selectedDates[0]}${selectedDates.length > 1 ? '_multi' : ''}.xlsx`);
