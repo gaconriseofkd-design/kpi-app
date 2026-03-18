@@ -122,8 +122,8 @@ export default function MQAAPatrolReport() {
 
         // Data Rows
         record.evaluation_data.forEach((item) => {
-            const scoreVal = (item.score !== null && item.score !== undefined && item.score !== "") ? Number(item.score) : "";
-            const levelVal = (item.level !== null && item.level !== undefined && item.level !== "") ? Number(item.level) : "";
+            const scoreVal = (!item.is_header && item.score !== null && item.score !== undefined && item.score !== "") ? Number(item.score) : "";
+            const levelVal = (!item.is_header && item.level !== null && item.level !== undefined && item.level !== "") ? Number(item.level) : "";
 
             const englishText = item.sub_label || item.subLabel || criteriaMap[item.no] || "";
 
