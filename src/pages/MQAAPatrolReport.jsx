@@ -129,7 +129,12 @@ export default function MQAAPatrolReport() {
 
             const row = worksheet.addRow([
                 item.no,
-                item.label + (englishText ? "\n" + englishText : ""),
+                englishText ? {
+                    richText: [
+                        { text: item.label, font: { bold: !!item.is_header, size: 10, color: { argb: 'FF000000' } } },
+                        { text: "\n" + englishText, font: { italic: true, size: 9, color: { argb: 'FF2563EB' } } }
+                    ]
+                } : item.label,
                 scoreVal,
                 levelVal,
                 item.image_url ? { text: "Link hình ảnh", hyperlink: item.image_url } : "",
@@ -138,9 +143,12 @@ export default function MQAAPatrolReport() {
 
             // Highlight main headers
             if (item.is_header) {
-                row.eachCell((cell) => {
+                row.eachCell((cell, colNumber) => {
                     cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFDBA74" } }; // Orange
-                    cell.font = { bold: true };
+                    // Only apply cell-level font bold if it's not the rich-text criteria cell to avoid overwriting rich styles
+                    if (colNumber !== 2) {
+                        cell.font = { bold: true };
+                    }
                 });
             }
 

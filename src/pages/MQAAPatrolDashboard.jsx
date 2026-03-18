@@ -310,7 +310,12 @@ export default function MQAAPatrolDashboard() {
 
                     const r = detailSheet.addRow([
                         item.no,
-                        item.label + (englishText ? "\n" + englishText : ""),
+                        englishText ? {
+                            richText: [
+                                { text: item.label, font: { bold: !!item.is_header, size: 10, color: { argb: 'FF000000' } } },
+                                { text: "\n" + englishText, font: { italic: true, size: 9, color: { argb: 'FF2563EB' } } }
+                            ]
+                        } : item.label,
                         scoreVal,
                         levelVal,
                         item.image_url ? { text: "Link hình ảnh", hyperlink: item.image_url } : "",
@@ -318,9 +323,11 @@ export default function MQAAPatrolDashboard() {
                     ]);
 
                     if (item.is_header) {
-                        r.eachCell(c => {
+                        r.eachCell((c, colNumber) => {
                             c.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFDBA74' } };
-                            c.font = { bold: true };
+                            if (colNumber !== 2) {
+                                c.font = { bold: true };
+                            }
                         });
                     }
 
