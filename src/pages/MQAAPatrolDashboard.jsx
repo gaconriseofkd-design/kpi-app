@@ -299,11 +299,14 @@ export default function MQAAPatrolDashboard() {
                 });
 
                 data.evaluation_data.forEach(item => {
+                    const scoreVal = (item.score !== null && item.score !== undefined && item.score !== "") ? Number(item.score) : "";
+                    const levelVal = (item.level !== null && item.level !== undefined && item.level !== "") ? Number(item.level) : "";
+
                     const r = detailSheet.addRow([
                         item.no,
-                        item.label,
-                        item.score || "",
-                        item.level || "",
+                        item.label + (item.sub_label || item.subLabel ? "\n" + (item.sub_label || item.subLabel) : ""),
+                        scoreVal,
+                        levelVal,
                         item.image_url ? { text: "Link hình ảnh", hyperlink: item.image_url } : "",
                         item.description || ""
                     ]);
