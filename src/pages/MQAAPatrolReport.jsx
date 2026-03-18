@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import ExcelJS from "exceljs";
@@ -22,20 +22,15 @@ export default function MQAAPatrolReport() {
     const [selectedRecord, setSelectedRecord] = useState(null);
     const [modalMode, setModalMode] = useState("edit"); // 'edit' or 'delete'
 
-    useState(() => {
+    useEffect(() => {
         const fetchAuditors = async () => {
-            const { data } = await supabase.from("mqaa_patrol_logs").select("auditor_name, auditor_id");
+            const { data } = await supabase.from("mqaa_patrol_auditors").select("*");
             if (data) {
-                const unique = [];
-                const seen = new Set();
-                data.forEach(item => {
-                    const label = `${item.auditor_id} - ${item.auditor_name}`;
-                    if (!seen.has(label)) {
-                        seen.add(label);
-                        unique.push({ id: item.auditor_id, name: item.auditor_name, label });
-                    }
-                });
-                 setAuditors(unique);
+                setAuditorList(data.map(a => ({
+                    id: a.id,
+                    name: a.name,
+                    label: `${a.id} - ${a.name}`
+                })));
             }
         };
         fetchAuditors();
@@ -239,7 +234,7 @@ export default function MQAAPatrolReport() {
                         onChange={(e) => setFilters({ ...filters, auditor: e.target.value })}
                     >
                         <option value="All">All Auditors</option>
-                        {auditors.map((a) => (
+                        {auditorList.map((a) => (
                             <option key={a.id} value={a.id}>{a.label}</option>
                         ))}
                     </select>

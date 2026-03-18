@@ -10,7 +10,7 @@ import {
 
 export default function MQAAPatrolDashboard() {
     const navigate = useNavigate();
-    const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
+    const [selectedDates, setSelectedDates] = useState([new Date().toISOString().split("T")[0]]);
     const [selectedAuditorId, setSelectedAuditorId] = useState("");
     const [availableAuditors, setAvailableAuditors] = useState([]);
     const [summaryData, setSummaryData] = useState({});
@@ -33,32 +33,19 @@ export default function MQAAPatrolDashboard() {
             await fetchAvailableAuditors();
         }
         loadAll();
-    }, [selectedDate]);
+    }, []);
 
     useEffect(() => {
         fetchData();
-    }, [selectedDate, selectedAuditorId]);
+    }, [selectedDates, selectedAuditorId]);
 
     const fetchAvailableAuditors = async () => {
-        const { data, error } = await supabase
-            .from("mqaa_patrol_logs")
-            .select("auditor_id, auditor_name")
-            .eq("date", selectedDate);
+        const { data } = await supabase
+            .from("mqaa_patrol_auditors")
+            .select("id, name");
 
         if (data) {
-            const unique = [];
-            const ids = new Set();
-            data.forEach(item => {
-                if (!ids.has(item.auditor_id)) {
-                    ids.add(item.auditor_id);
-                    unique.push(item);
-                }
-            });
-            setAvailableAuditors(unique);
-            // If current selected ID is not in new list, reset it
-            if (!ids.has(selectedAuditorId)) {
-                setSelectedAuditorId("");
-            }
+            setAvailableAuditors(data.map(a => ({ auditor_id: a.id, auditor_name: a.name })));
         }
     };
 
@@ -68,12 +55,16 @@ export default function MQAAPatrolDashboard() {
     };
 
     const fetchData = async () => {
+        if (selectedDates.length === 0) {
+            setSummaryData({});
+            return;
+        }
         setLoading(true);
         try {
             let query = supabase
                 .from("mqaa_patrol_logs")
-                .select("section, overall_performance, total_score, total_level, auditor_name, auditor_id, id, evaluation_data")
-                .eq("date", selectedDate);
+                .select("section, overall_performance, total_score, total_level, auditor_name, auditor_id, id, evaluation_data, date")
+                .in("date", selectedDates);
 
             if (selectedAuditorId) {
                 query = query.eq("auditor_id", selectedAuditorId);
@@ -92,7 +83,7 @@ export default function MQAAPatrolDashboard() {
             const summary = {};
             Object.keys(grouped).forEach(sectionId => {
                 const logs = grouped[sectionId];
-                if (logs.length === 1) {
+                if (logs.length === 1 && !selectedAuditorId) {
                     summary[sectionId] = logs[0];
                 } else {
                     const avgScore = logs.reduce((sum, l) => sum + (Number(l.total_score) || 0), 0) / logs.length;
@@ -100,23 +91,30 @@ export default function MQAAPatrolDashboard() {
                     const avgPerf = avgScore > 0 ? (avgLevel / avgScore) * 100 : 0;
 
                     summary[sectionId] = {
-                        ...logs[logs.length - 1], // Dữ liệu metadata lấy từ bản mới nhất
-                        total_score: avgScore,
-                        total_level: avgLevel,
+                        ...logs[logs.length - 1], // Metadata from newest
+                        total_score: avgScore.toFixed(1),
+                        total_level: avgLevel.toFixed(1),
                         overall_performance: avgPerf.toFixed(0),
                         auditor_name: [...new Set(logs.map(l => l.auditor_name))].join(", "),
                         auditor_id: [...new Set(logs.map(l => l.auditor_id))].join(", "),
                         is_average: true,
-                        logs: logs // Lưu lại danh sách log để xuất Excel chi tiết
+                        logs: logs, // Save list for detail export
+                        date_info: [...new Set(logs.map(l => l.date))].sort().join(", ")
                     };
                 }
             });
             setSummaryData(summary);
 
-            const { data: histData, error: histError } = await supabase
+            let histQuery = supabase
                 .from("mqaa_patrol_logs")
                 .select("date, section, overall_performance")
                 .order("date", { ascending: true });
+            
+            if (selectedAuditorId) {
+                histQuery = histQuery.eq("auditor_id", selectedAuditorId);
+            }
+
+            const { data: histData, error: histError } = await histQuery;
 
             if (histError) throw histError;
 
@@ -124,8 +122,11 @@ export default function MQAAPatrolDashboard() {
             const trend = dates.map(date => {
                 const dayPoints = { name: date };
                 sections.forEach(s => {
-                    const match = histData.find(d => d.date === date && d.section === s.id);
-                    if (match) dayPoints[s.name] = match.overall_performance;
+                    const matches = histData.filter(d => d.date === date && d.section === s.id);
+                    if (matches.length > 0) {
+                        const avg = matches.reduce((sum, m) => sum + (Number(m.overall_performance) || 0), 0) / matches.length;
+                        dayPoints[s.name] = avg.toFixed(0);
+                    }
                 });
                 return dayPoints;
             });
@@ -150,7 +151,7 @@ export default function MQAAPatrolDashboard() {
             }
         });
         const performance = score > 0 ? ((level / score) * 100).toFixed(0) : 0;
-        return { level, score, performance };
+        return { level: level.toFixed(1), score: score.toFixed(1), performance };
     }, [summaryData, SECTION_IDS]);
 
     const topSectionData = useMemo(() => {
@@ -196,7 +197,7 @@ export default function MQAAPatrolDashboard() {
 
         worksheet.addRow(["Auditor:", auditors]);
         worksheet.addRow(["ID:", auditorIds]);
-        worksheet.addRow(["Date of Audit:", selectedDate]);
+        worksheet.addRow(["Date of Audit:", selectedDates.sort().join(", ")]);
         worksheet.addRow(["Production:", "Insole"]);
 
         // Header for subsections
@@ -282,7 +283,7 @@ export default function MQAAPatrolDashboard() {
                 detailSheet.addRow([]);
                 detailSheet.addRow(["Auditor:", data.auditor_name]);
                 detailSheet.addRow(["ID:", data.auditor_id]);
-                detailSheet.addRow(["Date of Audit:", selectedDate]);
+                detailSheet.addRow(["Date of Audit:", data.date || selectedDates.sort().join(", ")]);
                 detailSheet.addRow(["Section:", SECTION_MAP[id]]);
                 const dPerfRow = detailSheet.addRow(["Overall Performance:", "", Number(data.overall_performance) / 100]);
                 dPerfRow.getCell(3).font = { bold: true, color: { argb: "FFEF4444" } };
@@ -341,7 +342,7 @@ export default function MQAAPatrolDashboard() {
         });
 
         const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), `MQAA_Summary_${selectedAuditorId || 'All'}_${selectedDate}.xlsx`);
+        saveAs(new Blob([buffer]), `MQAA_Summary_${selectedAuditorId || 'All'}_${selectedDates[0]}${selectedDates.length > 1 ? '_multi' : ''}.xlsx`);
     };
 
     return (
@@ -372,18 +373,49 @@ export default function MQAAPatrolDashboard() {
                         )}
                     </div>
 
-                    <div className="flex items-center gap-4">
-                        <select
-                            value={selectedAuditorId}
-                            onChange={(e) => setSelectedAuditorId(e.target.value)}
-                            className="bg-slate-100 border-none rounded-xl px-4 py-2 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500"
-                        >
-                            <option value="">Tất cả Auditor ID</option>
-                            {availableAuditors.map(a => (
-                                <option key={a.auditor_id} value={a.auditor_id}>{a.auditor_id} - {a.auditor_name}</option>
-                            ))}
-                        </select>
-                        <input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="bg-slate-100 border-none rounded-xl px-4 py-2 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500" />
+                    <div className="flex flex-wrap items-center gap-4">
+                        <div className="flex flex-col gap-1">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Auditor Filter</span>
+                            <select
+                                value={selectedAuditorId}
+                                onChange={(e) => setSelectedAuditorId(e.target.value)}
+                                className="bg-slate-100 border-none rounded-xl px-4 py-2 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500 min-w-[200px]"
+                            >
+                                <option value="">Tất cả Auditor ID</option>
+                                {availableAuditors.map(a => (
+                                    <option key={a.auditor_id} value={a.auditor_id}>{a.auditor_id} - {a.auditor_name}</option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="flex flex-col gap-1">
+                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest pl-1">Audit Dates</span>
+                            <div className="flex items-center gap-2">
+                                <div className="flex flex-wrap gap-2 max-w-[400px]">
+                                    {selectedDates.sort().map(date => (
+                                        <div key={date} className="flex items-center gap-1 bg-indigo-100 text-indigo-700 px-3 py-1.5 rounded-lg text-xs font-black">
+                                            {date}
+                                            <button 
+                                                onClick={() => setSelectedDates(selectedDates.filter(d => d !== date))}
+                                                className="hover:text-red-500"
+                                            >
+                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {selectedDates.length === 0 && <span className="text-xs text-slate-400 font-bold py-1.5">No dates selected</span>}
+                                </div>
+                                <input 
+                                    type="date" 
+                                    className="bg-slate-100 border-none rounded-xl px-4 py-1.5 font-bold text-slate-700 focus:ring-2 focus:ring-indigo-500"
+                                    onChange={(e) => {
+                                        if (e.target.value && !selectedDates.includes(e.target.value)) {
+                                            setSelectedDates([...selectedDates, e.target.value]);
+                                        }
+                                    }}
+                                />
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -409,7 +441,7 @@ export default function MQAAPatrolDashboard() {
                                             {[...new Set(SECTION_IDS.flatMap(id => summaryData[id]?.auditor_id?.split(", ") || []))].join(", ") || "***"}
                                         </td>
                                     </tr>
-                                    <tr className="border-b border-slate-100"><td className="p-4 font-bold text-slate-500">Date of Audit:</td><td colSpan="3" className="p-4 text-slate-900 font-black">{selectedDate}</td></tr>
+                                     <tr className="border-b border-slate-100"><td className="p-4 font-bold text-slate-500">Date of Audit:</td><td colSpan="3" className="p-4 text-slate-900 font-black">{selectedDates.sort().join(", ")}</td></tr>
                                     <tr className="border-b border-slate-100"><td className="p-4 font-bold text-slate-500">Production:</td><td colSpan="3" className="p-4 text-slate-900 font-black">Insole</td></tr>
 
                                     <tr className="bg-slate-50 text-red-600 font-black uppercase text-[10px] tracking-wider">
