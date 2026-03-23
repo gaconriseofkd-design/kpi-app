@@ -1,6 +1,6 @@
 import { useState } from "react";
 
-export default function PasswordModal({ isOpen, onClose, onSuccess, initialTitle = "Xác nhận mật mã" }) {
+export default function PasswordModal({ isOpen, onClose, onSuccess, initialTitle = "Xác nhận mật mã", correctPassword = "04672" }) {
     const [password, setPassword] = useState("");
     const [error, setError] = useState(false);
 
@@ -8,7 +8,7 @@ export default function PasswordModal({ isOpen, onClose, onSuccess, initialTitle
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (password === "04672") {
+        if (password === correctPassword) {
             onSuccess();
             setPassword("");
             setError(false);

@@ -1,5 +1,6 @@
 // src/pages/MQAADashboard.jsx
 import { useState, useEffect, useMemo } from "react";
+import PasswordModal from "../components/PasswordModal";
 import { supabase } from "../lib/supabaseClient";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
@@ -20,6 +21,8 @@ export default function MQAADashboard() {
     const [exporting, setExporting] = useState(false);
     const [exportProgress, setExportProgress] = useState(0);
     const [previewData, setPreviewData] = useState({ images: [], index: 0, isOpen: false });
+    const [passwordModal, setPasswordModal] = useState({ isOpen: false, logId: null });
+    const [deleting, setDeleting] = useState(false);
 
     const [filters, setFilters] = useState({
         startDate: new Date(new Date().setDate(new Date().getDate() - 7)).toISOString().slice(0, 10),
@@ -43,6 +46,26 @@ export default function MQAADashboard() {
             alert("Lỗi tải dữ liệu: " + error.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDelete = async () => {
+        if (!passwordModal.logId) return;
+        setDeleting(true);
+        try {
+            const { error } = await supabase
+                .from("mqaa_logs")
+                .delete()
+                .eq("id", passwordModal.logId);
+
+            if (error) throw error;
+            setLogs(logs.filter(l => l.id !== passwordModal.logId));
+        } catch (error) {
+            console.error("Error deleting log:", error);
+            alert("Lỗi khi xóa: " + error.message);
+        } finally {
+            setDeleting(false);
+            setPasswordModal({ isOpen: false, logId: null });
         }
     };
 
@@ -283,6 +306,7 @@ export default function MQAADashboard() {
                                     <th className="p-4 font-semibold text-gray-600">Loại</th>
                                     <th className="p-4 font-semibold text-gray-600">Mô tả</th>
                                     <th className="p-4 font-semibold text-gray-600 text-center">Ảnh</th>
+                                    <th className="p-4 font-semibold text-gray-600 text-center">Hành động</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -319,6 +343,17 @@ export default function MQAADashboard() {
                                                             <span className="text-gray-400 text-xs italic">Không có ảnh</span>
                                                         )}
                                                     </div>
+                                                </td>
+                                                <td className="p-4 text-center">
+                                                    <button
+                                                        onClick={() => setPasswordModal({ isOpen: true, logId: log.id })}
+                                                        className="p-2 text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                                                        title="Xóa dòng này"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                        </svg>
+                                                    </button>
                                                 </td>
                                             </tr>
                                         ))
@@ -449,6 +484,14 @@ export default function MQAADashboard() {
                     </div>
                 </div>
             )}
+
+            <PasswordModal
+                isOpen={passwordModal.isOpen}
+                onClose={() => setPasswordModal({ isOpen: false, logId: null })}
+                onSuccess={handleDelete}
+                correctPassword="admin"
+                initialTitle="Xác nhận xóa"
+            />
         </div>
     );
 }
