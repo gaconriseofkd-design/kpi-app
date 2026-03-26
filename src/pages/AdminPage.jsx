@@ -71,7 +71,7 @@ function AdminMain() {
   
   const pageSize = 15;
   const [page, setPage] = useState(1);
-
+  const bulkDeleteRef = useRef(null);
   // --- STATE CHO CHỨC NĂNG XÓA THEO SECTION ---
   const [sectionToDelete, setSectionToDelete] = useState("");
   
@@ -492,6 +492,76 @@ function AdminMain() {
     }
   };
 
+  const deleteByMsnvList = async (msnvs) => {
+    if (!msnvs || msnvs.length === 0) return;
+    
+    const confirmMsg = `CẢNH BÁO: Bạn có chắc chắn muốn xóa ${msnvs.length} nhân viên theo danh sách MSNV vừa tải lên không?`;
+    if (!window.confirm(confirmMsg)) return;
+    
+    setLoading(true);
+    let deletedCount = 0;
+    const chunkSize = 100;
+    
+    try {
+      for (let i = 0; i < msnvs.length; i += chunkSize) {
+        const chunk = msnvs.slice(i, i + chunkSize);
+        const { error, count } = await supabase
+          .from("users")
+          .delete({ count: 'exact' })
+          .in("msnv", chunk);
+        
+        if (error) throw error;
+        deletedCount += (count || 0);
+      }
+      alert(`Đã xóa thành công ${deletedCount}/${msnvs.length} nhân viên.`);
+      loadUsers();
+    } catch (err) {
+      console.error(err);
+      alert("Lỗi khi xóa hàng loạt: " + (err.message || err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBulkDeleteUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: "binary" });
+        const wsname = wb.SheetNames[0];
+        const ws = wb.Sheets[wsname];
+        const data = XLSX.utils.sheet_to_json(ws);
+
+        if (!data || data.length === 0) return alert("File Excel không có dữ liệu.");
+
+        const msnvs = data.map(row => {
+          let msnvVal = null;
+          Object.keys(row).forEach(key => {
+            if (mapHeaderToField(key) === "msnv") {
+              msnvVal = String(row[key]).trim();
+            }
+          });
+          return msnvVal;
+        }).filter(Boolean);
+
+        if (msnvs.length === 0) {
+          return alert("Không tìm thấy cột MSNV hợp lệ trong file.");
+        }
+
+        deleteByMsnvList(msnvs);
+      } catch (err) {
+        alert("Lỗi xử lý file: " + err.message);
+      } finally {
+        e.target.value = null;
+      }
+    };
+    reader.readAsBinaryString(file);
+  };
+
   // --- LOGIC LẤY DANH SÁCH SECTION ĐỘNG ---
   const dynamicSections = useMemo(() => {
     // Lấy tất cả giá trị cột section từ biến 'rows', loại bỏ giá trị trống và trùng lặp
@@ -536,31 +606,57 @@ function AdminMain() {
         {loading && <span className="text-gray-500">Đang tải/xử lý...</span>}
       </div>
       
-      {/* --- GIAO DIỆN XÓA THEO SECTION (ĐÃ CẬP NHẬT ĐỘNG) --- */}
-      <div className="bg-red-50 border border-red-200 p-4 rounded-lg mt-2 shadow-sm">
-        <h3 className="text-red-700 font-bold text-sm mb-2 flex items-center gap-2">
-          ⚠️ Xóa danh sách theo Section (Dọn dẹp trước khi import mới)
-        </h3>
-        
-        <div className="flex flex-wrap items-center gap-3">
-          <select 
-            className="input border-red-300" 
-            value={sectionToDelete} 
-            onChange={(e) => setSectionToDelete(e.target.value)}
-          >
-            <option value="">-- Chọn Section cần xóa --</option>
-            {dynamicSections.map((sec) => (
-                <option key={sec} value={sec}>{sec}</option>
-            ))}
-          </select>
+      {/* --- GIAO DIỆN XÓA THEO SECTION & MSNV --- */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
+        <div className="bg-red-50 border border-red-200 p-4 rounded-lg shadow-sm">
+          <h3 className="text-red-700 font-bold text-sm mb-2 flex items-center gap-2">
+            ⚠️ Xóa danh sách theo Section
+          </h3>
+          
+          <div className="flex flex-wrap items-center gap-3">
+            <select 
+              className="input border-red-300" 
+              value={sectionToDelete} 
+              onChange={(e) => setSectionToDelete(e.target.value)}
+            >
+              <option value="">-- Chọn Section cần xóa --</option>
+              {dynamicSections.map((sec) => (
+                  <option key={sec} value={sec}>{sec}</option>
+              ))}
+            </select>
 
-          <button 
-            onClick={handleDeleteBySection} 
-            disabled={loading || !sectionToDelete}
-            className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded text-sm disabled:opacity-50"
-          >
-            {loading ? "Đang xử lý..." : `Xóa User ${sectionToDelete || ""}`}
-          </button>
+            <button 
+              onClick={handleDeleteBySection} 
+              disabled={loading || !sectionToDelete}
+              className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded text-sm disabled:opacity-50"
+            >
+              {loading ? "Đang xử lý..." : `Xóa User ${sectionToDelete || ""}`}
+            </button>
+          </div>
+        </div>
+
+        <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg shadow-sm">
+          <h3 className="text-orange-700 font-bold text-sm mb-2 flex items-center gap-2">
+            ⚠️ Xóa hàng loạt theo danh sách MSNV (File Excel)
+          </h3>
+          
+          <div className="flex flex-wrap items-center gap-3">
+            <input 
+              type="file" 
+              accept=".xlsx, .xls" 
+              onChange={handleBulkDeleteUpload} 
+              className="hidden" 
+              ref={bulkDeleteRef} 
+            />
+            <button 
+              onClick={() => bulkDeleteRef.current.click()} 
+              disabled={loading}
+              className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded text-sm disabled:opacity-50"
+            >
+              Tải file & Xóa theo MSNV
+            </button>
+            <p className="text-xs text-orange-600 mt-1 italic">* File chỉ cần 1 cột MSNV</p>
+          </div>
         </div>
       </div>
 
