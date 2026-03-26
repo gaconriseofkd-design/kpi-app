@@ -569,6 +569,22 @@ function AdminMain() {
     XLSX.writeFile(wb, "Form_Xoa_Nhan_Vien.xlsx");
   };
 
+  const downloadUpsertTemplate = () => {
+    const data = [{
+      msnv: "12345",
+      full_name: "Nguyen Van A",
+      section: "PHONG BAN",
+      line: "LINE_01",
+      role: "worker",
+      approver_msnv: "54321",
+      approver_name: "Ten Nguoi Duyet"
+    }];
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "DanhSachNhanVien");
+    XLSX.writeFile(wb, "Form_Import_Nhan_Vien.xlsx");
+  };
+
   // --- LOGIC LẤY DANH SÁCH SECTION ĐỘNG ---
   const dynamicSections = useMemo(() => {
     // Lấy tất cả giá trị cột section từ biến 'rows', loại bỏ giá trị trống và trùng lặp
@@ -577,98 +593,126 @@ function AdminMain() {
   }, [rows]);
 
   return (
-    <div className="p-4 space-y-4">
-      <h2 className="text-xl font-semibold">Quản lý User</h2>
-      
-      <div className="flex flex-wrap items-center gap-3">
-        <button className="btn btn-primary" onClick={addNewRow} disabled={loading}>+ Thêm User mới</button>
-        
-        <input 
-            type="file" 
-            accept=".xlsx, .xls" 
-            onChange={handleFileUpload} 
-            className="hidden" 
-            ref={fileRef} 
-        />
-        <button 
-            className="btn bg-green-500 text-white hover:bg-green-600" 
-            onClick={() => fileRef.current.click()}
-            disabled={loading}
-        >
-            Tải lên từ Excel (Upsert)
-        </button>
-        
-        <button 
-            className="btn bg-indigo-500 text-white hover:bg-indigo-600" 
-            onClick={downloadAllUsers} 
-            disabled={loading}
-        >
-            Tải danh sách User ({rows.length})
-        </button>
-        
-        <button className="btn bg-red-500 text-white hover:bg-red-600 ml-auto" onClick={deleteAllUsers} disabled={loading}>
-            Xóa TOÀN BỘ User (DANGER)
-        </button>
-        
-        {loading && <span className="text-gray-500">Đang tải/xử lý...</span>}
-      </div>
-      
-      {/* --- GIAO DIỆN XÓA THEO SECTION & MSNV --- */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
-        <div className="bg-red-50 border border-red-200 p-4 rounded-lg shadow-sm">
-          <h3 className="text-red-700 font-bold text-sm mb-2 flex items-center gap-2">
-            ⚠️ Xóa danh sách theo Section
-          </h3>
-          
-          <div className="flex flex-wrap items-center gap-3">
-            <select 
-              className="input border-red-300" 
-              value={sectionToDelete} 
-              onChange={(e) => setSectionToDelete(e.target.value)}
-            >
-              <option value="">-- Chọn Section cần xóa --</option>
-              {dynamicSections.map((sec) => (
-                  <option key={sec} value={sec}>{sec}</option>
-              ))}
-            </select>
+    <div className="p-4 space-y-6">
+      <h2 className="text-2xl font-bold text-gray-800">Cài đặt Hệ thống & Quản lý User</h2>
 
-            <button 
-              onClick={handleDeleteBySection} 
-              disabled={loading || !sectionToDelete}
-              className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded text-sm disabled:opacity-50"
-            >
-              {loading ? "Đang xử lý..." : `Xóa User ${sectionToDelete || ""}`}
-            </button>
-          </div>
+      {/* PHẦN 1: CẬP NHẬT DANH SÁCH */}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
+          <h3 className="text-lg font-semibold text-gray-700 flex items-center gap-2">
+            📥 Cập nhật danh sách nhân viên
+          </h3>
         </div>
-
-        <div className="bg-orange-50 border border-orange-200 p-4 rounded-lg shadow-sm">
-          <h3 className="text-orange-700 font-bold text-sm mb-2 flex items-center gap-2">
-            ⚠️ Xóa hàng loạt theo danh sách MSNV (File Excel)
-          </h3>
+        <div className="p-4 flex flex-wrap items-center gap-3">
+          <button className="btn btn-primary" onClick={addNewRow} disabled={loading}>
+            + Thêm User mới
+          </button>
           
-          <div className="flex flex-wrap items-center gap-3">
-            <input 
+          <input 
               type="file" 
               accept=".xlsx, .xls" 
-              onChange={handleBulkDeleteUpload} 
+              onChange={handleFileUpload} 
               className="hidden" 
-              ref={bulkDeleteRef} 
-            />
-            <button 
-              onClick={() => bulkDeleteRef.current.click()} 
+              ref={fileRef} 
+          />
+          <button 
+              className="btn bg-green-600 text-white hover:bg-green-700" 
+              onClick={() => fileRef.current.click()}
               disabled={loading}
-              className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded text-sm disabled:opacity-50"
-            >
-              Tải file & Xóa theo MSNV
-            </button>
-            <button 
-              onClick={downloadBulkDeleteTemplate}
-              className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded text-sm"
-            >
-              Tải file mẫu (.xlsx)
-            </button>
-            <p className="text-xs text-orange-600 mt-1 italic">* File chỉ cần 1 cột MSNV</p>
+          >
+              Tải lên từ Excel (Upsert)
+          </button>
+          <button 
+              className="btn bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200"
+              onClick={downloadUpsertTemplate}
+          >
+              Tải file mẫu Import
+          </button>
+          
+          <button 
+              className="btn bg-indigo-600 text-white hover:bg-indigo-700" 
+              onClick={downloadAllUsers} 
+              disabled={loading}
+          >
+              Tải danh sách User hiện có ({rows.length})
+          </button>
+
+          {loading && <span className="text-gray-500 animate-pulse ml-2">Đang xử lý...</span>}
+        </div>
+      </div>
+
+      {/* PHẦN 2: XÓA DANH SÁCH */}
+      <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+        <div className="bg-red-50 px-4 py-3 border-b border-red-100">
+          <h3 className="text-lg font-semibold text-red-700 flex items-center gap-2">
+            🗑️ Xóa danh sách nhân viên
+          </h3>
+        </div>
+        <div className="p-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* Xóa theo Section */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-600">Xóa theo Section:</label>
+              <div className="flex gap-2">
+                <select 
+                  className="input flex-1 border-red-200 focus:ring-red-500" 
+                  value={sectionToDelete} 
+                  onChange={(e) => setSectionToDelete(e.target.value)}
+                >
+                  <option value="">-- Chọn Section --</option>
+                  {dynamicSections.map((sec) => (
+                      <option key={sec} value={sec}>{sec}</option>
+                  ))}
+                </select>
+                <button 
+                  onClick={handleDeleteBySection} 
+                  disabled={loading || !sectionToDelete}
+                  className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded disabled:opacity-50 transition-colors"
+                >
+                  Xóa
+                </button>
+              </div>
+            </div>
+
+            {/* Xóa theo MSNV */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-600">Xóa theo danh sách MSNV:</label>
+              <div className="flex flex-wrap gap-2">
+                <input 
+                  type="file" 
+                  accept=".xlsx, .xls" 
+                  onChange={handleBulkDeleteUpload} 
+                  className="hidden" 
+                  ref={bulkDeleteRef} 
+                />
+                <button 
+                  onClick={() => bulkDeleteRef.current.click()} 
+                  disabled={loading}
+                  className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded transition-colors"
+                >
+                  Tải file & Xóa
+                </button>
+                <button 
+                  onClick={downloadBulkDeleteTemplate}
+                  className="bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 py-2 px-3 rounded text-sm"
+                  title="Tải file mẫu xóa"
+                >
+                  Mẫu file (.xlsx)
+                </button>
+              </div>
+              <p className="text-[10px] text-orange-600 italic">File chỉ cần 1 cột MSNV</p>
+            </div>
+
+            {/* Xóa TOÀN BỘ */}
+            <div className="flex items-end justify-end">
+              <button 
+                className="btn bg-red-700 text-white hover:bg-red-800 w-full md:w-auto" 
+                onClick={deleteAllUsers} 
+                disabled={loading}
+              >
+                Xóa TOÀN BỘ User (DANGER)
+              </button>
+            </div>
           </div>
         </div>
       </div>
