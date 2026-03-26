@@ -561,6 +561,13 @@ function AdminMain() {
     };
     reader.readAsBinaryString(file);
   };
+  const downloadBulkDeleteTemplate = () => {
+    const data = [{ msnv: "12345" }];
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "XoaNhanVien");
+    XLSX.writeFile(wb, "Form_Xoa_Nhan_Vien.xlsx");
+  };
 
   // --- LOGIC LẤY DANH SÁCH SECTION ĐỘNG ---
   const dynamicSections = useMemo(() => {
@@ -654,6 +661,12 @@ function AdminMain() {
               className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded text-sm disabled:opacity-50"
             >
               Tải file & Xóa theo MSNV
+            </button>
+            <button 
+              onClick={downloadBulkDeleteTemplate}
+              className="bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-2 px-4 rounded text-sm"
+            >
+              Tải file mẫu (.xlsx)
             </button>
             <p className="text-xs text-orange-600 mt-1 italic">* File chỉ cần 1 cột MSNV</p>
           </div>
