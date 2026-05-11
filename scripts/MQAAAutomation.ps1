@@ -330,7 +330,10 @@ public static extern bool IsIconic(IntPtr hWnd);
 
                     # 2. Tính trung bình cho các bản lưu CÙNG NGÀY + CÙNG SECTION (nhiều auditor)
                     $dateSectionAvg = @{}
-                    $dateSectionGroups = $patrolData | Group-Object { "$($_.date)|$($_.section)" }
+                    $dateSectionGroups = $patrolData | Group-Object { 
+                        $normSection = $_.section.Replace("_", " ")
+                        "$($_.date)|$normSection" 
+                    }
                     foreach ($group in $dateSectionGroups) {
                         $avgScore = [Math]::Round(($group.Group | Measure-Object overall_performance -Average).Average, 1)
                         $dateSectionAvg[$group.Name] = $avgScore
@@ -366,14 +369,6 @@ public static extern bool IsIconic(IntPtr hWnd);
 
                         Write-Host "--- Đang tạo phiếu cho Auditor: $auditorName ($auditorId)..."
 
-                        # Lấy danh sách section mà auditor này đã chấm (theo date|section key)
-                        $auditorSections = @{}
-                        foreach ($record in $auditorGroup.Group) {
-                            $key = "$($record.date)|$($record.section)"
-                            # Dùng điểm trung bình nếu cùng ngày+section có nhiều auditor
-                            $auditorSections[$record.section] = $dateSectionAvg[$key]
-                        }
-
                         # Xây dựng tin nhắn cho Auditor này
                         $patrolMsg = $titlePatrol + "`n"
                         $patrolMsg += $userEmoji + " *Auditor: " + $auditorName + " (" + $auditorId + ")*`n"
@@ -382,46 +377,43 @@ public static extern bool IsIconic(IntPtr hWnd);
                         $totalScoreSum = 0
                         $scoreCount = 0
 
-                        foreach ($sec in $allSections) {
-                            $secName = $sec.name
-                            if ($auditorSections.ContainsKey($secName)) {
-                                $score = $auditorSections[$secName]
-                                $patrolMsg += $diamondEmoji + " **" + $secName + "**: " + $score + "%`n"
-                                $totalScoreSum += $score
-                                $scoreCount++
+                        # Lấy danh sách các bộ phận mà auditor này ĐÃ CHẤM trong tuần
+                        $auditorSectionsGroups = $auditorGroup.Group | Group-Object { $_.section.Replace("_", " ") }
 
-                                # Nếu điểm dưới 100%, tìm chi tiết lỗi từ auditorGroup
-                                if ($score -lt 100) {
-                                    $matchingRecords = $auditorGroup.Group | Where-Object { $_.section -eq $secName }
-                                    foreach ($rec in $matchingRecords) {
-                                        if ($rec.evaluation_data) {
-                                            foreach ($item in $rec.evaluation_data) {
-                                                # Kiểm tra nếu không phải header và điểm không đạt mức tối đa
-                                                # Lưu ý: evaluation_data từ Invoke-RestMethod thường là PSCustomObject
-                                                $isHeader = if ($item.is_header -ne $null) { $item.is_header } else { $item.isHeader }
-                                                $s_val = [double]$item.score
-                                                $l_val = [double]$item.level
-                                                
-                                                if (-not $isHeader -and $l_val -lt $s_val) {
-                                                    $desc = if ($item.description) { $item.description } else { $item.label }
-                                                    $evidenceItems += [PSCustomObject]@{
-                                                        Section = $secName
-                                                        Text    = $desc
-                                                        Image   = $item.image_url
-                                                    }
+                        foreach ($secGroup in $auditorSectionsGroups) {
+                            $secName = $secGroup.Name
+                            # Tính trung bình điểm của auditor này cho bộ phận này (nhiều ca)
+                            $score = [Math]::Round(($secGroup.Group | Measure-Object overall_performance -Average).Average, 1)
+                            
+                            $patrolMsg += $diamondEmoji + " **" + $secName + "**: " + $score + "%`n"
+                            $totalScoreSum += $score
+                            $scoreCount++
+
+                            # Nếu điểm dưới 100%, tìm chi tiết lỗi
+                            if ($score -lt 100) {
+                                foreach ($rec in $secGroup.Group) {
+                                    if ($rec.evaluation_data) {
+                                        foreach ($item in $rec.evaluation_data) {
+                                            $isHeader = if ($item.is_header -ne $null) { $item.is_header } else { $item.isHeader }
+                                            $s_val = [double]$item.score
+                                            $l_val = [double]$item.level
+                                            
+                                            if (-not $isHeader -and $l_val -lt $s_val) {
+                                                $desc = if ($item.description) { $item.description } else { $item.label }
+                                                $evidenceItems += [PSCustomObject]@{
+                                                    Section = $secName
+                                                    Text    = $desc
+                                                    Image   = $item.image_url
                                                 }
                                             }
                                         }
                                     }
                                 }
                             }
-                            else {
-                                $patrolMsg += $diamondEmoji + " **" + $secName + "**: ...`n"
-                            }
                         }
 
                         $totalAvg = if ($scoreCount -gt 0) { [Math]::Round($totalScoreSum / $scoreCount, 1) } else { 0 }
-                        $patrolMsg += $L_SEP + "`n" + $starEmoji + " **Overall Performance: " + $totalAvg + "%**"
+                        $patrolMsg += $L_SEP + "`n" + $starEmoji + " **Performance: " + $totalAvg + "%**"
 
                         # Thêm danh sách lỗi chi tiết nếu có
                         if ($evidenceItems.Count -gt 0) {
@@ -435,7 +427,6 @@ public static extern bool IsIconic(IntPtr hWnd);
                             }
                             
                             # Gửi tin nhắn văn bản trước
-                            Write-Host "--- Đang gửi phiếu kèm chi tiết lỗi của $auditorName..."
                             Send-ZaloMessage -text $patrolMsg
                             
                             # Gửi nhóm ảnh sau đó
@@ -446,8 +437,7 @@ public static extern bool IsIconic(IntPtr hWnd);
                             }
                         }
                         else {
-                            # Gửi phiếu của Auditor này (không có lỗi chi tiết)
-                            Write-Host "--- Đang gửi phiếu của $auditorName..."
+                            # Gửi phiếu của Auditor này
                             Send-ZaloMessage -text $patrolMsg
                         }
 
@@ -455,9 +445,44 @@ public static extern bool IsIconic(IntPtr hWnd);
                         Start-Sleep -Seconds 1
                     }
 
-                    Write-Host ">>> Đã gửi xong tất cả $($auditorGroups.Count) phiếu tổng kết." -ForegroundColor Green
+                    # 5. Gửi bảng tổng kết cuối cùng cho toàn bộ các bộ phận
+                    Write-Host "--- Đang tạo bảng tổng kết toàn bộ các bộ phận..." -ForegroundColor Cyan
+                    
+                    $summaryMsg = $titlePatrol + "`n"
+                    $summaryMsg += "*T" + [char]0x1ED4 + "NG K" + [char]0x1EBF + "T TO" + [char]0x00C0 + "N B" + [char]0x1ED8 + " C" + [char]0x00C1 + "C B" + [char]0x1ED8 + " PH" + [char]0x1EAC + "N*`n"
+                    $summaryMsg += $subTitle + "`n" + $L_SEP + "`n"
 
-                    # Đánh dấu đã gửi (Cập nhật cột last_patrol_report_monday)
+                    $overallSum = 0
+                    $overallCount = 0
+
+                    # Tính trung bình tuần cho từng bộ phận (tất cả auditor)
+                    $weeklySectionStats = $patrolData | Group-Object { $_.section.Replace("_", " ") }
+                    $weeklySectionAvg = @{}
+                    foreach ($group in $weeklySectionStats) {
+                        $avg = [Math]::Round(($group.Group | Measure-Object overall_performance -Average).Average, 1)
+                        $weeklySectionAvg[$group.Name] = $avg
+                    }
+
+                    foreach ($sec in $allSections) {
+                        $secName = $sec.name
+                        if ($weeklySectionAvg.ContainsKey($secName)) {
+                            $score = $weeklySectionAvg[$secName]
+                            $summaryMsg += $diamondEmoji + " **" + $secName + "**: " + $score + "%`n"
+                            $overallSum += $score
+                            $overallCount++
+                        }
+                        else {
+                            $summaryMsg += $diamondEmoji + " **" + $secName + "**: ...`n"
+                        }
+                    }
+
+                    $finalTotalAvg = if ($overallCount -gt 0) { [Math]::Round($overallSum / $overallCount, 1) } else { 0 }
+                    $summaryMsg += $L_SEP + "`n" + $starEmoji + " **Overall Weekly Performance: " + $finalTotalAvg + "%**"
+                    
+                    Send-ZaloMessage -text $summaryMsg
+                    Write-Host ">>> Đã gửi bảng tổng kết toàn bộ thành công." -ForegroundColor Green
+
+                    # 6. Đánh dấu đã gửi (Cập nhật cột last_patrol_report_monday)
                     $updatePatrolBody = '{"last_patrol_report_monday":"' + $mondayStr + '"}'
                     $null = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Patch -Body $updatePatrolBody -ContentType "application/json"
                 }
