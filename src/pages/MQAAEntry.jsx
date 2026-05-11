@@ -41,6 +41,10 @@ export default function MQAAEntry() {
     patrol_report_days: "Friday,Saturday"
   });
 
+  // Page Authorization State
+  const [isPageAuthorized, setIsPageAuthorized] = useState(false);
+  const [pagePassword, setPagePassword] = useState("");
+
   // Fetch settings on mount
   useEffect(() => {
     const fetchSettings = async () => {
@@ -285,6 +289,49 @@ export default function MQAAEntry() {
       setLoading(false);
     }
   };
+
+  // Nếu chưa xác thực trang, hiển thị màn hình nhập mật khẩu
+  if (!isPageAuthorized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-100 p-4">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8 space-y-6 text-center">
+          <div className="bg-indigo-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto">
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-10 w-10 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+            </svg>
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold text-gray-800">Trang này đã bị khóa</h2>
+            <p className="text-gray-500 mt-2">Vui lòng nhập mật khẩu để tiếp tục</p>
+          </div>
+          <div className="space-y-4">
+            <input
+              type="password"
+              placeholder="Mật khẩu..."
+              value={pagePassword}
+              onChange={(e) => setPagePassword(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && pagePassword === "Deplao.1305" && setIsPageAuthorized(true)}
+              className="w-full p-4 border border-gray-300 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500 text-center text-lg tracking-widest"
+              autoFocus
+            />
+            <button
+              onClick={() => {
+                if (pagePassword === "Deplao.1305") {
+                  setIsPageAuthorized(true);
+                } else {
+                  alert("Sai mật khẩu!");
+                }
+              }}
+              className="w-full py-4 bg-indigo-600 text-white rounded-xl font-bold text-lg hover:bg-indigo-700 transition transform active:scale-95 shadow-lg"
+            >
+              Xác thực
+            </button>
+          </div>
+          <p className="text-xs text-gray-400">© 2026 Insole Production - MQAA System</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto p-4 sm:p-6 bg-white shadow-lg rounded-xl mt-6 relative">
