@@ -318,7 +318,7 @@ public static extern bool IsIconic(IntPtr hWnd);
             if ($lastPatrolMonday -ne $mondayStr) {
                 Write-Host "--- Đang kiểm tra dữ liệu Patrol cho tuần từ $mondayStr..."
                 # Truy vấn tất cả đánh giá Patrol trong tuần (kèm thông tin auditor và ngày)
-                $patrolUrl = "$SUPABASE_URL/rest/v1/mqaa_patrol_logs?date=gte.$mondayStr&date=lte.$todayStr&select=auditor_name,auditor_id,date,section,overall_performance"
+                $patrolUrl = "$SUPABASE_URL/rest/v1/mqaa_patrol_logs?date=gte.$mondayStr&date=lte.$todayStr&select=auditor_name,auditor_id,date,section,overall_performance,evaluation_data"
                 $patrolData = Invoke-RestMethod -Uri $patrolUrl -Headers $headers -Method Get
             
                 if ($patrolData -and $patrolData.Count -gt 0) {
@@ -362,6 +362,7 @@ public static extern bool IsIconic(IntPtr hWnd);
                     foreach ($auditorGroup in $auditorGroups) {
                         $auditorName = $auditorGroup.Group[0].auditor_name
                         $auditorId = $auditorGroup.Group[0].auditor_id
+                        $evidenceItems = @()
 
                         Write-Host "--- Đang tạo phiếu cho Auditor: $auditorName ($auditorId)..."
 
@@ -388,6 +389,31 @@ public static extern bool IsIconic(IntPtr hWnd);
                                 $patrolMsg += $diamondEmoji + " **" + $secName + "**: " + $score + "%`n"
                                 $totalScoreSum += $score
                                 $scoreCount++
+
+                                # Nếu điểm dưới 100%, tìm chi tiết lỗi từ auditorGroup
+                                if ($score -lt 100) {
+                                    $matchingRecords = $auditorGroup.Group | Where-Object { $_.section -eq $secName }
+                                    foreach ($rec in $matchingRecords) {
+                                        if ($rec.evaluation_data) {
+                                            foreach ($item in $rec.evaluation_data) {
+                                                # Kiểm tra nếu không phải header và điểm không đạt mức tối đa
+                                                # Lưu ý: evaluation_data từ Invoke-RestMethod thường là PSCustomObject
+                                                $isHeader = if ($item.is_header -ne $null) { $item.is_header } else { $item.isHeader }
+                                                $s_val = [double]$item.score
+                                                $l_val = [double]$item.level
+                                                
+                                                if (-not $isHeader -and $l_val -lt $s_val) {
+                                                    $desc = if ($item.description) { $item.description } else { $item.label }
+                                                    $evidenceItems += [PSCustomObject]@{
+                                                        Section = $secName
+                                                        Text    = $desc
+                                                        Image   = $item.image_url
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                             }
                             else {
                                 $patrolMsg += $diamondEmoji + " **" + $secName + "**: ...`n"
@@ -397,9 +423,34 @@ public static extern bool IsIconic(IntPtr hWnd);
                         $totalAvg = if ($scoreCount -gt 0) { [Math]::Round($totalScoreSum / $scoreCount, 1) } else { 0 }
                         $patrolMsg += $L_SEP + "`n" + $starEmoji + " **Overall Performance: " + $totalAvg + "%**"
 
-                        # Gửi phiếu của Auditor này
-                        Write-Host "--- Đang gửi phiếu của $auditorName..."
-                        Send-ZaloMessage -text $patrolMsg
+                        # Thêm danh sách lỗi chi tiết nếu có
+                        if ($evidenceItems.Count -gt 0) {
+                            $patrolMsg += "`n`n" + $E_WARNING + " *CHI TI" + [char]0x1EBF + "T C" + [char]0x00C1 + "C L" + [char]0x1ED7 + "I:*`n"
+                            $allImages = @()
+                            foreach ($ev in $evidenceItems) {
+                                $patrolMsg += "- **" + $ev.Section + "**: " + $ev.Text + "`n"
+                                if ($ev.Image -and $ev.Image -ne "") {
+                                    $allImages += $ev.Image
+                                }
+                            }
+                            
+                            # Gửi tin nhắn văn bản trước
+                            Write-Host "--- Đang gửi phiếu kèm chi tiết lỗi của $auditorName..."
+                            Send-ZaloMessage -text $patrolMsg
+                            
+                            # Gửi nhóm ảnh sau đó
+                            if ($allImages.Count -gt 0) {
+                                # Lọc ảnh trùng lặp nếu có
+                                $uniqueImages = $allImages | Select-Object -Unique
+                                Send-ZaloImageGroup -imageUrls $uniqueImages
+                            }
+                        }
+                        else {
+                            # Gửi phiếu của Auditor này (không có lỗi chi tiết)
+                            Write-Host "--- Đang gửi phiếu của $auditorName..."
+                            Send-ZaloMessage -text $patrolMsg
+                        }
+
                         Write-Host ">>> Đã gửi phiếu Auditor $auditorName thành công." -ForegroundColor Green
                         Start-Sleep -Seconds 1
                     }
