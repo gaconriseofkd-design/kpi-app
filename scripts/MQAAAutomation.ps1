@@ -369,9 +369,13 @@ public static extern bool IsIconic(IntPtr hWnd);
 
                         Write-Host "--- Đang tạo phiếu cho Auditor: $auditorName ($auditorId)..."
 
+                        # Lấy danh sách các ngày Auditor này đã đi Patrol trong tuần
+                        $uniqueDates = $auditorGroup.Group | Select-Object -ExpandProperty date -Unique | Sort-Object
+                        $dateFormatted = ($uniqueDates | ForEach-Object { (Get-Date $_).ToString("dd/MM") }) -join ", "
+
                         # Xây dựng tin nhắn cho Auditor này
                         $patrolMsg = $titlePatrol + "`n"
-                        $patrolMsg += $userEmoji + " *Auditor: " + $auditorName + " (" + $auditorId + ")*`n"
+                        $patrolMsg += $userEmoji + " *Auditor: " + $auditorName + " (" + $auditorId + ") - Ng" + [char]0x00E0 + "y: " + $dateFormatted + "*`n"
                         $patrolMsg += $subTitle + "`n" + $L_SEP + "`n"
 
                         $totalScoreSum = 0
@@ -417,7 +421,7 @@ public static extern bool IsIconic(IntPtr hWnd);
 
                         # Thêm danh sách lỗi chi tiết nếu có
                         if ($evidenceItems.Count -gt 0) {
-                            $patrolMsg += "`n`n" + $E_WARNING + " *CHI TI" + [char]0x1EBF + "T C" + [char]0x00C1 + "C L" + [char]0x1ED7 + "I:*`n"
+                            $patrolMsg += "`n`n" + $E_WARNING + " *CHI TI" + [char]0x1EBE + "T C" + [char]0x00C1 + "C L" + [char]0x1ED6 + "I:*`n"
                             $allImages = @()
                             foreach ($ev in $evidenceItems) {
                                 $patrolMsg += "- **" + $ev.Section + "**: " + $ev.Text + "`n"
@@ -449,7 +453,7 @@ public static extern bool IsIconic(IntPtr hWnd);
                     Write-Host "--- Đang tạo bảng tổng kết toàn bộ các bộ phận..." -ForegroundColor Cyan
                     
                     $summaryMsg = $titlePatrol + "`n"
-                    $summaryMsg += "*T" + [char]0x1ED4 + "NG K" + [char]0x1EBF + "T TO" + [char]0x00C0 + "N B" + [char]0x1ED8 + " C" + [char]0x00C1 + "C B" + [char]0x1ED8 + " PH" + [char]0x1EAC + "N*`n"
+                    $summaryMsg += "*T" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T TO" + [char]0x00C0 + "N B" + [char]0x1ED8 + " C" + [char]0x00C1 + "C B" + [char]0x1ED8 + " PH" + [char]0x1EAC + "N*`n"
                     $summaryMsg += $subTitle + "`n" + $L_SEP + "`n"
 
                     $overallSum = 0
