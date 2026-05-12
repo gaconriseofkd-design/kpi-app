@@ -27,7 +27,7 @@ const MACHINE_MAP = {
   "PREFITTING": ["Máy cắt 1", "Máy cắt 2", "Máy cắt 3", "Máy cắt 4", "Máy cắt 5", "Máy cắt 6"],
   "BÀO": ["Máy bào 1", "Máy bào 2", "Máy bào 3", "Máy bào 4"],
   "TÁCH": ["Máy tách 1", "Máy tách 2", "Máy tách 3", "Máy tách 4"],
-  "LEANLINE_MOLDED": ["M1", "M2", "M3", "M4", "M5"],
+  "LEANLINE_MOLDED": ["H1", "H2", "M1-A", "M1-B", "M1-C", "M2-A", "M2-B", "M3-A", "M3-B", "M4-A", "M4-B", "M5-B"],
   "LEANLINE_DEFAULT": ["LEAN-D1", "LEAN-D2", "LEAN-D3", "LEAN-D4", "LEAN-H1", "LEAN-H2"],
 };
 

@@ -450,8 +450,8 @@ function RulesContent() {
                     <span className="font-black text-slate-700 uppercase">{secName}</span>
                     <span className="text-xs text-slate-500">{rows.filter(r => r.section === secName).length} rules</span>
                   </div>
-                  <RuleTableInner 
-                    rows={rows.filter(r => r.section === secName)} 
+                  <RuleTableInner
+                    rows={rows.filter(r => r.section === secName)}
                     idxOffset={rows.findIndex(r => r.section === secName)}
                     onUpdateRow={(newRow, idx) => {
                       const absoluteIdx = rows.findIndex(r => r.section === secName) + idx;
@@ -465,8 +465,8 @@ function RulesContent() {
             ) : (
               // HIỂN THỊ 1 BỘ PHẬN ĐANG CHỌN
               <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
-                <RuleTableInner 
-                  rows={rows} 
+                <RuleTableInner
+                  rows={rows}
                   onUpdateRow={(newRow, idx) => setRows(list => list.map((x, i) => i === idx ? newRow : x))}
                   onDeleteRow={delRow}
                   needsCategory={needsCategory}

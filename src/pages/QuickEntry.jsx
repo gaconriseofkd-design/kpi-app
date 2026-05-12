@@ -47,7 +47,7 @@ function scoreByProductivityLeanlineQuick(oe, allRules, section, line) {
   return 0;
 }
 const LEANLINE_MACHINES = {
-  "LEANLINE_MOLDED": ["M1", "M2", "M3", "M4", "M5"],
+  "LEANLINE_MOLDED": ["H1", "H2", "M1-A", "M1-B", "M1-C", "M2-A", "M2-B", "M3-A", "M3-B", "M4-A", "M4-B", "M5-B"],
   "LEANLINE_DC": ["D1A", "D1B", "D2A", "D2B", "D3A", "D3B", "D4A", "D4B", "H1", "H2"],
   "DEFAULT": ["D1A", "D1B", "D2A", "D2B", "D3A", "D3B", "D4A", "D4B", "H1", "H2"],
 }
@@ -230,7 +230,7 @@ function ApproverModeLeanline({ section }) {
   // 1. ĐỊNH NGHĨA DANH SÁCH LINE CHUẨN DỰA TRÊN SECTION
   const currentMachines = useMemo(() => {
     if (section === "LEANLINE_MOLDED") {
-      return ["M1", "M2", "M3", "M4", "M5", "H1"];
+      return ["H1", "H2", "M1-A", "M1-B", "M1-C", "M2-A", "M2-B", "M3-A", "M3-B", "M4-A", "M4-B", "M5-B"];
     }
     // Cho LEANLINE_DC
     return ["D1A", "D1B", "D2A", "D2B", "D3A", "D3B", "D4A", "D4B", "H1", "H2"];
