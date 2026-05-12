@@ -65,7 +65,6 @@ function RulesContent() {
   const [testCat, setTestCat] = useState("");
   const [activeTab, setActiveTab] = useState("productivity"); // "productivity" or "quality"
   const [showAllSections, setShowAllSections] = useState(false);
-  const [showOriginalThreshold, setShowOriginalThreshold] = useState(false);
 
   const needsCategory = requiresCategory(section.toUpperCase());
 
@@ -326,21 +325,6 @@ function RulesContent() {
               <button className="btn btn-sm bg-teal-600 text-white hover:bg-teal-700" onClick={handleExportExcel} disabled={loading}>
                 📥 Xuất Excel (Tất cả)
               </button>
-              {section.toUpperCase() === "LEANLINE_MOLDED" && (
-                <button
-                  className={`btn btn-sm ${showOriginalThreshold ? "bg-amber-600 hover:bg-amber-700" : "bg-slate-500 hover:bg-slate-600"} text-white font-bold shadow-sm`}
-                  onClick={() => {
-                    if (!showOriginalThreshold) {
-                      const pass = prompt("Nhập mật khẩu để hiện điểm gốc:");
-                      if (pass !== "12345") return alert("Sai mật khẩu!");
-                    }
-                    setShowOriginalThreshold(!showOriginalThreshold);
-                  }}
-                  title={showOriginalThreshold ? "Đang hiện điểm gốc. Click để hiện +3%" : "Đang hiện điểm +3%. Click để hiện điểm gốc (Hide)"}
-                >
-                  {showOriginalThreshold ? "Show (+3%)" : "Hide"}
-                </button>
-              )}
               <button className="btn btn-sm bg-blue-600 text-white hover:bg-blue-700" onClick={saveAll} disabled={saving}>
                 {saving ? "Đang lưu..." : "Lưu tất cả"}
               </button>
@@ -410,9 +394,8 @@ function RulesContent() {
                       <td className="p-2">
                         <input
                           type="number"
-                          className={`input input-sm input-bordered w-24 ${(!showOriginalThreshold && section.toUpperCase() === "LEANLINE_MOLDED") ? "bg-amber-50 font-bold text-amber-700 border-amber-200" : ""}`}
-                          value={(!showOriginalThreshold && section.toUpperCase() === "LEANLINE_MOLDED") ? r.threshold + 3 : r.threshold}
-                          readOnly={!showOriginalThreshold && section.toUpperCase() === "LEANLINE_MOLDED"}
+                          className="input input-sm input-bordered w-24"
+                          value={r.threshold}
                           onChange={(e) =>
                             setRows((list) =>
                               list.map((x, i) =>
@@ -489,9 +472,8 @@ function RulesContent() {
                       <td className="p-2">
                         <input
                           type="number"
-                          className={`input input-sm input-bordered w-32 ${(!showOriginalThreshold && section.toUpperCase() === "LEANLINE_MOLDED") ? "bg-amber-50 font-bold text-amber-700 border-amber-200" : ""}`}
-                          value={(!showOriginalThreshold && section.toUpperCase() === "LEANLINE_MOLDED") ? r.threshold + 3 : r.threshold}
-                          readOnly={!showOriginalThreshold && section.toUpperCase() === "LEANLINE_MOLDED"}
+                          className="input input-sm input-bordered w-32"
+                          value={r.threshold}
                           onChange={(e) =>
                             setRows((list) =>
                               list.map((x, i) =>
