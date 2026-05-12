@@ -55,6 +55,78 @@ export default function RulesPage() {
   return <RulesContent />;
 }
 
+// Helper component để hiển thị bảng Rule
+function RuleTableInner({ rows, idxOffset = 0, onUpdateRow, onDeleteRow, needsCategory }) {
+  return (
+    <div className="overflow-auto pb-4">
+      <table className="table table-sm w-full">
+        <thead>
+          <tr className="bg-slate-50">
+            {needsCategory && <th className="p-3">Loại hàng/Line</th>}
+            <th className="p-3">{needsCategory ? "Ngưỡng (≥)" : "Ngưỡng %OE (≥)"}</th>
+            <th className="p-3">Điểm</th>
+            <th className="p-3">Ghi chú</th>
+            <th className="p-3 text-center">Active</th>
+            <th className="p-3 text-center">Xoá</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, idx) => (
+            <tr key={r.id ?? `new-${idxOffset + idx}`} className="hover:bg-slate-50 transition-colors">
+              {needsCategory && (
+                <td className="p-2">
+                  <input
+                    className="input input-sm input-bordered w-full"
+                    value={r.category || ""}
+                    onChange={(e) => onUpdateRow({ ...r, category: e.target.value }, idx)}
+                  />
+                </td>
+              )}
+              <td className="p-2">
+                <input
+                  type="number"
+                  step="any"
+                  className={`input input-sm input-bordered ${needsCategory ? "w-24" : "w-32"}`}
+                  value={r.threshold}
+                  onChange={(e) => onUpdateRow({ ...r, threshold: Number(e.target.value) }, idx)}
+                />
+              </td>
+              <td className="p-2">
+                <input
+                  type="number"
+                  className={`input input-sm input-bordered ${needsCategory ? "w-16" : "w-20"}`}
+                  value={r.score}
+                  onChange={(e) => onUpdateRow({ ...r, score: Number(e.target.value) }, idx)}
+                />
+              </td>
+              <td className="p-2">
+                <input
+                  className="input input-sm input-bordered w-full"
+                  value={r.note ?? ""}
+                  onChange={(e) => onUpdateRow({ ...r, note: e.target.value }, idx)}
+                />
+              </td>
+              <td className="p-2 text-center">
+                <input
+                  type="checkbox"
+                  className="checkbox checkbox-sm checkbox-primary"
+                  checked={!!r.active}
+                  onChange={(e) => onUpdateRow({ ...r, active: e.target.checked }, idx)}
+                />
+              </td>
+              <td className="p-2 text-center">
+                <button className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50" onClick={() => onDeleteRow(r.id, idx)}>
+                  Xoá
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function RulesContent() {
   const { section, SECTIONS } = useKpiSection();
   const [rows, setRows] = useState([]);
@@ -76,7 +148,8 @@ function RulesContent() {
     const { data, error } = await supabase
       .from("kpi_rule_productivity")
       .select("*")
-      .eq("section", dbSection)
+      .eq(showAllSections ? "" : "section", showAllSections ? undefined : dbSection)
+      .order("section", { ascending: true })
       .order("category", { ascending: true })
       .order("threshold", { ascending: false });
     setLoading(false);
@@ -95,7 +168,7 @@ function RulesContent() {
   useEffect(() => {
     load();
     loadCompliance();
-  }, [section]);
+  }, [section, showAllSections]);
 
   // ➕ Thêm dòng mới
   function addRow() {
@@ -309,9 +382,15 @@ function RulesContent() {
         <div className="space-y-4 animate-in fade-in slide-in-from-left-4 duration-500">
           <div className="flex items-center gap-2 flex-wrap bg-white p-4 rounded-2xl border shadow-sm">
             <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mr-auto">
-              {needsCategory ? "Thiết lập Ngưỡng Sản lượng" : "Thiết lập tỷ lệ %OE"}
+              {showAllSections ? "Tất cả các bộ phận" : (needsCategory ? "Thiết lập Ngưỡng Sản lượng" : "Thiết lập tỷ lệ %OE")}
             </h3>
             <div className="flex items-center gap-2">
+              <button
+                className={`btn btn-sm ${showAllSections ? "bg-slate-800 text-white shadow-md" : "bg-white text-slate-800"}`}
+                onClick={() => setShowAllSections(!showAllSections)}
+              >
+                {showAllSections ? "← Quay lại" : "Xem tất cả bộ phận"}
+              </button>
               <button className="btn btn-sm" onClick={load} disabled={loading}>
                 {loading ? "Đang tải..." : "Tải lại"}
               </button>
@@ -362,180 +441,41 @@ function RulesContent() {
           </div>
 
           {/* Bảng Rule */}
-          <div className="overflow-auto pb-4 bg-white rounded-2xl border shadow-sm">
-            {needsCategory ? (
-              <table className="table table-sm w-full">
-                <thead>
-                  <tr className="bg-slate-50">
-                    <th className="p-3">Loại hàng/Line</th>
-                    <th className="p-3">Ngưỡng (≥)</th>
-                    <th className="p-3">Điểm</th>
-                    <th className="p-3">Ghi chú</th>
-                    <th className="p-3 text-center">Active</th>
-                    <th className="p-3 text-center">Xoá</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r, idx) => (
-                    <tr key={r.id ?? `new-${idx}`} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-2">
-                        <input
-                          className="input input-sm input-bordered w-full"
-                          value={r.category || ""}
-                          onChange={(e) =>
-                            setRows((list) =>
-                              list.map((x, i) =>
-                                i === idx ? { ...x, category: e.target.value } : x
-                              )
-                            )
-                          }
-                        />
-                      </td>
-                      <td className="p-2">
-                        <input
-                          type="number"
-                          className="input input-sm input-bordered w-24"
-                          value={r.threshold}
-                          onChange={(e) =>
-                            setRows((list) =>
-                              list.map((x, i) =>
-                                i === idx ? { ...x, threshold: Number(e.target.value) } : x
-                              )
-                            )
-                          }
-                        />
-                      </td>
-                      <td className="p-2">
-                        <input
-                          type="number"
-                          className="input input-sm input-bordered w-16"
-                          value={r.score}
-                          onChange={(e) =>
-                            setRows((list) =>
-                              list.map((x, i) =>
-                                i === idx ? { ...x, score: Number(e.target.value) } : x
-                              )
-                            )
-                          }
-                        />
-                      </td>
-                      <td className="p-2">
-                        <input
-                          className="input input-sm input-bordered w-full"
-                          value={r.note ?? ""}
-                          onChange={(e) =>
-                            setRows((list) =>
-                              list.map((x, i) =>
-                                i === idx ? { ...x, note: e.target.value } : x
-                              )
-                            )
-                          }
-                        />
-                      </td>
-                      <td className="p-2 text-center">
-                        <input
-                          type="checkbox"
-                          className="checkbox checkbox-sm checkbox-primary"
-                          checked={!!r.active}
-                          onChange={(e) =>
-                            setRows((list) =>
-                              list.map((x, i) =>
-                                i === idx ? { ...x, active: e.target.checked } : x
-                              )
-                            )
-                          }
-                        />
-                      </td>
-                      <td className="p-2 text-center">
-                        <button className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50" onClick={() => delRow(r.id, idx)}>
-                          Xoá
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+          <div className="space-y-6">
+            {showAllSections ? (
+              // HIỂN THỊ TẤT CẢ BỘ PHẬN
+              [...new Set(rows.map(r => r.section))].map(secName => (
+                <div key={secName} className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+                  <div className="bg-slate-100 px-4 py-2 border-b flex justify-between items-center">
+                    <span className="font-black text-slate-700 uppercase">{secName}</span>
+                    <span className="text-xs text-slate-500">{rows.filter(r => r.section === secName).length} rules</span>
+                  </div>
+                  <RuleTableInner 
+                    rows={rows.filter(r => r.section === secName)} 
+                    idxOffset={rows.findIndex(r => r.section === secName)}
+                    onUpdateRow={(newRow, idx) => {
+                      const absoluteIdx = rows.findIndex(r => r.section === secName) + idx;
+                      setRows(list => list.map((x, i) => i === absoluteIdx ? newRow : x));
+                    }}
+                    onDeleteRow={(id, idx) => delRow(id, rows.findIndex(r => r.section === secName) + idx)}
+                    needsCategory={requiresCategory(secName)}
+                  />
+                </div>
+              ))
             ) : (
-              <table className="table table-sm w-full">
-                <thead>
-                  <tr className="bg-slate-50">
-                    <th className="p-3">Ngưỡng %OE (≥)</th>
-                    <th className="p-3">Điểm</th>
-                    <th className="p-3">Ghi chú</th>
-                    <th className="p-3 text-center">Active</th>
-                    <th className="p-3 text-center">Xoá</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {rows.map((r, idx) => (
-                    <tr key={r.id ?? `new-${idx}`} className="hover:bg-slate-50 transition-colors">
-                      <td className="p-2">
-                        <input
-                          type="number"
-                          className="input input-sm input-bordered w-32"
-                          value={r.threshold}
-                          onChange={(e) =>
-                            setRows((list) =>
-                              list.map((x, i) =>
-                                i === idx ? { ...x, threshold: Number(e.target.value) } : x
-                              )
-                            )
-                          }
-                        />
-                      </td>
-                      <td className="p-2">
-                        <input
-                          type="number"
-                          className="input input-sm input-bordered w-20"
-                          value={r.score}
-                          onChange={(e) =>
-                            setRows((list) =>
-                              list.map((x, i) =>
-                                i === idx ? { ...x, score: Number(e.target.value) } : x
-                              )
-                            )
-                          }
-                        />
-                      </td>
-                      <td className="p-2">
-                        <input
-                          className="input input-sm input-bordered w-full"
-                          value={r.note ?? ""}
-                          onChange={(e) =>
-                            setRows((list) =>
-                              list.map((x, i) =>
-                                i === idx ? { ...x, note: e.target.value } : x
-                              )
-                            )
-                          }
-                        />
-                      </td>
-                      <td className="p-2 text-center">
-                        <input
-                          type="checkbox"
-                          className="checkbox checkbox-sm checkbox-primary"
-                          checked={!!r.active}
-                          onChange={(e) =>
-                            setRows((list) =>
-                              list.map((x, i) =>
-                                i === idx ? { ...x, active: e.target.checked } : x
-                              )
-                            )
-                          }
-                        />
-                      </td>
-                      <td className="p-2 text-center">
-                        <button className="btn btn-ghost btn-xs text-red-500 hover:bg-red-50" onClick={() => delRow(r.id, idx)}>
-                          Xoá
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              // HIỂN THỊ 1 BỘ PHẬN ĐANG CHỌN
+              <div className="bg-white rounded-2xl border shadow-sm overflow-hidden">
+                <RuleTableInner 
+                  rows={rows} 
+                  onUpdateRow={(newRow, idx) => setRows(list => list.map((x, i) => i === idx ? newRow : x))}
+                  onDeleteRow={delRow}
+                  needsCategory={needsCategory}
+                />
+              </div>
             )}
+
             {!rows.length && (
-              <div className="p-10 text-center text-gray-400 italic">Chưa có dữ liệu cấu hình.</div>
+              <div className="p-10 text-center text-gray-400 italic bg-white rounded-2xl border shadow-sm">Chưa có dữ liệu cấu hình.</div>
             )}
           </div>
         </div>
