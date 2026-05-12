@@ -177,19 +177,38 @@ export default function EntryPage() {
 
   const today = new Date().toISOString().slice(0, 10);
 
-  const currentMachines = useMemo(() => {
-    return MACHINE_MAP[section] || MACHINE_MAP.LEANLINE_DEFAULT;
+  const [machinesList, setMachinesList] = useState([]);
+
+  useEffect(() => {
+    supabase.from("kpi_machines")
+      .select("machine_name")
+      .eq("section", section)
+      .eq("active", true)
+      .order("machine_name", { ascending: true })
+      .then(({ data, error }) => {
+        if (!error && data && data.length > 0) {
+          setMachinesList(data.map(m => m.machine_name));
+        } else {
+          setMachinesList(MACHINE_MAP[section] || MACHINE_MAP.LEANLINE_DEFAULT || []);
+        }
+      });
   }, [section]);
+
+  const currentMachines = useMemo(() => machinesList, [machinesList]);
+
+  useEffect(() => {
+    if (currentMachines.length > 0) {
+      setForm(f => ({ ...f, line: currentMachines[0] }));
+    }
+  }, [currentMachines]);
 
   // ====== tải rule theo section ======
   useEffect(() => {
     let cancelled = false;
 
-    const defaultLine = currentMachines[0] || DEFAULT_FORM.line;
     setForm(f => ({
       ...DEFAULT_FORM,
       date: f.date,
-      line: defaultLine,
       category: isHybridSection(section) ? f.category : "",
       output: isHybridSection(section) ? f.output : 0,
       oe: isHybridSection(section) ? 100 : f.oe,

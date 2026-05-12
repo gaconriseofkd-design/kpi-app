@@ -51,7 +51,30 @@ const LEANLINE_MACHINES = {
   "LEANLINE_DC": ["D1A", "D1B", "D2A", "D2B", "D3A", "D3B", "D4A", "D4B", "H1", "H2"],
   "DEFAULT": ["D1A", "D1B", "D2A", "D2B", "D3A", "D3B", "D4A", "D4B", "H1", "H2"],
 }
-const getLeanlineMachines = (section) => LEANLINE_MACHINES[section] || LEANLINE_MACHINES.DEFAULT;
+const getLeanlineMachinesFallback = (section) => LEANLINE_MACHINES[section] || LEANLINE_MACHINES.DEFAULT;
+
+function useMachines(section) {
+  const [machines, setMachines] = useState([]);
+
+  useEffect(() => {
+    if (!section) return;
+    supabase.from("kpi_machines")
+      .select("machine_name")
+      .eq("section", section)
+      .eq("active", true)
+      .order("machine_name", { ascending: true })
+      .then(({ data, error }) => {
+        if (!error && data && data.length > 0) {
+          setMachines(data.map(m => m.machine_name));
+        } else {
+          const machines = getLeanlineMachinesFallback(section);
+          setMachines(machines);
+        }
+      });
+  }, [section]);
+
+  return machines;
+}
 
 /**
  * Helper tính toán cho Leanline
@@ -227,14 +250,8 @@ function ApproverModeLeanline({ section }) {
     return ["NONE", ...new Set(complianceDict.filter(r => r.section === secKey && r.category === cat).map(r => r.content))];
   };
 
-  // 1. ĐỊNH NGHĨA DANH SÁCH LINE CHUẨN DỰA TRÊN SECTION
-  const currentMachines = useMemo(() => {
-    if (section === "LEANLINE_MOLDED") {
-      return ["H1", "H2", "M1-A", "M1-B", "M1-C", "M2-A", "M2-B", "M3-A", "M3-B", "M4-A", "M4-B", "M5-B"];
-    }
-    // Cho LEANLINE_DC
-    return ["D1A", "D1B", "D2A", "D2B", "D3A", "D3B", "D4A", "D4B", "H1", "H2"];
-  }, [section]);
+  // 1. ĐỊNH NGHĨA DANH SÁCH LINE CHUẨN DỰA TRÊN DATABASE
+  const currentMachines = useMachines(section);
 
   const [tplLine, setTplLine] = useState(currentMachines[0]);
 

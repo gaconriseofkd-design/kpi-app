@@ -54,7 +54,10 @@ async function upsertInChunks(data, chunkSize = 100) {
   }
 }
 
-function AdminMain() {
+/* ======================================================================
+   USER MANAGER COMPONENT (FORMER ADMINMAIN)
+   ====================================================================== */
+function UserManager() {
   const MAX_HISTORY = 10; 
   
   const [rows, setRows] = useState([]);
@@ -593,9 +596,7 @@ function AdminMain() {
   }, [rows]);
 
   return (
-    <div className="p-4 space-y-6">
-      <h2 className="text-2xl font-bold text-gray-800">Cài đặt Hệ thống & Quản lý User</h2>
-
+    <div className="space-y-6">
       {/* PHẦN 1: CẬP NHẬT DANH SÁCH */}
       <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
         <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
@@ -868,4 +869,163 @@ function AdminMain() {
   );
 }
 
-export default AdminMain;
+/* ======================================================================
+   MACHINE MANAGER COMPONENT
+   ====================================================================== */
+function MachineManager() {
+  const [machines, setMachines] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const loadMachines = async () => {
+    setLoading(true);
+    const { data, error } = await supabase.from("kpi_machines").select("*").order("section", { ascending: true }).order("machine_name", { ascending: true });
+    setLoading(false);
+    if (error) console.error(error);
+    setMachines(data || []);
+  };
+
+  useEffect(() => {
+    loadMachines();
+  }, []);
+
+  const addRow = () => {
+    setMachines([{ section: "", machine_name: "", active: true }, ...machines]);
+  };
+
+  const saveRow = async (m, idx) => {
+    if (!m.section || !m.machine_name) return alert("Vui lòng nhập đầy đủ Section và Tên Máy.");
+    setSaving(true);
+    const payload = { section: m.section.toUpperCase(), machine_name: m.machine_name.toUpperCase(), active: !!m.active };
+    if (m.id) payload.id = m.id;
+    
+    const { error } = await supabase.from("kpi_machines").upsert(payload);
+    setSaving(false);
+    if (error) alert("Lỗi: " + error.message);
+    else {
+      alert("Đã lưu máy.");
+      loadMachines();
+    }
+  };
+
+  const deleteRow = async (m, idx) => {
+    if (!m.id) return setMachines(prev => prev.filter((_, i) => i !== idx));
+    if (!confirm(`Xoá máy ${m.machine_name} của section ${m.section}?`)) return;
+    
+    setSaving(true);
+    const { error } = await supabase.from("kpi_machines").delete().eq("id", m.id);
+    setSaving(false);
+    if (error) alert("Lỗi xoá: " + error.message);
+    else loadMachines();
+  };
+
+  const seedData = async () => {
+    if (!confirm("Hệ thống sẽ nạp danh sách máy mặc định vào database. Tiếp tục?")) return;
+    const INITIAL_MACHINES = [
+      { section: "LAMINATION", machine_name: "Máy dán 1" }, { section: "LAMINATION", machine_name: "Máy dán 2" },
+      { section: "LAMINATION", machine_name: "Máy dán 3" }, { section: "LAMINATION", machine_name: "Máy dán 4" },
+      { section: "LAMINATION", machine_name: "Máy dán 5" }, { section: "LAMINATION", machine_name: "Máy dán 6" },
+      { section: "LAMINATION", machine_name: "Máy dán 7" },
+      { section: "PREFITTING", machine_name: "Máy cắt 1" }, { section: "PREFITTING", machine_name: "Máy cắt 2" },
+      { section: "PREFITTING", machine_name: "Máy cắt 3" }, { section: "PREFITTING", machine_name: "Máy cắt 4" },
+      { section: "PREFITTING", machine_name: "Máy cắt 5" }, { section: "PREFITTING", machine_name: "Máy cắt 6" },
+      { section: "BÀO", machine_name: "Máy bào 1" }, { section: "BÀO", machine_name: "Máy bào 2" },
+      { section: "BÀO", machine_name: "Máy bào 3" }, { section: "BÀO", machine_name: "Máy bào 4" },
+      { section: "TÁCH", machine_name: "Máy tách 1" }, { section: "TÁCH", machine_name: "Máy tách 2" },
+      { section: "TÁCH", machine_name: "Máy tách 3" }, { section: "TÁCH", machine_name: "Máy tách 4" },
+      { section: "LEANLINE_MOLDED", machine_name: "H1" }, { section: "LEANLINE_MOLDED", machine_name: "H2" },
+      { section: "LEANLINE_MOLDED", machine_name: "M1-A" }, { section: "LEANLINE_MOLDED", machine_name: "M1-B" },
+      { section: "LEANLINE_MOLDED", machine_name: "M1-C" }, { section: "LEANLINE_MOLDED", machine_name: "M2-A" },
+      { section: "LEANLINE_MOLDED", machine_name: "M2-B" }, { section: "LEANLINE_MOLDED", machine_name: "M3-A" },
+      { section: "LEANLINE_MOLDED", machine_name: "M3-B" }, { section: "LEANLINE_MOLDED", machine_name: "M4-A" },
+      { section: "LEANLINE_MOLDED", machine_name: "M4-B" }, { section: "LEANLINE_MOLDED", machine_name: "M5-B" },
+      { section: "LEANLINE_DC", machine_name: "D1A" }, { section: "LEANLINE_DC", machine_name: "D1B" },
+      { section: "LEANLINE_DC", machine_name: "D2A" }, { section: "LEANLINE_DC", machine_name: "D2B" },
+      { section: "LEANLINE_DC", machine_name: "D3A" }, { section: "LEANLINE_DC", machine_name: "D3B" },
+      { section: "LEANLINE_DC", machine_name: "D4A" }, { section: "LEANLINE_DC", machine_name: "D4B" },
+      { section: "LEANLINE_DC", machine_name: "H1" }, { section: "LEANLINE_DC", machine_name: "H2" },
+    ];
+    setSaving(true);
+    const { error } = await supabase.from("kpi_machines").upsert(INITIAL_MACHINES, { onConflict: "section,machine_name" });
+    setSaving(false);
+    if (error) alert("Lỗi nạp dữ liệu: " + error.message);
+    else { alert("Đã nạp danh sách máy mặc định."); loadMachines(); }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex justify-between items-center bg-white p-4 border rounded-xl shadow-sm">
+        <h3 className="text-lg font-bold">Danh sách Line / Máy ({machines.length})</h3>
+        <div className="space-x-2">
+          <button className="btn" onClick={seedData} disabled={saving}>🔄 Nạp dữ liệu mặc định</button>
+          <button className="btn btn-primary" onClick={addRow} disabled={loading}>+ Thêm máy mới</button>
+        </div>
+      </div>
+
+      <div className="overflow-auto border rounded-xl bg-white shadow-sm">
+        <table className="table w-full">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="p-3 text-left">Section</th>
+              <th className="p-3 text-left">Tên Line / Máy</th>
+              <th className="p-3 text-center">Active</th>
+              <th className="p-3 text-center">Hành động</th>
+            </tr>
+          </thead>
+          <tbody>
+            {machines.map((m, idx) => (
+              <tr key={m.id || idx} className="border-t hover:bg-gray-50">
+                <td className="p-2">
+                  <input className="input w-full" value={m.section} onChange={e => setMachines(prev => prev.map((x, i) => i === idx ? { ...x, section: e.target.value.toUpperCase() } : x))} />
+                </td>
+                <td className="p-2">
+                  <input className="input w-full" value={m.machine_name} onChange={e => setMachines(prev => prev.map((x, i) => i === idx ? { ...x, machine_name: e.target.value.toUpperCase() } : x))} />
+                </td>
+                <td className="p-2 text-center">
+                  <input type="checkbox" checked={m.active} onChange={e => setMachines(prev => prev.map((x, i) => i === idx ? { ...x, active: e.target.checked } : x))} />
+                </td>
+                <td className="p-2 text-center space-x-2">
+                  <button className="btn btn-sm btn-ghost text-blue-600" onClick={() => saveRow(m, idx)} disabled={saving}>Lưu</button>
+                  <button className="btn btn-sm btn-ghost text-red-600" onClick={() => deleteRow(m, idx)} disabled={saving}>Xoá</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+/* ======================================================================
+   ADMIN PAGE WRAPPER WITH TABS
+   ====================================================================== */
+export default function AdminPage() {
+  const [activeTab, setActiveTab] = useState("users"); // "users" or "machines"
+  
+  return (
+    <div className="p-4 max-w-7xl mx-auto space-y-6">
+      <div className="flex items-center justify-between border-b pb-4">
+        <h2 className="text-2xl font-black text-slate-800 tracking-tight">Hệ thống Quản trị</h2>
+        <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+          <button 
+             className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'users' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+             onClick={() => setActiveTab('users')}
+          >
+             👥 Quản lý Nhân viên
+          </button>
+          <button 
+             className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'machines' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+             onClick={() => setActiveTab('machines')}
+          >
+             ⚙️ Quản lý Line / Máy
+          </button>
+        </div>
+      </div>
+      
+      <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+        {activeTab === 'users' ? <UserManager /> : <MachineManager />}
+      </div>
+    </div>
+  );
+}
