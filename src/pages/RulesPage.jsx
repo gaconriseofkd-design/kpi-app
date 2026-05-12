@@ -61,11 +61,11 @@ function RuleTableInner({ rows, idxOffset = 0, onUpdateRow, onDeleteRow, needsCa
     <div className="overflow-auto pb-4">
       <table className="table table-sm w-full">
         <thead>
-          <tr className="bg-slate-50">
-            {needsCategory && <th className="p-3">Loại hàng/Line</th>}
-            <th className="p-3">{needsCategory ? "Ngưỡng (≥)" : "Ngưỡng %OE (≥)"}</th>
-            <th className="p-3">Điểm</th>
-            <th className="p-3">Ghi chú</th>
+          <tr className="bg-slate-50 text-slate-600">
+            {needsCategory && <th className="p-3 text-left">Loại hàng/Line</th>}
+            <th className="p-3 text-left">{needsCategory ? "Ngưỡng (≥)" : "Ngưỡng %OE (≥)"}</th>
+            <th className="p-3 text-left">Điểm</th>
+            <th className="p-3 text-left">Ghi chú</th>
             <th className="p-3 text-center">Active</th>
             <th className="p-3 text-center">Xoá</th>
           </tr>
@@ -74,7 +74,7 @@ function RuleTableInner({ rows, idxOffset = 0, onUpdateRow, onDeleteRow, needsCa
           {rows.map((r, idx) => (
             <tr key={r.id ?? `new-${idxOffset + idx}`} className="hover:bg-slate-50 transition-colors">
               {needsCategory && (
-                <td className="p-2">
+                <td className="p-2 text-left">
                   <input
                     className="input input-sm input-bordered w-full"
                     value={r.category || ""}
@@ -82,7 +82,7 @@ function RuleTableInner({ rows, idxOffset = 0, onUpdateRow, onDeleteRow, needsCa
                   />
                 </td>
               )}
-              <td className="p-2">
+              <td className="p-2 text-left">
                 <input
                   type="number"
                   step="any"
@@ -91,7 +91,7 @@ function RuleTableInner({ rows, idxOffset = 0, onUpdateRow, onDeleteRow, needsCa
                   onChange={(e) => onUpdateRow({ ...r, threshold: Number(e.target.value) }, idx)}
                 />
               </td>
-              <td className="p-2">
+              <td className="p-2 text-left">
                 <input
                   type="number"
                   className={`input input-sm input-bordered ${needsCategory ? "w-16" : "w-20"}`}
@@ -99,7 +99,7 @@ function RuleTableInner({ rows, idxOffset = 0, onUpdateRow, onDeleteRow, needsCa
                   onChange={(e) => onUpdateRow({ ...r, score: Number(e.target.value) }, idx)}
                 />
               </td>
-              <td className="p-2">
+              <td className="p-2 text-left">
                 <input
                   className="input input-sm input-bordered w-full"
                   value={r.note ?? ""}
