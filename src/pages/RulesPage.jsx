@@ -183,6 +183,38 @@ function RulesContent() {
     reader.readAsArrayBuffer(file);
   }
 
+  // 📥 Xuất Excel (Tất cả)
+  async function handleExportExcel() {
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("kpi_rule_productivity")
+      .select("*")
+      .order("section", { ascending: true })
+      .order("category", { ascending: true })
+      .order("score", { ascending: false });
+    setLoading(false);
+
+    if (error) return alert("Lỗi khi tải dữ liệu: " + error.message);
+    if (!data || data.length === 0) return alert("Không có dữ liệu để xuất.");
+
+    // Chuẩn bị dữ liệu cho Excel (loại bỏ id và timestamps)
+    const exportData = data.map(r => ({
+      "Section": r.section,
+      "Category": r.category,
+      "Threshold (≥)": r.threshold,
+      "Score": r.score,
+      "Note": r.note || "",
+      "Active": r.active ? "TRUE" : "FALSE"
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "KPI_Rules");
+
+    // Tải file về
+    XLSX.writeFile(workbook, `MQAA_KPI_Rules_All_${new Date().toISOString().split('T')[0]}.xlsx`);
+  }
+
   // 💾 Lưu tất cả rule hiện tại..
   async function saveAll() {
     const pass = prompt("Nhập mật khẩu để Lưu:");
@@ -291,6 +323,9 @@ function RulesContent() {
                 📤 Import Excel
                 <input type="file" accept=".xlsx,.xls,.csv" hidden onChange={handleImportExcel} />
               </label>
+              <button className="btn btn-sm bg-teal-600 text-white hover:bg-teal-700" onClick={handleExportExcel} disabled={loading}>
+                📥 Xuất Excel (Tất cả)
+              </button>
               {section.toUpperCase() === "LEANLINE_MOLDED" && (
                 <button
                   className={`btn btn-sm ${showOriginalThreshold ? "bg-amber-600 hover:bg-amber-700" : "bg-slate-500 hover:bg-slate-600"} text-white font-bold shadow-sm`}

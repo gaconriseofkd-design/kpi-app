@@ -3,7 +3,7 @@
 
 $SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
 $SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0"
-$PATROL_ZALO_GROUP = "My Documents" 
+$PATROL_ZALO_GROUP = "MQAA TESTING REPORT" 
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
@@ -51,7 +51,7 @@ function Send-ZaloImageGroup {
 
 try {
     # Mặc định lấy ngày hôm trước để đúng logic thực tế
-    $targetDate = (Get-Date).AddDays(-1).ToString("yyyy-MM-dd")
+    $targetDate = "2026-05-11"
     $headers = @{ "apikey" = $SUPABASE_KEY; "Authorization" = "Bearer $SUPABASE_KEY" }
     Write-Host ">>> BẮT ĐẦU TEST (Dữ liệu ngày hôm trước: $targetDate)..." -ForegroundColor Yellow
 
