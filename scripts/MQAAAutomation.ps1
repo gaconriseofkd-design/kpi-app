@@ -5,7 +5,7 @@
 # === Cấu hình (Người dùng thay đổi tại đây) ===
 $SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
 $SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0"
-$ZALO_GROUP_NAME = "My Documents" # Nhập tên chính xác của nhóm Zalo
+$ZALO_GROUP_NAME = "MQAA TESTING REPORT" # Nhập tên chính xác của nhóm Zalo
 
 # === Khởi tạo thư viện ===
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -100,47 +100,12 @@ try {
         [Util.Win32]::SetForegroundWindow($zaloProcess.MainWindowHandle)
         Start-Sleep -Seconds 2
 
+        <#
         # ============================================
         # PHẦN A: BÁO CÁO VI PHẠM MQAA HÀNG NGÀY
         # ============================================
-        if ($currentTime -ge $REPORT_TIME -and $LAST_RUN -ne $todayStr) {
-            $yesterdayDate = (Get-Date).AddDays(-1).Date
-            $yesterday = $yesterdayDate.ToString("yyyy-MM-dd")
-            $response = Invoke-RestMethod -Uri "$SUPABASE_URL/rest/v1/mqaa_logs?date=eq.$yesterday&select=*" -Headers $headers -Method Get
-            
-            if ($response.Count -gt 0) {
-                Write-Host ">>> Gửi báo cáo vi phạm ngày $yesterday..." -ForegroundColor Cyan
-                # Tìm nhóm Zalo
-                [System.Windows.Forms.SendKeys]::SendWait("^f")
-                Start-Sleep -Milliseconds 800
-                [System.Windows.Forms.Clipboard]::SetText($ZALO_GROUP_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
-                [System.Windows.Forms.SendKeys]::SendWait("^v")
-                Start-Sleep -Seconds 1
-                [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-                Start-Sleep -Seconds 1
-
-                $subTitleDaily = "*(Ng" + [char]0x00E0 + "y: " + $yesterdayDate.ToString("dd/MM/yyyy") + ")*"
-
-                foreach ($log in $response) {
-                    $normSection = $log.section.Replace("_", " ")
-                    $msg = "$E_ANNOUNCE $L_HEADER`n$subTitleDaily`n$L_SEP`n" +
-                           "$E_CALENDAR $L_DATE $($log.date)`n" +
-                           "$E_SECTION $L_SECTION $normSection`n" +
-                           "$E_CLOCK $L_SHIFT $($log.shift)`n" +
-                           "$E_LOCATION $L_LINE $($log.line)`n" +
-                           "$E_OFFICER $L_LEADER $($log.leader_name)`n"
-                    
-                    if ($log.worker_name) { $msg += "$E_USER $L_WORKER $($log.worker_name) ($($log.worker_id))`n" }
-                    $msg += "$E_WARNING $L_ISSUE_TYPE $($log.issue_type)`n$E_NOTE $L_DESCRIPTION $($log.description)`n$L_SEP"
-                    
-                    Send-ZaloMessage -text $msg
-                    if ($log.image_url) { Send-ZaloImageGroup -imageUrls @($log.image_url) }
-                }
-
-                # Cập nhật trạng thái
-                $null = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Patch -Body '{"last_run_date":"'$todayStr'"}' -ContentType "application/json"
-            }
-        }
+        ... (Đã vô hiệu hóa theo yêu cầu chuyển sang quy trình Patrol) ...
+        #>
 
         # ============================================
         # PHẦN B: BÁO CÁO PATROL MQAA
@@ -167,20 +132,20 @@ try {
                     [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
                     Start-Sleep -Seconds 1
 
-                    $titlePatrol = [char]0xD83D + [char]0xDCCB + " *PHI" + [char]0x1EBE + "U T" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T MQAA*"
-                    $subTitleDaily = "*(Ng" + [char]0x00E0 + "y: " + $yesterdayDate.ToString("dd/MM/yyyy") + ")*"
+                    $titlePatrol = [char]0xD83D + [char]0xDCCB + " PHI" + [char]0x1EBE + "U T" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T MQAA"
+                    $subTitleDaily = "(Ng" + [char]0x00E0 + "y: " + $yesterdayDate.ToString("dd/MM/yyyy") + ")"
 
                     # 1. Gửi phiếu riêng lẻ
                     $auditorGroups = $patrolData | Group-Object auditor_id
                     foreach ($auditorGroup in $auditorGroups) {
                         $auditorName = $auditorGroup.Group[0].auditor_name
                         $evidenceItems = @()
-                        $patrolMsg = "$titlePatrol`n$E_USER *Auditor: $auditorName - Ngày: $($yesterdayDate.ToString("dd/MM"))*`n$subTitleDaily`n$L_SEP`n"
+                        $patrolMsg = "$titlePatrol`n$E_USER Auditor: $auditorName - Ng" + [char]0x00E0 + "y: $($yesterdayDate.ToString("dd/MM"))`n$subTitleDaily`n$L_SEP`n"
                         $totalSum = 0; $count = 0
                         $secGroups = $auditorGroup.Group | Group-Object { $_.section.Replace("_", " ") }
                         foreach ($sg in $secGroups) {
                             $score = [Math]::Round(($sg.Group | Measure-Object overall_performance -Average).Average, 1)
-                            $patrolMsg += "$E_BLUE_DOT **$($sg.Name)**: $score%`n"
+                            $patrolMsg += "$E_BLUE_DOT $($sg.Name): $score%`n"
                             $totalSum += $score; $count++
                             if ($score -lt 100) {
                                 foreach ($rec in $sg.Group) {
@@ -196,7 +161,7 @@ try {
                                 }
                             }
                         }
-                        $patrolMsg += "$L_SEP`n$starEmoji **Performance: " + ([Math]::Round($totalSum/$count, 1)) + "%**"
+                        $patrolMsg += "$L_SEP`n$starEmoji Performance: " + ([Math]::Round($totalSum/$count, 1)) + "%"
                         if ($evidenceItems.Count -gt 0) {
                             $patrolMsg += "`n`n$E_WARNING *CHI TI" + [char]0x1EBE + "T C" + [char]0x00C1 + "C L" + [char]0x1ED6 + "I:*`n"
                             $imgs = @()
@@ -210,18 +175,18 @@ try {
                     }
 
                     # 2. Bảng tổng kết ngày
-                    $sumMsg = "$titlePatrol`n*T" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T B" + [char]0x1ED8 + " PH" + [char]0x1EAC + "N TRONG NG" + [char]0x00C0 + "Y*`n$subTitleDaily`n$L_SEP`n"
+                    $sumMsg = "$titlePatrol`nT" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T B" + [char]0x1ED8 + " PH" + [char]0x1EAC + "N TRONG NG" + [char]0x00C0 + "Y`n$subTitleDaily`n$L_SEP`n"
                     $oSum = 0; $oCount = 0
                     $dStats = $patrolData | Group-Object { $_.section.Replace("_", " ") }
                     foreach ($sec in $allSections) {
                         $match = $dStats | Where-Object { $_.Name -eq $sec.name }
                         if ($match) {
                             $score = [Math]::Round(($match.Group | Measure-Object overall_performance -Average).Average, 1)
-                            $sumMsg += "$E_BLUE_DOT **$($sec.name)**: $score%`n"
+                            $sumMsg += "$E_BLUE_DOT $($sec.name): $score%`n"
                             $oSum += $score; $oCount++
-                        } else { $sumMsg += "$E_BLUE_DOT **$($sec.name)**: ...`n" }
+                        } else { $sumMsg += "$E_BLUE_DOT $($sec.name): ...`n" }
                     }
-                    $sumMsg += "$L_SEP`n$starEmoji **Overall Daily Performance: " + ([Math]::Round($oSum/$oCount, 1)) + "%**"
+                    $sumMsg += "$L_SEP`n$starEmoji Overall Daily Performance: " + ([Math]::Round($oSum/$oCount, 1)) + "%"
                     Send-ZaloMessage -text $sumMsg
 
                     # 3. Tổng kết tuần (Chỉ Thứ 7)
@@ -230,18 +195,18 @@ try {
                         $wUrl = "$SUPABASE_URL/rest/v1/mqaa_patrol_logs?date=gte.$($monDate.ToString("yyyy-MM-dd"))&date=lte.$todayStr&select=overall_performance,section"
                         $wData = Invoke-RestMethod -Uri $wUrl -Headers $headers -Method Get
                         if ($wData) {
-                            $wMsg = "$titlePatrol`n*T" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T VI PH" + [char]0x1EA0 + "M MQAA TRONG TU" + [char]0x1EA6 + "N*`n*(Tu" + [char]0x1EA7 + "n t" + [char]0x1EEB + " " + $monDate.ToString("dd/MM") + " " + [char]0x0111 + [char]0x1EBF + "n " + (Get-Date).ToString("dd/MM") + ")*`n$L_SEP`n"
+                            $wMsg = "$titlePatrol`nT" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T VI PH" + [char]0x1EA0 + "M MQAA TRONG TU" + [char]0x1EA6 + "N`n(Tu" + [char]0x1EA7 + "n t" + [char]0x1EEB + " " + $monDate.ToString("dd/MM") + " " + [char]0x0111 + [char]0x1EBF + "n " + (Get-Date).ToString("dd/MM") + ")`n$L_SEP`n"
                             $wStats = $wData | Group-Object { $_.section.Replace("_", " ") }
                             $ws = 0; $wc = 0
                             foreach ($sec in $allSections) {
                                 $m = $wStats | Where-Object { $_.Name -eq $sec.name }
                                 if ($m) {
                                     $score = [Math]::Round(($m.Group | Measure-Object overall_performance -Average).Average, 1)
-                                    $wMsg += "$E_BLUE_DOT **$($sec.name)**: $score%`n"
+                                    $wMsg += "$E_BLUE_DOT $($sec.name): $score%`n"
                                     $ws += $score; $wc++
-                                } else { $wMsg += "$E_BLUE_DOT **$($sec.name)**: ...`n" }
+                                } else { $wMsg += "$E_BLUE_DOT $($sec.name): ...`n" }
                             }
-                            $wMsg += "$L_SEP`n$starEmoji **Weekly Overall: " + ([Math]::Round($ws/$wc, 1)) + "%**"
+                            $wMsg += "$L_SEP`n$starEmoji Weekly Overall: " + ([Math]::Round($ws/$wc, 1)) + "%"
                             Send-ZaloMessage -text $wMsg
                         }
                     }
