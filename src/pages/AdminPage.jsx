@@ -902,6 +902,36 @@ function MachineManager() {
     return Array.from(new Set(s)).sort();
   }, [machines]);
 
+  const saveRow = async (m, idx) => {
+    if (!m.section || !m.machine_name) return;
+    setSaving(true);
+    const payload = { section: m.section.toUpperCase(), machine_name: m.machine_name.toUpperCase(), active: !!m.active };
+    if (m.id) payload.id = m.id;
+    
+    const { error } = await supabase.from("kpi_machines").upsert(payload);
+    setSaving(false);
+    if (error) {
+      console.error("Lỗi lưu máy:", error);
+    } else {
+      // Chỉ tải lại nếu là máy mới để lấy ID, tránh làm phiền khi đang nhập
+      if (!m.id) loadMachines();
+    }
+  };
+
+  const deleteRow = async (m, idx) => {
+    if (!m.id) {
+       setMachines(prev => prev.filter(x => x !== m));
+       return;
+    }
+    if (!confirm(`Xoá máy ${m.machine_name} của section ${m.section}?`)) return;
+    
+    setSaving(true);
+    const { error } = await supabase.from("kpi_machines").delete().eq("id", m.id);
+    setSaving(false);
+    if (error) alert("Lỗi xoá: " + error.message);
+    else loadMachines();
+  };
+
   const filteredMachines = useMemo(() => {
     if (!selectedSection) return machines;
     return machines.filter(m => m.section === selectedSection);
@@ -916,36 +946,6 @@ function MachineManager() {
     } else {
       setMachines([{ section: selectedSection, machine_name: "", active: true }, ...machines]);
     }
-  };
-
-  const saveRow = async (m, idx) => {
-    if (!m.section || !m.machine_name) return alert("Vui lòng nhập đầy đủ Section và Tên Máy.");
-    setSaving(true);
-    const payload = { section: m.section.toUpperCase(), machine_name: m.machine_name.toUpperCase(), active: !!m.active };
-    if (m.id) payload.id = m.id;
-    
-    const { error } = await supabase.from("kpi_machines").upsert(payload);
-    setSaving(false);
-    if (error) alert("Lỗi: " + error.message);
-    else {
-      alert("Đã lưu máy.");
-      loadMachines();
-    }
-  };
-
-  const deleteRow = async (m, idx) => {
-    // Tìm index thật trong mảng machines để xóa
-    if (!m.id) {
-       setMachines(prev => prev.filter(x => x !== m));
-       return;
-    }
-    if (!confirm(`Xoá máy ${m.machine_name} của section ${m.section}?`)) return;
-    
-    setSaving(true);
-    const { error } = await supabase.from("kpi_machines").delete().eq("id", m.id);
-    setSaving(false);
-    if (error) alert("Lỗi xoá: " + error.message);
-    else loadMachines();
   };
 
   const seedData = async () => {
@@ -978,7 +978,7 @@ function MachineManager() {
     const { error } = await supabase.from("kpi_machines").upsert(INITIAL_MACHINES, { onConflict: "section,machine_name" });
     setSaving(false);
     if (error) alert("Lỗi nạp dữ liệu: " + error.message);
-    else { alert("Đã nạp danh sách máy mặc định."); loadMachines(); }
+    else { loadMachines(); }
   };
 
   const handleAddSection = () => {
@@ -1017,12 +1017,11 @@ function MachineManager() {
               <th className="p-3 text-left w-1/4">Section</th>
               <th className="p-3 text-left">Tên Line / Máy</th>
               <th className="p-3 text-center w-24">Active</th>
-              <th className="p-3 text-center w-40">Hành động</th>
+              <th className="p-3 text-center w-32">Hành động</th>
             </tr>
           </thead>
           <tbody>
             {filteredMachines.map((m, fIdx) => {
-               // Tìm index thật trong mảng machines để update state
                const realIdx = machines.findIndex(x => x === m);
                return (
                 <tr key={m.id || `new-${fIdx}`} className="border-t hover:bg-gray-50">
@@ -1035,13 +1034,19 @@ function MachineManager() {
                       value={m.machine_name} 
                       placeholder="Nhập tên máy..."
                       onChange={e => setMachines(prev => prev.map((x, i) => i === realIdx ? { ...x, machine_name: e.target.value.toUpperCase() } : x))} 
+                      onBlur={() => saveRow(m, realIdx)}
+                      onKeyDown={e => e.key === 'Enter' && saveRow(m, realIdx)}
                     />
                   </td>
                   <td className="p-2 text-center">
-                    <input type="checkbox" checked={m.active} onChange={e => setMachines(prev => prev.map((x, i) => i === realIdx ? { ...x, active: e.target.checked } : x))} />
+                    <input type="checkbox" checked={m.active} onChange={e => {
+                      const newActive = e.target.checked;
+                      setMachines(prev => prev.map((x, i) => i === realIdx ? { ...x, active: newActive } : x));
+                      // Tự động lưu khi toggle checkbox
+                      saveRow({ ...m, active: newActive }, realIdx);
+                    }} />
                   </td>
-                  <td className="p-2 text-center space-x-2">
-                    <button className="btn btn-sm bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100" onClick={() => saveRow(m, realIdx)} disabled={saving}>Lưu</button>
+                  <td className="p-2 text-center">
                     <button className="btn btn-sm bg-red-50 text-red-600 border-red-200 hover:bg-red-100" onClick={() => deleteRow(m, realIdx)} disabled={saving}>Xoá</button>
                   </td>
                 </tr>
