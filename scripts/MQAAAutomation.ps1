@@ -104,7 +104,8 @@ try {
         # PHẦN A: BÁO CÁO VI PHẠM MQAA HÀNG NGÀY
         # ============================================
         if ($currentTime -ge $REPORT_TIME -and $LAST_RUN -ne $todayStr) {
-            $yesterday = (Get-Date).AddDays(-1).ToString("yyyy-MM-dd")
+            $yesterdayDate = (Get-Date).AddDays(-1).Date
+            $yesterday = $yesterdayDate.ToString("yyyy-MM-dd")
             $response = Invoke-RestMethod -Uri "$SUPABASE_URL/rest/v1/mqaa_logs?date=eq.$yesterday&select=*" -Headers $headers -Method Get
             
             if ($response.Count -gt 0) {
@@ -118,10 +119,20 @@ try {
                 [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
                 Start-Sleep -Seconds 1
 
+                $subTitleDaily = "*(Ng" + [char]0x00E0 + "y: " + $yesterdayDate.ToString("dd/MM/yyyy") + ")*"
+
                 foreach ($log in $response) {
-                    $msg = "$E_ANNOUNCE $L_HEADER`n$L_SEP`n$E_CALENDAR $L_DATE $($log.date)`n$E_SECTION $L_SECTION $($log.section)`n$E_CLOCK $L_SHIFT $($log.shift)`n$E_LOCATION $L_LINE $($log.line)`n$E_OFFICER $L_LEADER $($log.leader_name)`n"
+                    $normSection = $log.section.Replace("_", " ")
+                    $msg = "$E_ANNOUNCE $L_HEADER`n$subTitleDaily`n$L_SEP`n" +
+                           "$E_CALENDAR $L_DATE $($log.date)`n" +
+                           "$E_SECTION $L_SECTION $normSection`n" +
+                           "$E_CLOCK $L_SHIFT $($log.shift)`n" +
+                           "$E_LOCATION $L_LINE $($log.line)`n" +
+                           "$E_OFFICER $L_LEADER $($log.leader_name)`n"
+                    
                     if ($log.worker_name) { $msg += "$E_USER $L_WORKER $($log.worker_name) ($($log.worker_id))`n" }
                     $msg += "$E_WARNING $L_ISSUE_TYPE $($log.issue_type)`n$E_NOTE $L_DESCRIPTION $($log.description)`n$L_SEP"
+                    
                     Send-ZaloMessage -text $msg
                     if ($log.image_url) { Send-ZaloImageGroup -imageUrls @($log.image_url) }
                 }
