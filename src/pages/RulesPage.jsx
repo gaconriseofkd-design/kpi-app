@@ -175,8 +175,8 @@ function RulesContent() {
     const p = prompt("Nhập mật khẩu để thêm dòng:");
     if (p !== "davidtu") return;
 
-    let category = "";
-    if (section.toUpperCase() === "LEANLINE_MOLDED") category = "%OE";
+    const s = section.toUpperCase();
+    if (s === "LEANLINE_MOLDED" || s === "LEANLINE_DC") category = "%OE";
 
     const newRow =
       needsCategory
@@ -296,7 +296,7 @@ function RulesContent() {
       delete x.id;
       x.section = (x.section || section || "MOLDING").toUpperCase();
       let cat = (x.category || "").toString().trim().replace(/\s+/g, " ");
-      if (x.section === "LEANLINE_MOLDED" && !cat) cat = "%OE";
+      if ((x.section === "LEANLINE_MOLDED" || x.section === "LEANLINE_DC") && !cat) cat = "%OE";
       x.category = cat;
       x.threshold = Number(x.threshold || 0);
       x.score = Number(x.score || 0);

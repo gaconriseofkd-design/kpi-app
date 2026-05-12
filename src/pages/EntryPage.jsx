@@ -62,10 +62,10 @@ function scoreByProductivityLeanline(oe, allRules, section, line) {
   let rules = [];
   let category = '';
 
-  if (section === "LEANLINE_MOLDED") {
+  if (section === "LEANLINE_MOLDED" || section === "LEANLINE_DC") {
     category = getMoldedCategoryFromLine(line);
     rules = (allRules || [])
-      .filter(r => r.active !== false && r.category === category)
+      .filter(r => r.active !== false && (r.category === category || !r.category))
       .sort((a, b) => Number(b.threshold) - Number(a.threshold));
   } else {
     rules = (allRules || [])
