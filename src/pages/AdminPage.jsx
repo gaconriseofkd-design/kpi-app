@@ -876,21 +876,46 @@ function MachineManager() {
   const [machines, setMachines] = useState([]);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [selectedSection, setSelectedSection] = useState("");
 
   const loadMachines = async () => {
     setLoading(true);
     const { data, error } = await supabase.from("kpi_machines").select("*").order("section", { ascending: true }).order("machine_name", { ascending: true });
     setLoading(false);
     if (error) console.error(error);
-    setMachines(data || []);
+    const rows = data || [];
+    setMachines(rows);
+    
+    // Auto-select first section if none selected
+    if (rows.length > 0 && !selectedSection) {
+      const firstSection = rows[0].section;
+      setSelectedSection(firstSection);
+    }
   };
 
   useEffect(() => {
     loadMachines();
   }, []);
 
+  const sections = useMemo(() => {
+    const s = machines.map(m => m.section).filter(Boolean);
+    return Array.from(new Set(s)).sort();
+  }, [machines]);
+
+  const filteredMachines = useMemo(() => {
+    if (!selectedSection) return machines;
+    return machines.filter(m => m.section === selectedSection);
+  }, [machines, selectedSection]);
+
   const addRow = () => {
-    setMachines([{ section: "", machine_name: "", active: true }, ...machines]);
+    if (!selectedSection) {
+      const newSec = prompt("Nhập tên Section mới:");
+      if (!newSec) return;
+      setSelectedSection(newSec.toUpperCase());
+      setMachines([{ section: newSec.toUpperCase(), machine_name: "", active: true }, ...machines]);
+    } else {
+      setMachines([{ section: selectedSection, machine_name: "", active: true }, ...machines]);
+    }
   };
 
   const saveRow = async (m, idx) => {
@@ -909,7 +934,11 @@ function MachineManager() {
   };
 
   const deleteRow = async (m, idx) => {
-    if (!m.id) return setMachines(prev => prev.filter((_, i) => i !== idx));
+    // Tìm index thật trong mảng machines để xóa
+    if (!m.id) {
+       setMachines(prev => prev.filter(x => x !== m));
+       return;
+    }
     if (!confirm(`Xoá máy ${m.machine_name} của section ${m.section}?`)) return;
     
     setSaving(true);
@@ -952,10 +981,29 @@ function MachineManager() {
     else { alert("Đã nạp danh sách máy mặc định."); loadMachines(); }
   };
 
+  const handleAddSection = () => {
+    const newSec = prompt("Nhập tên Section mới (VD: MOLDING, LEANLINE_MOLDED...):");
+    if (newSec) {
+      setSelectedSection(newSec.toUpperCase());
+    }
+  };
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-between items-center bg-white p-4 border rounded-xl shadow-sm">
-        <h3 className="text-lg font-bold">Danh sách Line / Máy ({machines.length})</h3>
+      <div className="bg-white p-4 border rounded-xl shadow-sm flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <label className="font-bold text-gray-700">Chọn Section:</label>
+          <select 
+            className="input min-w-[200px]"
+            value={selectedSection}
+            onChange={(e) => setSelectedSection(e.target.value)}
+          >
+            <option value="">-- Tất cả --</option>
+            {sections.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+          <button className="btn btn-sm" onClick={handleAddSection}>+ Thêm Section mới</button>
+        </div>
+        
         <div className="space-x-2">
           <button className="btn" onClick={seedData} disabled={saving}>🔄 Nạp dữ liệu mặc định</button>
           <button className="btn btn-primary" onClick={addRow} disabled={loading}>+ Thêm máy mới</button>
@@ -966,30 +1014,54 @@ function MachineManager() {
         <table className="table w-full">
           <thead className="bg-gray-50">
             <tr>
-              <th className="p-3 text-left">Section</th>
+              <th className="p-3 text-left w-1/4">Section</th>
               <th className="p-3 text-left">Tên Line / Máy</th>
-              <th className="p-3 text-center">Active</th>
-              <th className="p-3 text-center">Hành động</th>
+              <th className="p-3 text-center w-24">Active</th>
+              <th className="p-3 text-center w-40">Hành động</th>
             </tr>
           </thead>
           <tbody>
-            {machines.map((m, idx) => (
-              <tr key={m.id || idx} className="border-t hover:bg-gray-50">
-                <td className="p-2">
-                  <input className="input w-full" value={m.section} onChange={e => setMachines(prev => prev.map((x, i) => i === idx ? { ...x, section: e.target.value.toUpperCase() } : x))} />
-                </td>
-                <td className="p-2">
-                  <input className="input w-full" value={m.machine_name} onChange={e => setMachines(prev => prev.map((x, i) => i === idx ? { ...x, machine_name: e.target.value.toUpperCase() } : x))} />
-                </td>
-                <td className="p-2 text-center">
-                  <input type="checkbox" checked={m.active} onChange={e => setMachines(prev => prev.map((x, i) => i === idx ? { ...x, active: e.target.checked } : x))} />
-                </td>
-                <td className="p-2 text-center space-x-2">
-                  <button className="btn btn-sm btn-ghost text-blue-600" onClick={() => saveRow(m, idx)} disabled={saving}>Lưu</button>
-                  <button className="btn btn-sm btn-ghost text-red-600" onClick={() => deleteRow(m, idx)} disabled={saving}>Xoá</button>
+            {filteredMachines.map((m, fIdx) => {
+               // Tìm index thật trong mảng machines để update state
+               const realIdx = machines.findIndex(x => x === m);
+               return (
+                <tr key={m.id || `new-${fIdx}`} className="border-t hover:bg-gray-50">
+                  <td className="p-2 text-gray-500 font-medium">
+                    {m.section}
+                  </td>
+                  <td className="p-2">
+                    <input 
+                      className="input w-full font-bold text-blue-600" 
+                      value={m.machine_name} 
+                      placeholder="Nhập tên máy..."
+                      onChange={e => setMachines(prev => prev.map((x, i) => i === realIdx ? { ...x, machine_name: e.target.value.toUpperCase() } : x))} 
+                    />
+                  </td>
+                  <td className="p-2 text-center">
+                    <input type="checkbox" checked={m.active} onChange={e => setMachines(prev => prev.map((x, i) => i === realIdx ? { ...x, active: e.target.checked } : x))} />
+                  </td>
+                  <td className="p-2 text-center space-x-2">
+                    <button className="btn btn-sm bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100" onClick={() => saveRow(m, realIdx)} disabled={saving}>Lưu</button>
+                    <button className="btn btn-sm bg-red-50 text-red-600 border-red-200 hover:bg-red-100" onClick={() => deleteRow(m, realIdx)} disabled={saving}>Xoá</button>
+                  </td>
+                </tr>
+               );
+            })}
+            {selectedSection && (
+              <tr className="border-t bg-gray-50/50">
+                <td colSpan={4} className="p-2 text-center">
+                  <button 
+                    className="text-blue-600 hover:text-blue-800 font-bold flex items-center justify-center gap-2 w-full py-2"
+                    onClick={addRow}
+                  >
+                    <span>+ Thêm máy mới cho {selectedSection}</span>
+                  </button>
                 </td>
               </tr>
-            ))}
+            )}
+            {!filteredMachines.length && (
+                <tr><td colSpan={4} className="p-8 text-center text-gray-400 italic">Không có máy nào trong section này.</td></tr>
+            )}
           </tbody>
         </table>
       </div>
