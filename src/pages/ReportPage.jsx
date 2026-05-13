@@ -95,22 +95,52 @@ export default function ReportPage() {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
         <form onSubmit={tryLogin} className="w-full max-w-sm p-6 rounded-xl shadow bg-white">
-          <h2 className="text-xl font-semibold mb-4">Báo cáo KPI</h2>
-          <label className="block mb-2">Mật khẩu</label>
+          <h2 className="text-xl font-semibold mb-4 text-indigo-700">Báo cáo KPI</h2>
+          <label className="block mb-2 text-sm font-medium text-gray-600">Mật khẩu truy cập</label>
           <input
             type="password"
             className="input w-full"
             value={pwd}
             onChange={(e) => setPwd(e.target.value)}
-            placeholder="..."
+            placeholder="Nhập mật khẩu..."
           />
-          <button className="btn btn-primary mt-4 w-full" type="submit">Đăng nhập</button>
+          <button className="btn btn-primary mt-6 w-full" type="submit">Đăng nhập</button>
         </form>
       </div>
     );
   }
 
-  return <ReportContent />;
+  return <ReportShell />;
+}
+
+function ReportShell() {
+  const [tab, setTab] = useState("detail"); // "detail" | "summary"
+
+  return (
+    <div className="p-4 max-w-7xl mx-auto space-y-6">
+      <div className="flex items-center justify-between border-b pb-4">
+        <h2 className="text-2xl font-black text-slate-800 tracking-tight">Hệ thống Báo cáo</h2>
+        <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+          <button 
+             className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${tab === 'detail' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+             onClick={() => setTab('detail')}
+          >
+             📊 Báo cáo chi tiết
+          </button>
+          <button 
+             className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${tab === 'summary' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+             onClick={() => setTab('summary')}
+          >
+             📈 Tổng hợp Section theo tháng
+          </button>
+        </div>
+      </div>
+
+      <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+        {tab === "detail" ? <ReportContent /> : <MonthlySectionSummary />}
+      </div>
+    </div>
+  );
 }
 
 /* =============== Trang báo cáo =============== */
@@ -1349,3 +1379,176 @@ function SummaryCard({ title, value }) {
     </div>
   );
 }
+
+/* =============== Báo cáo Tổng hợp (MỚI) =============== */
+function MonthlySectionSummary() {
+  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const viSection = (s) => {
+    const k = (s || "").toUpperCase();
+    if (k === "MOLDING") return "Molding";
+    if (k === "LAMINATION") return "Lamination";
+    if (k === "PREFITTING") return "Prefitting";
+    if (k === "BÀO") return "Bào";
+    if (k === "TÁCH") return "Tách";
+    if (k === "LEANLINE_DC") return "LL Die cut";
+    if (k === "LEANLINE_MOLDED") return "LL Molded";
+    return s || "";
+  };
+
+  async function loadSummary() {
+    setLoading(true);
+    try {
+      const dateFrom = `${month}-01`;
+      const [year, mo] = month.split("-").map(Number);
+      const dateTo = new Date(year, mo, 0).toISOString().slice(0, 10);
+
+      // Tải từ 3 bảng khác nhau
+      const [r1, r2, r3] = await Promise.all([
+        supabase.from("kpi_entries").select("section, day_score").gte("date", dateFrom).lte("date", dateTo).eq("status", "approved"),
+        supabase.from("kpi_entries_molding").select("section, day_score").gte("date", dateFrom).lte("date", dateTo).eq("status", "approved"),
+        supabase.from("kpi_lps_entries").select("section, day_score").gte("date", dateFrom).lte("date", dateTo).eq("status", "approved")
+      ]);
+
+      const allData = [
+        ...(r1.data || []),
+        ...(r2.data || []),
+        ...(r3.data || [])
+      ];
+
+      const stats = {};
+      allData.forEach(r => {
+        const s = (r.section || "MOLDING").toUpperCase();
+        if (!stats[s]) stats[s] = { count: 0, sum: 0 };
+        stats[s].count++;
+        stats[s].sum += Number(r.day_score || 0);
+      });
+
+      const result = Object.entries(stats).map(([sec, val]) => ({
+        key: sec,
+        sectionName: viSection(sec),
+        count: val.count,
+        avg: val.count ? (val.sum / val.count) : 0,
+        percent: val.count ? (val.sum / val.count / 15 * 100) : 0
+      })).sort((a, b) => b.percent - a.percent);
+
+      setData(result);
+    } catch (err) {
+      alert("Lỗi: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadSummary();
+  }, [month]);
+
+  const exportSummaryXLSX = () => {
+    const exportData = data.map(d => ({
+      "Tháng": month,
+      "Bộ phận": d.sectionName,
+      "Số bản ghi": d.count,
+      "Điểm trung bình": Number(d.avg.toFixed(2)),
+      "% KPI Đạt được": Number(d.percent.toFixed(2)) + "%"
+    }));
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Summary");
+    XLSX.writeFile(wb, `TongHop_KPI_Section_${month}.xlsx`);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="bg-white p-6 rounded-xl shadow-sm border flex flex-wrap items-end gap-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-600 mb-1">Chọn tháng báo cáo</label>
+          <input 
+            type="month" 
+            className="input w-full md:w-64" 
+            value={month} 
+            onChange={e => setMonth(e.target.value)} 
+          />
+        </div>
+        <button 
+          onClick={loadSummary} 
+          disabled={loading} 
+          className="btn btn-primary"
+        >
+          {loading ? "Đang tải..." : "🔄 Cập nhật dữ liệu"}
+        </button>
+        <button 
+          onClick={exportSummaryXLSX} 
+          disabled={loading || data.length === 0} 
+          className="btn bg-green-600 text-white hover:bg-green-700"
+        >
+          📥 Xuất Excel tổng hợp
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Bảng tổng hợp */}
+        <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+          <div className="bg-gray-50 px-4 py-3 border-b">
+            <h3 className="font-bold text-gray-700">Chi tiết theo Section ({month})</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bộ phận</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Số lượt</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">Điểm TB</th>
+                  <th className="px-4 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">% KPI</th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {data.map(d => (
+                  <tr key={d.key} className="hover:bg-gray-50 transition-colors">
+                    <td className="px-4 py-4 whitespace-nowrap font-bold text-gray-800">{d.sectionName}</td>
+                    <td className="px-4 py-4 whitespace-nowrap text-center text-gray-600">{d.count}</td>
+                    <td className="px-4 py-4 whitespace-nowrap text-center font-semibold text-indigo-600">{d.avg.toFixed(2)}</td>
+                    <td className="px-4 py-4 whitespace-nowrap text-center">
+                      <span className={`px-2 py-1 rounded-full text-xs font-bold ${d.percent >= 90 ? 'bg-green-100 text-green-700' : d.percent >= 80 ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
+                        {d.percent.toFixed(1)}%
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+                {!data.length && !loading && (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-8 text-center text-gray-500 italic">Không có dữ liệu cho tháng này</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Biểu đồ so sánh */}
+        <div className="bg-white rounded-xl shadow-sm border p-6">
+          <h3 className="font-bold text-gray-700 mb-6">Biểu đồ % Hiệu suất các Section</h3>
+          <div className="space-y-4">
+            {data.map(d => (
+              <div key={d.key}>
+                <div className="flex justify-between text-sm mb-1">
+                  <span className="font-medium text-gray-600">{d.sectionName}</span>
+                  <span className="font-bold text-indigo-600">{d.percent.toFixed(1)}%</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-3">
+                  <div 
+                    className={`h-3 rounded-full transition-all duration-500 ${d.percent >= 90 ? 'bg-green-500' : d.percent >= 80 ? 'bg-blue-500' : 'bg-orange-500'}`}
+                    style={{ width: `${d.percent}%` }}
+                  ></div>
+                </div>
+              </div>
+            ))}
+            {!data.length && <div className="h-64 flex items-center justify-center text-gray-400 italic border-2 border-dashed rounded-lg">Dữ liệu biểu đồ trống</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
