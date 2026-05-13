@@ -9,6 +9,51 @@ const SECTIONS = ["All", "Raw_Material_Warehouse", "Lamination", "Prefitting", "
 
 export default function MQAAPatrolReport() {
     const navigate = useNavigate();
+    const [activeTab, setActiveTab] = useState("logs"); // "logs" or "summary"
+    
+    return (
+        <div className="max-w-[1200px] mx-auto p-6 bg-white shadow-xl rounded-xl mt-8">
+            <div className="flex items-center justify-between mb-8 border-b pb-4">
+                <div className="flex items-center gap-4">
+                    <button
+                        onClick={() => navigate("/mqaa-patrol")}
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-lg transition-all"
+                        title="Quay lại"
+                    >
+                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                    </button>
+                    <h2 className="text-3xl font-black text-indigo-900 tracking-tight">MQAA Patrol Reports</h2>
+                </div>
+
+                <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+                    <button 
+                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'logs' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        onClick={() => setActiveTab('logs')}
+                    >
+                        📋 Chi tiết phiếu
+                    </button>
+                    <button 
+                        className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'summary' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                        onClick={() => setActiveTab('summary')}
+                    >
+                        📊 Tổng hợp tháng
+                    </button>
+                </div>
+            </div>
+
+            <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
+                {activeTab === "logs" ? <PatrolLogsTab navigate={navigate} /> : <PatrolSummaryTab />}
+            </div>
+        </div>
+    );
+}
+
+/* ======================================================================
+   TAB 1: PATROL LOGS (EXISTING LOGIC)
+   ====================================================================== */
+function PatrolLogsTab({ navigate }) {
     const [filters, setFilters] = useState({
         section: "All",
         auditor: "All",
@@ -20,7 +65,7 @@ export default function MQAAPatrolReport() {
     const [loading, setLoading] = useState(false);
     const [showPasswordModal, setShowPasswordModal] = useState(false);
     const [selectedRecord, setSelectedRecord] = useState(null);
-    const [modalMode, setModalMode] = useState("edit"); // 'edit' or 'delete'
+    const [modalMode, setModalMode] = useState("edit");
 
     useEffect(() => {
         const fetchAuditors = async () => {
@@ -55,13 +100,29 @@ export default function MQAAPatrolReport() {
             }
 
             const { data, error } = await query;
-
             if (error) throw error;
             setResults(data || []);
         } catch (error) {
             alert("Lỗi tìm kiếm: " + error.message);
         } finally {
             setLoading(false);
+        }
+    };
+
+    const confirmDeleteRecord = async () => {
+        if (!selectedRecord) return;
+        try {
+            const { error } = await supabase
+                .from("mqaa_patrol_logs")
+                .delete()
+                .eq("id", selectedRecord.id);
+            if (error) throw error;
+            setResults(prev => prev.filter(r => r.id !== selectedRecord.id));
+            alert("Đã xóa bản lưu thành công.");
+        } catch (error) {
+            alert("Lỗi khi xóa: " + error.message);
+        } finally {
+            setSelectedRecord(null);
         }
     };
 
@@ -78,35 +139,21 @@ export default function MQAAPatrolReport() {
         titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } };
 
         // Header Info
-        worksheet.mergeCells("A3:B3");
         worksheet.getCell("A3").value = "Auditor:";
-        worksheet.mergeCells("C3:F3");
         worksheet.getCell("C3").value = record.auditor_name;
-
-        worksheet.mergeCells("A4:B4");
         worksheet.getCell("A4").value = "ID:";
-        worksheet.mergeCells("C4:F4");
         worksheet.getCell("C4").value = record.auditor_id;
-
-        worksheet.mergeCells("A5:B5");
         worksheet.getCell("A5").value = "Date of Audit:";
-        worksheet.mergeCells("C5:F5");
         worksheet.getCell("C5").value = record.date;
-
-        worksheet.mergeCells("A6:B6");
         worksheet.getCell("A6").value = "Section:";
-        worksheet.mergeCells("C6:F6");
         worksheet.getCell("C6").value = record.section;
-
-        worksheet.mergeCells("A7:B7");
         worksheet.getCell("A7").value = "Overall Performance:";
-        worksheet.mergeCells("C7:F7");
         const perfCell = worksheet.getCell("C7");
         perfCell.value = Number(record.overall_performance) / 100;
         perfCell.font = { bold: true, color: { argb: "FFEF4444" } };
         perfCell.numFmt = '0%';
 
-        // Fetch subLabel if missing (for old records)
+        // Fetch subLabel
         const { data: dbCriteria } = await supabase.from("mqaa_patrol_criteria").select("no, sub_label").eq("section_id", record.section);
         const criteriaMap = {};
         (dbCriteria || []).forEach(c => criteriaMap[c.no] = c.sub_label);
@@ -125,7 +172,6 @@ export default function MQAAPatrolReport() {
             const isHeader = item.is_header || item.isHeader;
             const scoreVal = (!isHeader && item.score !== null && item.score !== undefined && item.score !== "") ? Number(item.score) : "";
             const levelVal = (!isHeader && item.level !== null && item.level !== undefined && item.level !== "") ? Number(item.level) : "";
-
             const englishText = item.sub_label || item.subLabel || criteriaMap[item.no] || "";
 
             const row = worksheet.addRow([
@@ -142,34 +188,17 @@ export default function MQAAPatrolReport() {
                 item.description || ""
             ]);
 
-            // Highlight main headers
             if (isHeader) {
                 row.eachCell((cell, colNumber) => {
-                    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFDBA74" } }; // Orange
-                    // Only apply cell-level font bold if it's not the rich-text criteria cell to avoid overwriting rich styles
-                    if (colNumber !== 2) {
-                        cell.font = { bold: true };
-                    }
+                    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFDBA74" } };
+                    if (colNumber !== 2) cell.font = { bold: true };
                 });
-            }
-
-            if (item.image_url) {
-                row.getCell(5).font = { color: { argb: '0000FF' }, underline: true };
             }
 
             row.eachCell((cell) => {
                 cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
                 cell.alignment = { wrapText: true, vertical: "middle" };
             });
-            row.getCell(5).alignment = { horizontal: 'center' };
-        });
-
-        // Totals Row
-        const totalRow = worksheet.addRow(["", "TOTAL", record.total_score, record.total_level, "", ""]);
-        totalRow.font = { bold: true };
-        totalRow.eachCell((cell) => {
-            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFEF9C3" } };
-            cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
         });
 
         // Column Widths
@@ -180,33 +209,12 @@ export default function MQAAPatrolReport() {
         worksheet.getColumn(5).width = 20;
         worksheet.getColumn(6).width = 30;
 
-        // Buffer and save
         const buffer = await workbook.xlsx.writeBuffer();
         saveAs(new Blob([buffer]), `MQAA_Patrol_${record.section}_${record.date}.xlsx`);
     };
 
-    const confirmDeleteRecord = async () => {
-        if (!selectedRecord) return;
-        try {
-            const { error } = await supabase
-                .from("mqaa_patrol_logs")
-                .delete()
-                .eq("id", selectedRecord.id);
-
-            if (error) throw error;
-
-            // Refresh results
-            setResults(prev => prev.filter(r => r.id !== selectedRecord.id));
-            alert("Đã xóa bản lưu thành công.");
-        } catch (error) {
-            alert("Lỗi khi xóa: " + error.message);
-        } finally {
-            setSelectedRecord(null);
-        }
-    };
-
     return (
-        <div className="max-w-[1200px] mx-auto p-6 bg-white shadow-xl rounded-xl mt-8">
+        <>
             <PasswordModal
                 isOpen={showPasswordModal}
                 onClose={() => setShowPasswordModal(false)}
@@ -219,18 +227,6 @@ export default function MQAAPatrolReport() {
                 }}
                 initialTitle={modalMode === "edit" ? "Chỉnh sửa phiếu" : "Xác nhận xóa phiếu"}
             />
-            <div className="flex items-center gap-4 mb-8 border-b pb-4">
-                <button
-                    onClick={() => navigate("/mqaa-patrol")}
-                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 p-2 rounded-lg transition-all"
-                    title="Quay lại"
-                >
-                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                    </svg>
-                </button>
-                <h2 className="text-3xl font-bold text-indigo-900">Xuất Báo Cáo MQAA Patrol</h2>
-            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-10 p-6 bg-indigo-50 rounded-xl border border-indigo-100 shadow-sm">
                 <div className="flex flex-col gap-2">
@@ -260,31 +256,15 @@ export default function MQAAPatrolReport() {
                 </div>
                 <div className="flex flex-col gap-2">
                     <label className="text-sm font-bold text-indigo-700">Từ ngày</label>
-                    <input
-                        type="date"
-                        className="p-2.5 border rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                        value={filters.startDate}
-                        onChange={(e) => setFilters({ ...filters, startDate: e.target.value })}
-                    />
+                    <input type="date" className="p-2.5 border rounded-lg" value={filters.startDate} onChange={(e) => setFilters({ ...filters, startDate: e.target.value })} />
                 </div>
                 <div className="flex flex-col gap-2">
                     <label className="text-sm font-bold text-indigo-700">Đến ngày</label>
-                    <input
-                        type="date"
-                        className="p-2.5 border rounded-lg bg-white shadow-sm focus:ring-2 focus:ring-indigo-500 outline-none"
-                        value={filters.endDate}
-                        onChange={(e) => setFilters({ ...filters, endDate: e.target.value })}
-                    />
+                    <input type="date" className="p-2.5 border rounded-lg" value={filters.endDate} onChange={(e) => setFilters({ ...filters, endDate: e.target.value })} />
                 </div>
                 <div className="flex items-end">
-                    <button
-                        onClick={handleSearch}
-                        disabled={loading}
-                        className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-6 rounded-lg shadow-lg transition-all flex items-center justify-center gap-2"
-                    >
-                        {loading ? (
-                            <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
-                        ) : "Tìm kiếm"}
+                    <button onClick={handleSearch} disabled={loading} className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 rounded-lg transition-all flex items-center justify-center gap-2">
+                        {loading ? <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span> : "Tìm kiếm"}
                     </button>
                 </div>
             </div>
@@ -298,18 +278,13 @@ export default function MQAAPatrolReport() {
                             <th className="p-4 border-b">Auditor</th>
                             <th className="p-4 border-b text-center">Section</th>
                             <th className="p-4 border-b text-center">Score</th>
-                            <th className="p-4 border-b text-center">Level</th>
                             <th className="p-4 border-b text-center">Hiệu suất</th>
                             <th className="p-4 border-b text-right">Thao tác</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
                         {results.length === 0 ? (
-                            <tr>
-                                <td colSpan="8" className="p-10 text-center text-gray-500 italic">
-                                    Không tìm thấy dữ liệu trong khoảng thời gian này
-                                </td>
-                            </tr>
+                            <tr><td colSpan="7" className="p-10 text-center text-gray-500 italic">Không tìm thấy dữ liệu</td></tr>
                         ) : (
                             results.map((res, idx) => (
                                 <tr key={res.id} className="hover:bg-gray-50 transition-colors">
@@ -325,48 +300,159 @@ export default function MQAAPatrolReport() {
                                         </span>
                                     </td>
                                     <td className="p-4 text-center font-black text-red-600">{res.total_score}</td>
-                                    <td className="p-4 text-center font-black text-red-600">{res.total_level}</td>
                                     <td className="p-4 text-center">
                                         <span className={`px-3 py-1 rounded-full text-xs font-black ${Number(res.overall_performance) >= 90 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                                             {res.overall_performance}%
                                         </span>
                                     </td>
                                     <td className="p-4 text-right flex justify-end gap-2">
-                                        <button
-                                            onClick={() => {
-                                                setSelectedRecord(res);
-                                                setShowPasswordModal(true);
-                                            }}
-                                            className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-4 py-1.5 rounded-lg text-sm font-bold transition-all inline-flex items-center gap-1 shadow-sm border border-indigo-200"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                                            Chỉnh sửa
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                setSelectedRecord(res);
-                                                setModalMode("delete");
-                                                setShowPasswordModal(true);
-                                            }}
-                                            className="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-1.5 rounded-lg text-sm font-bold transition-all inline-flex items-center gap-1 shadow-sm border border-red-100"
-                                            title="Xóa bản lưu"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                            Xóa
-                                        </button>
-                                        <button
-                                            onClick={() => exportToExcel(res)}
-                                            className="bg-green-100 hover:bg-green-200 text-green-700 px-4 py-1.5 rounded-lg text-sm font-bold transition-all inline-flex items-center gap-1 shadow-sm border border-green-200"
-                                        >
-                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M16 5l-4-4-4 4M12 1v13" /></svg>
-                                            Tải về (.xlsx)
-                                        </button>
+                                        <button onClick={() => { setSelectedRecord(res); setModalMode("edit"); setShowPasswordModal(true); }} className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-4 py-1.5 rounded-lg text-sm font-bold transition-all border border-indigo-200">Sửa</button>
+                                        <button onClick={() => { setSelectedRecord(res); setModalMode("delete"); setShowPasswordModal(true); }} className="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-1.5 rounded-lg text-sm font-bold transition-all border border-red-100">Xóa</button>
+                                        <button onClick={() => exportToExcel(res)} className="bg-green-100 hover:bg-green-200 text-green-700 px-4 py-1.5 rounded-lg text-sm font-bold transition-all border border-green-200">Tải (.xlsx)</button>
                                     </td>
                                 </tr>
                             ))
                         )}
                     </tbody>
                 </table>
+            </div>
+        </>
+    );
+}
+
+/* ======================================================================
+   TAB 2: PATROL SUMMARY (MONTHLY)
+   ====================================================================== */
+function PatrolSummaryTab() {
+    const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+    const [data, setData] = useState([]);
+    const [loading, setLoading] = useState(false);
+
+    const loadSummary = async () => {
+        setLoading(true);
+        try {
+            const dateFrom = `${month}-01`;
+            const [year, mo] = month.split("-").map(Number);
+            const dateTo = new Date(year, mo, 0).toISOString().slice(0, 10);
+
+            const { data: logs, error } = await supabase
+                .from("mqaa_patrol_logs")
+                .select("section, overall_performance")
+                .gte("date", dateFrom)
+                .lte("date", dateTo);
+
+            if (error) throw error;
+
+            const stats = {};
+            logs.forEach(l => {
+                const s = l.section || "Unknown";
+                if (!stats[s]) stats[s] = { count: 0, sum: 0 };
+                stats[s].count++;
+                stats[s].sum += Number(l.overall_performance || 0);
+            });
+
+            const result = Object.entries(stats).map(([sec, val]) => ({
+                key: sec,
+                sectionName: sec.replace(/_/g, " "),
+                count: val.count,
+                avgPerformance: val.count ? (val.sum / val.count) : 0
+            })).sort((a, b) => b.avgPerformance - a.avgPerformance);
+
+            setData(result);
+        } catch (err) {
+            alert("Lỗi tải tổng hợp: " + err.message);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => { loadSummary(); }, [month]);
+
+    const exportSummary = async () => {
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet("MQAA Summary");
+        worksheet.columns = [
+            { header: "Tháng", key: "month", width: 15 },
+            { header: "Section", key: "section", width: 25 },
+            { header: "Số lượt Audit", key: "count", width: 15 },
+            { header: "% Hiệu suất trung bình", key: "perf", width: 20 }
+        ];
+        data.forEach(d => {
+            worksheet.addRow({
+                month: month,
+                section: d.sectionName,
+                count: d.count,
+                perf: d.avgPerformance.toFixed(1) + "%"
+            });
+        });
+        const buffer = await workbook.xlsx.writeBuffer();
+        saveAs(new Blob([buffer]), `MQAA_Patrol_Summary_${month}.xlsx`);
+    };
+
+    return (
+        <div className="space-y-6">
+            <div className="bg-white p-6 rounded-xl shadow-sm border flex flex-wrap items-end gap-6">
+                <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Chọn tháng báo cáo</label>
+                    <input type="month" className="p-2 border rounded-lg w-full md:w-64" value={month} onChange={e => setMonth(e.target.value)} />
+                </div>
+                <button onClick={loadSummary} disabled={loading} className="btn bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-indigo-700 transition-all">
+                    {loading ? "Đang tải..." : "Cập nhật dữ liệu"}
+                </button>
+                <button onClick={exportSummary} disabled={loading || data.length === 0} className="btn bg-green-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-green-700 transition-all">
+                    📥 Tải báo cáo tổng hợp (.xlsx)
+                </button>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
+                    <div className="bg-slate-50 px-4 py-3 border-b">
+                        <h3 className="font-bold text-slate-700 uppercase text-sm">Bảng hiệu suất theo Section ({month})</h3>
+                    </div>
+                    <table className="w-full text-left">
+                        <thead className="bg-slate-100 text-slate-600 text-xs font-black">
+                            <tr>
+                                <th className="p-3">Section</th>
+                                <th className="p-3 text-center">Lượt Audit</th>
+                                <th className="p-3 text-center">% Hiệu suất TB</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y">
+                            {data.map(d => (
+                                <tr key={d.key} className="hover:bg-slate-50 transition-colors">
+                                    <td className="p-3 font-bold text-slate-800">{d.sectionName}</td>
+                                    <td className="p-3 text-center text-slate-600">{d.count}</td>
+                                    <td className="p-3 text-center">
+                                        <span className={`px-3 py-1 rounded-full text-xs font-black ${d.avgPerformance >= 90 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                            {d.avgPerformance.toFixed(1)}%
+                                        </span>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-sm border p-6">
+                    <h3 className="font-bold text-slate-700 mb-6 uppercase text-sm">Biểu đồ trực quan % Compliance</h3>
+                    <div className="space-y-5">
+                        {data.map(d => (
+                            <div key={d.key}>
+                                <div className="flex justify-between text-sm mb-1">
+                                    <span className="font-bold text-slate-600">{d.sectionName}</span>
+                                    <span className="font-black text-indigo-700">{d.avgPerformance.toFixed(1)}%</span>
+                                </div>
+                                <div className="w-full bg-slate-100 rounded-full h-3.5 shadow-inner">
+                                    <div 
+                                        className={`h-3.5 rounded-full transition-all duration-700 ${d.avgPerformance >= 90 ? 'bg-green-500' : 'bg-red-500'}`}
+                                        style={{ width: `${d.avgPerformance}%` }}
+                                    ></div>
+                                </div>
+                            </div>
+                        ))}
+                        {!data.length && <div className="h-40 flex items-center justify-center text-slate-400 italic border-2 border-dashed rounded-lg">Không có dữ liệu biểu đồ</div>}
+                    </div>
+                </div>
             </div>
         </div>
     );
