@@ -324,20 +324,21 @@ function PatrolLogsTab({ navigate }) {
    TAB 2: PATROL SUMMARY (MONTHLY)
    ====================================================================== */
 function PatrolSummaryTab() {
-    const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+    const [monthFrom, setMonthFrom] = useState(new Date().toISOString().slice(0, 7));
+    const [monthTo, setMonthTo] = useState(new Date().toISOString().slice(0, 7));
     const [data, setData] = useState([]);
     const [loading, setLoading] = useState(false);
 
     const loadSummary = async () => {
         setLoading(true);
         try {
-            const dateFrom = `${month}-01`;
-            const [year, mo] = month.split("-").map(Number);
-            const dateTo = new Date(year, mo, 0).toISOString().slice(0, 10);
+            const dateFrom = `${monthFrom}-01`;
+            const [yearTo, moTo] = monthTo.split("-").map(Number);
+            const dateTo = new Date(yearTo, moTo, 0).toISOString().slice(0, 10);
 
             const { data: logs, error } = await supabase
                 .from("mqaa_patrol_logs")
-                .select("section, overall_performance")
+                .select("section, overall_performance, date")
                 .gte("date", dateFrom)
                 .lte("date", dateTo);
 
@@ -366,35 +367,41 @@ function PatrolSummaryTab() {
         }
     };
 
-    useEffect(() => { loadSummary(); }, [month]);
+    useEffect(() => { loadSummary(); }, [monthFrom, monthTo]);
 
     const exportSummary = async () => {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet("MQAA Summary");
         worksheet.columns = [
-            { header: "Tháng", key: "month", width: 15 },
+            { header: "Từ tháng", key: "from", width: 15 },
+            { header: "Đến tháng", key: "to", width: 15 },
             { header: "Section", key: "section", width: 25 },
             { header: "Số lượt Audit", key: "count", width: 15 },
             { header: "% Hiệu suất trung bình", key: "perf", width: 20 }
         ];
         data.forEach(d => {
             worksheet.addRow({
-                month: month,
+                from: monthFrom,
+                to: monthTo,
                 section: d.sectionName,
                 count: d.count,
                 perf: d.avgPerformance.toFixed(1) + "%"
             });
         });
         const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), `MQAA_Patrol_Summary_${month}.xlsx`);
+        saveAs(new Blob([buffer]), `MQAA_Patrol_Summary_${monthFrom}_to_${monthTo}.xlsx`);
     };
 
     return (
         <div className="space-y-6">
             <div className="bg-white p-6 rounded-xl shadow-sm border flex flex-wrap items-end gap-6">
                 <div>
-                    <label className="block text-sm font-bold text-gray-700 mb-1">Chọn tháng báo cáo</label>
-                    <input type="month" className="p-2 border rounded-lg w-full md:w-64" value={month} onChange={e => setMonth(e.target.value)} />
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Từ tháng</label>
+                    <input type="month" className="p-2 border rounded-lg w-full md:w-48" value={monthFrom} onChange={e => setMonthFrom(e.target.value)} />
+                </div>
+                <div>
+                    <label className="block text-sm font-bold text-gray-700 mb-1">Đến tháng</label>
+                    <input type="month" className="p-2 border rounded-lg w-full md:w-48" value={monthTo} onChange={e => setMonthTo(e.target.value)} />
                 </div>
                 <button onClick={loadSummary} disabled={loading} className="btn bg-indigo-600 text-white font-bold py-2 px-6 rounded-lg hover:bg-indigo-700 transition-all">
                     {loading ? "Đang tải..." : "Cập nhật dữ liệu"}
@@ -407,7 +414,7 @@ function PatrolSummaryTab() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
                     <div className="bg-slate-50 px-4 py-3 border-b">
-                        <h3 className="font-bold text-slate-700 uppercase text-sm">Bảng hiệu suất theo Section ({month})</h3>
+                        <h3 className="font-bold text-slate-700 uppercase text-sm">Bảng hiệu suất ({monthFrom} → {monthTo})</h3>
                     </div>
                     <table className="w-full text-left">
                         <thead className="bg-slate-100 text-slate-600 text-xs font-black">
@@ -429,12 +436,15 @@ function PatrolSummaryTab() {
                                     </td>
                                 </tr>
                             ))}
+                            {!data.length && !loading && (
+                                <tr><td colSpan="3" className="p-10 text-center text-slate-400 italic">Không có dữ liệu trong khoảng này</td></tr>
+                            )}
                         </tbody>
                     </table>
                 </div>
 
                 <div className="bg-white rounded-xl shadow-sm border p-6">
-                    <h3 className="font-bold text-slate-700 mb-6 uppercase text-sm">Biểu đồ trực quan % Compliance</h3>
+                    <h3 className="font-bold text-slate-700 mb-6 uppercase text-sm">Biểu đồ % Compliance ({monthFrom} → {monthTo})</h3>
                     <div className="space-y-5">
                         {data.map(d => (
                             <div key={d.key}>

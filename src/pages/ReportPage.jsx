@@ -1346,7 +1346,6 @@ function ReportContent() {
                     <td className="p-2 text-center">{r.line}</td>
                     <td className="p-2 text-center">{r.ca}</td>
                     <td className="p-2 text-center">{fmt(r.oe, 2)}</td>
-                    <td className="p-2 text-center">{fmt(r.defects, 0)}</td>
                     <td className="p-2 text-center">{fmt(r.p_score, 2)}</td>
                     <td className="p-2 text-center">{fmt(r.q_score, 2)}</td>
                     <td className="p-2 text-center font-semibold text-orange-600">{fmt(r.c_score, 1)}</td>
@@ -1371,6 +1370,7 @@ function ReportContent() {
     </div>
   );
 }
+
 function SummaryCard({ title, value }) {
   return (
     <div className="p-3 rounded border bg-white">
@@ -1382,7 +1382,8 @@ function SummaryCard({ title, value }) {
 
 /* =============== Báo cáo Tổng hợp (MỚI) =============== */
 function MonthlySectionSummary() {
-  const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
+  const [monthFrom, setMonthFrom] = useState(new Date().toISOString().slice(0, 7));
+  const [monthTo, setMonthTo] = useState(new Date().toISOString().slice(0, 7));
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -1401,9 +1402,9 @@ function MonthlySectionSummary() {
   async function loadSummary() {
     setLoading(true);
     try {
-      const dateFrom = `${month}-01`;
-      const [year, mo] = month.split("-").map(Number);
-      const dateTo = new Date(year, mo, 0).toISOString().slice(0, 10);
+      const dateFrom = `${monthFrom}-01`;
+      const [yearTo, moTo] = monthTo.split("-").map(Number);
+      const dateTo = new Date(yearTo, moTo, 0).toISOString().slice(0, 10);
 
       // Tải từ 3 bảng khác nhau
       const [r1, r2, r3] = await Promise.all([
@@ -1444,11 +1445,11 @@ function MonthlySectionSummary() {
 
   useEffect(() => {
     loadSummary();
-  }, [month]);
+  }, [monthFrom, monthTo]);
 
   const exportSummaryXLSX = () => {
     const exportData = data.map(d => ({
-      "Tháng": month,
+      "Khoảng thời gian": `${monthFrom} -> ${monthTo}`,
       "Bộ phận": d.sectionName,
       "Số bản ghi": d.count,
       "Điểm trung bình": Number(d.avg.toFixed(2)),
@@ -1457,19 +1458,28 @@ function MonthlySectionSummary() {
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Summary");
-    XLSX.writeFile(wb, `TongHop_KPI_Section_${month}.xlsx`);
+    XLSX.writeFile(wb, `TongHop_KPI_Section_${monthFrom}_to_${monthTo}.xlsx`);
   };
 
   return (
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-xl shadow-sm border flex flex-wrap items-end gap-6">
         <div>
-          <label className="block text-sm font-medium text-gray-600 mb-1">Chọn tháng báo cáo</label>
+          <label className="block text-sm font-medium text-gray-600 mb-1">Từ tháng</label>
           <input 
             type="month" 
-            className="input w-full md:w-64" 
-            value={month} 
-            onChange={e => setMonth(e.target.value)} 
+            className="input w-full md:w-48" 
+            value={monthFrom} 
+            onChange={e => setMonthFrom(e.target.value)} 
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-600 mb-1">Đến tháng</label>
+          <input 
+            type="month" 
+            className="input w-full md:w-48" 
+            value={monthTo} 
+            onChange={e => setMonthTo(e.target.value)} 
           />
         </div>
         <button 
@@ -1492,7 +1502,7 @@ function MonthlySectionSummary() {
         {/* Bảng tổng hợp */}
         <div className="bg-white rounded-xl shadow-sm border overflow-hidden">
           <div className="bg-gray-50 px-4 py-3 border-b">
-            <h3 className="font-bold text-gray-700">Chi tiết theo Section ({month})</h3>
+            <h3 className="font-bold text-gray-700">Chi tiết theo Section ({monthFrom} → {monthTo})</h3>
           </div>
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-gray-200">
@@ -1519,7 +1529,7 @@ function MonthlySectionSummary() {
                 ))}
                 {!data.length && !loading && (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-gray-500 italic">Không có dữ liệu cho tháng này</td>
+                    <td colSpan={4} className="px-4 py-8 text-center text-gray-500 italic">Không có dữ liệu trong khoảng này</td>
                   </tr>
                 )}
               </tbody>
@@ -1529,7 +1539,7 @@ function MonthlySectionSummary() {
 
         {/* Biểu đồ so sánh */}
         <div className="bg-white rounded-xl shadow-sm border p-6">
-          <h3 className="font-bold text-gray-700 mb-6">Biểu đồ % Hiệu suất các Section</h3>
+          <h3 className="font-bold text-gray-700 mb-6">Biểu đồ % Hiệu suất ({monthFrom} → {monthTo})</h3>
           <div className="space-y-4">
             {data.map(d => (
               <div key={d.key}>
@@ -1551,4 +1561,5 @@ function MonthlySectionSummary() {
       </div>
     </div>
   );
-}
+}
+
