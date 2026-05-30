@@ -352,18 +352,19 @@ try {
                 
                 Write-Log "Da tao xong bao cao WIP."
                 
-                # Chuyển Zalo Target theo $ZALO_GROUP_NAME
+                $WIP_TARGET = "Daily Report"
+                # Chuyển Zalo Target
                 Focus-Zalo
                 [System.Windows.Forms.SendKeys]::SendWait("^f")
                 Start-Sleep -Milliseconds 800
-                [System.Windows.Forms.Clipboard]::SetText($ZALO_GROUP_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+                [System.Windows.Forms.Clipboard]::SetText($WIP_TARGET, [System.Windows.Forms.TextDataFormat]::UnicodeText)
                 [System.Windows.Forms.SendKeys]::SendWait("^v")
                 Start-Sleep -Seconds 1
                 [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
                 Start-Sleep -Seconds 1
                 
                 Send-ZaloMessage -text $wipMsg
-                Write-Log "Da gui bao cao WIP."
+                Write-Log "Da gui bao cao WIP vao $WIP_TARGET."
                 
             } catch {
                 Write-Log "Loi tao bao cao WIP: $_" "ERROR"
