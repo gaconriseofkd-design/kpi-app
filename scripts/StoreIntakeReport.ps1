@@ -307,6 +307,108 @@ try {
         }
     }
 
+    # --- Gui bao cao WIP (16h) ---
+    if ($currentHour -eq 16) {
+        Write-Host "Kiem tra thoi gian: 16h - Bat dau doc va gui bao cao WIP..." -ForegroundColor Cyan
+        $WIP_EXCEL_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Nhân Lg\Schedule\Ovn Pro Schedule.xlsb"
+        if (Test-Path $WIP_EXCEL_PATH) {
+            $excelWIP = New-Object -ComObject Excel.Application
+            $excelWIP.Visible = $false
+            $excelWIP.DisplayAlerts = $false
+            try {
+                $wbWIP = $excelWIP.Workbooks.Open($WIP_EXCEL_PATH, 0, $true)
+                $shWIP = $wbWIP.Sheets.Item("Record Wip")
+                
+                $lastRow = 1
+                for ($r = 50000; $r -ge 1; $r--) {
+                    if (-not [string]::IsNullOrWhiteSpace($shWIP.Cells.Item($r, 1).Text)) {
+                        $lastRow = $r
+                        break
+                    }
+                }
+                
+                $colNames = @(
+                    $shWIP.Cells.Item(1,2).Text.Trim(),
+                    $shWIP.Cells.Item(1,3).Text.Trim(),
+                    $shWIP.Cells.Item(1,4).Text.Trim(),
+                    $shWIP.Cells.Item(1,5).Text.Trim(),
+                    $shWIP.Cells.Item(1,6).Text.Trim(),
+                    $shWIP.Cells.Item(1,7).Text.Trim(),
+                    $shWIP.Cells.Item(1,8).Text.Trim()
+                )
+                
+                $wipValues = @()
+                $totalWIP = 0
+                for ($c = 2; $c -le 8; $c++) {
+                    $valText = $shWIP.Cells.Item($lastRow, $c).Text
+                    $valNum = 0
+                    if (-not [string]::IsNullOrWhiteSpace($valText)) {
+                        $valText = $valText -replace '[^\d\.-]', ''
+                        if ($valText) { [double]::TryParse($valText, [ref]$valNum) | Out-Null }
+                    }
+                    $wipValues += $valNum
+                    $totalWIP += $valNum
+                }
+                
+                $wbWIP.Close($false)
+                $excelWIP.Quit()
+                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelWIP) | Out-Null
+                $excelWIP = $null
+                
+                $currentTimeStr = Get-Date -Format "HH:mm dd/MM/yy"
+                $wipMsg = "Báo cáo tình hình WIP đến thời điểm ${currentTimeStr}:`n"
+                for ($i = 0; $i -lt 7; $i++) {
+                    $fmt = "{0:N0}" -f $wipValues[$i]
+                    $wipMsg += "$($colNames[$i]): $fmt Pairs`n"
+                }
+                
+                $totalWIPF = "{0:N0}" -f $totalWIP
+                $wipMsg += "Total WIP: $totalWIPF Pairs`n"
+                
+                $target = 1900000
+                if ($totalWIP -gt $target) {
+                    $diff = "{0:N0}" -f ($totalWIP - $target)
+                    $wipMsg += "Nhận xét: Tổng WIP hiện tại đang VƯỢT target $diff Pairs. Cần chú ý giảm WIP!"
+                } elseif ($totalWIP -lt $target) {
+                    $diff = "{0:N0}" -f ($target - $totalWIP)
+                    $wipMsg += "Nhận xét: Tổng WIP hiện tại đang THẤP HƠN target $diff Pairs. Đang kiểm soát tốt!"
+                } else {
+                    $wipMsg += "Nhận xét: Tổng WIP hiện tại ĐẠT ĐÚNG target 1,900,000 Pairs."
+                }
+                
+                Write-Host "Noi dung bao cao WIP:"
+                Write-Host $wipMsg -ForegroundColor Green
+                
+                # Gui vao Zalo
+                Focus-Zalo
+                Start-Sleep -Seconds 1
+                
+                [System.Windows.Forms.SendKeys]::SendWait("^f")
+                Start-Sleep -Milliseconds 800
+                [System.Windows.Forms.Clipboard]::SetText($ZALO_TARGET_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+                [System.Windows.Forms.SendKeys]::SendWait("^v")
+                Start-Sleep -Seconds 1
+                [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+                Start-Sleep -Seconds 1
+
+                [System.Windows.Forms.Clipboard]::SetText($wipMsg, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+                [System.Windows.Forms.SendKeys]::SendWait("^v")
+                Start-Sleep -Milliseconds 600
+                [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+                Start-Sleep -Milliseconds 800
+                
+            } catch {
+                Write-Host "Loi khi tao bao cao WIP: $_" -ForegroundColor Red
+                if ($excelWIP) {
+                    try {
+                        $excelWIP.Quit()
+                        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelWIP) | Out-Null
+                    } catch {}
+                }
+            }
+        }
+    }
+
     Write-Host "=== HOAN TAT GUI BAO CAO ===" -ForegroundColor Green
 } catch {
     Write-Host "LOI: $_" -ForegroundColor Red

@@ -1,4 +1,4 @@
-# scripts/MQAAAutomation.ps1
+﻿# scripts/MQAAAutomation.ps1
 # Script tự động gửi báo cáo MQAA vào Zalo mỗi sáng 08:00
 # Logic: Báo cáo hàng ngày cho ngày hôm trước + Tổng kết tuần vào Thứ 7
 
@@ -279,6 +279,101 @@ try {
             Write-Log "Chua den gio gui bao cao ($currentTime < $PATROL_REPORT_TIME). Bo qua." "WARN"
         }
     }
+    # ============================================
+    # PHẦN C: BÁO CÁO WIP (08:00)
+    # ============================================
+    if ((Get-Date).Hour -eq 8) {
+        Write-Log "Kiem tra thoi gian: 8h - Bat dau doc va gui bao cao WIP..."
+        $WIP_EXCEL_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Nhân Lg\Schedule\Ovn Pro Schedule.xlsb"
+        if (Test-Path $WIP_EXCEL_PATH) {
+            $excelWIP = New-Object -ComObject Excel.Application
+            $excelWIP.Visible = $false
+            $excelWIP.DisplayAlerts = $false
+            try {
+                $wbWIP = $excelWIP.Workbooks.Open($WIP_EXCEL_PATH, 0, $true)
+                $shWIP = $wbWIP.Sheets.Item("Record Wip")
+                
+                $lastRow = 1
+                for ($r = 50000; $r -ge 1; $r--) {
+                    if (-not [string]::IsNullOrWhiteSpace($shWIP.Cells.Item($r, 1).Text)) {
+                        $lastRow = $r
+                        break
+                    }
+                }
+                
+                $colNames = @(
+                    $shWIP.Cells.Item(1,2).Text.Trim(),
+                    $shWIP.Cells.Item(1,3).Text.Trim(),
+                    $shWIP.Cells.Item(1,4).Text.Trim(),
+                    $shWIP.Cells.Item(1,5).Text.Trim(),
+                    $shWIP.Cells.Item(1,6).Text.Trim(),
+                    $shWIP.Cells.Item(1,7).Text.Trim(),
+                    $shWIP.Cells.Item(1,8).Text.Trim()
+                )
+                
+                $wipValues = @()
+                $totalWIP = 0
+                for ($c = 2; $c -le 8; $c++) {
+                    $valText = $shWIP.Cells.Item($lastRow, $c).Text
+                    $valNum = 0
+                    if (-not [string]::IsNullOrWhiteSpace($valText)) {
+                        $valText = $valText -replace '[^\d\.-]', ''
+                        if ($valText) { [double]::TryParse($valText, [ref]$valNum) | Out-Null }
+                    }
+                    $wipValues += $valNum
+                    $totalWIP += $valNum
+                }
+                
+                $wbWIP.Close($false)
+                $excelWIP.Quit()
+                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelWIP) | Out-Null
+                $excelWIP = $null
+                
+                $currentTimeStr = Get-Date -Format "HH:mm dd/MM/yy"
+                $wipMsg = "Báo cáo tình hình WIP đến thời điểm ${currentTimeStr}:`n"
+                for ($i = 0; $i -lt 7; $i++) {
+                    $fmt = "{0:N0}" -f $wipValues[$i]
+                    $wipMsg += "$($colNames[$i]): $fmt Pairs`n"
+                }
+                
+                $totalWIPF = "{0:N0}" -f $totalWIP
+                $wipMsg += "Total WIP: $totalWIPF Pairs`n"
+                
+                $target = 1900000
+                if ($totalWIP -gt $target) {
+                    $diff = "{0:N0}" -f ($totalWIP - $target)
+                    $wipMsg += "Nhận xét: Tổng WIP hiện tại đang VƯỢT target $diff Pairs. Cần chú ý giảm WIP!"
+                } elseif ($totalWIP -lt $target) {
+                    $diff = "{0:N0}" -f ($target - $totalWIP)
+                    $wipMsg += "Nhận xét: Tổng WIP hiện tại đang THẤP HƠN target $diff Pairs. Đang kiểm soát tốt!"
+                } else {
+                    $wipMsg += "Nhận xét: Tổng WIP hiện tại ĐẠT ĐÚNG target 1,900,000 Pairs."
+                }
+                
+                Write-Log "Da tao xong bao cao WIP."
+                
+                # Chuyển Zalo Target theo $ZALO_GROUP_NAME
+                Focus-Zalo
+                [System.Windows.Forms.SendKeys]::SendWait("^f")
+                Start-Sleep -Milliseconds 800
+                [System.Windows.Forms.Clipboard]::SetText($ZALO_GROUP_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+                [System.Windows.Forms.SendKeys]::SendWait("^v")
+                Start-Sleep -Seconds 1
+                [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+                Start-Sleep -Seconds 1
+                
+                Send-ZaloMessage -text $wipMsg
+                Write-Log "Da gui bao cao WIP."
+                
+            } catch {
+                Write-Log "Loi tao bao cao WIP: $_" "ERROR"
+                if ($excelWIP) { try { $excelWIP.Quit(); [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelWIP) | Out-Null } catch {} }
+            }
+        } else {
+            Write-Log "Khong tim thay file WIP: $WIP_EXCEL_PATH" "ERROR"
+        }
+    }
+
     Write-Log "=== HOAN TAT ==="
 } catch {
     Write-Log "LOI NGHIEM TRONG: $_" "ERROR"
