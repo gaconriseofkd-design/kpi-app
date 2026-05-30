@@ -273,7 +273,7 @@ try {
             
             $currentTimeStr = Get-Date -Format "HH:mm dd/MM/yy"
             
-            $dlMessage = "Thông tin Delay xuất gấp đến thời điểm $currentTimeStr:`nDelay: Die cut: $delayDieCutF Pairs, Molded: $delayMoldedF Pairs, Others: $delayOthersF Pairs, Total: $delayTotalF Pairs.`nXuất gấp: Die cut: $urgentDieCutF Pairs, Molded: $urgentMoldedF Pairs, Others: $urgentOthersF Pairs, Total: $urgentTotalF Pairs."
+            $dlMessage = "Thông tin Delay xuất gấp đến thời điểm ${currentTimeStr}:`nDelay: Die cut: $delayDieCutF Pairs, Molded: $delayMoldedF Pairs, Others: $delayOthersF Pairs, Total: $delayTotalF Pairs.`nXuất gấp: Die cut: $urgentDieCutF Pairs, Molded: $urgentMoldedF Pairs, Others: $urgentOthersF Pairs, Total: $urgentTotalF Pairs."
             
             Write-Host "Noi dung bao cao Delay Xuat Gap:"
             Write-Host $dlMessage -ForegroundColor Green
