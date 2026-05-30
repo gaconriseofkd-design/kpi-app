@@ -203,6 +203,110 @@ try {
         }
     }
 
+    # --- Gui bao cao Delay Xuat Gap (10h va 16h) ---
+    $currentHour = (Get-Date).Hour
+    if ($currentHour -eq 10 -or $currentHour -eq 16) {
+        Write-Host "Kiem tra thoi gian: $currentHour h - Bat dau doc va gui bao cao Delay-Xuat Gap..." -ForegroundColor Cyan
+        
+        $excelDLXG = New-Object -ComObject Excel.Application
+        $excelDLXG.Visible = $false
+        $excelDLXG.DisplayAlerts = $false
+        
+        try {
+            $wbDLXG = $excelDLXG.Workbooks.Open($EXCEL_FILE_PATH, 0, $true)
+            $shDLXG = $wbDLXG.Sheets.Item("DL-XG")
+            
+            $delayDieCut = 0; $delayMolded = 0; $delayOthers = 0
+            $urgentDieCut = 0; $urgentMolded = 0; $urgentOthers = 0
+            
+            $row = 2
+            while ($true) {
+                $reasonText = $shDLXG.Cells.Item($row, 2).Text
+                $qtyText = $shDLXG.Cells.Item($row, 3).Text
+                $typeText = $shDLXG.Cells.Item($row, 5).Text
+                
+                if ([string]::IsNullOrWhiteSpace($reasonText) -and [string]::IsNullOrWhiteSpace($typeText)) {
+                    break
+                }
+                
+                $reason = $reasonText.Trim().ToUpper()
+                $type = $typeText.Trim().ToUpper()
+                
+                $qty = 0
+                if (-not [string]::IsNullOrWhiteSpace($qtyText)) {
+                    $qtyText = $qtyText -replace '[^\d\.-]', ''
+                    if ($qtyText) { [double]::TryParse($qtyText, [ref]$qty) | Out-Null }
+                }
+                
+                if ($reason -eq "PRODUCTION DELAY") {
+                    if ($type -eq "DIE CUT") { $delayDieCut += $qty }
+                    elseif ($type -eq "MOLDED") { $delayMolded += $qty }
+                    else { $delayOthers += $qty }
+                }
+                elseif ($reason -eq "URGENT") {
+                    if ($type -eq "DIE CUT") { $urgentDieCut += $qty }
+                    elseif ($type -eq "MOLDED") { $urgentMolded += $qty }
+                    else { $urgentOthers += $qty }
+                }
+                
+                $row++
+                if ($row -gt 50000) { break }
+            }
+            
+            $wbDLXG.Close($false)
+            $excelDLXG.Quit()
+            [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelDLXG) | Out-Null
+            $excelDLXG = $null
+            
+            $delayTotal = $delayDieCut + $delayMolded + $delayOthers
+            $urgentTotal = $urgentDieCut + $urgentMolded + $urgentOthers
+            
+            $delayDieCutF = "{0:N0}" -f $delayDieCut
+            $delayMoldedF = "{0:N0}" -f $delayMolded
+            $delayOthersF = "{0:N0}" -f $delayOthers
+            $delayTotalF  = "{0:N0}" -f $delayTotal
+            
+            $urgentDieCutF = "{0:N0}" -f $urgentDieCut
+            $urgentMoldedF = "{0:N0}" -f $urgentMolded
+            $urgentOthersF = "{0:N0}" -f $urgentOthers
+            $urgentTotalF  = "{0:N0}" -f $urgentTotal
+            
+            $currentTimeStr = Get-Date -Format "HH:mm dd/MM/yy"
+            
+            $dlMessage = "Thông tin Delay xuất gấp đến thời điểm $currentTimeStr:`nDelay: Die cut: $delayDieCutF Pairs, Molded: $delayMoldedF Pairs, Others: $delayOthersF Pairs, Total: $delayTotalF Pairs.`nXuất gấp: Die cut: $urgentDieCutF Pairs, Molded: $urgentMoldedF Pairs, Others: $urgentOthersF Pairs, Total: $urgentTotalF Pairs."
+            
+            Write-Host "Noi dung bao cao Delay Xuat Gap:"
+            Write-Host $dlMessage -ForegroundColor Green
+            
+            # Gui vao Zalo
+            Focus-Zalo
+            Start-Sleep -Seconds 1
+            
+            [System.Windows.Forms.SendKeys]::SendWait("^f")
+            Start-Sleep -Milliseconds 800
+            [System.Windows.Forms.Clipboard]::SetText($ZALO_TARGET_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+            [System.Windows.Forms.SendKeys]::SendWait("^v")
+            Start-Sleep -Seconds 1
+            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+            Start-Sleep -Seconds 1
+
+            [System.Windows.Forms.Clipboard]::SetText($dlMessage, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+            [System.Windows.Forms.SendKeys]::SendWait("^v")
+            Start-Sleep -Milliseconds 600
+            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+            Start-Sleep -Milliseconds 800
+            
+        } catch {
+            Write-Host "Loi khi tao bao cao Delay Xuat Gap: $_" -ForegroundColor Red
+            if ($excelDLXG) {
+                try {
+                    $excelDLXG.Quit()
+                    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelDLXG) | Out-Null
+                } catch {}
+            }
+        }
+    }
+
     Write-Host "=== HOAN TAT GUI BAO CAO ===" -ForegroundColor Green
 } catch {
     Write-Host "LOI: $_" -ForegroundColor Red
