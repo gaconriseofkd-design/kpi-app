@@ -5,53 +5,92 @@
 # === Cấu hình (Người dùng thay đổi tại đây) ===
 $SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
 $SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0"
-$ZALO_GROUP_NAME = "MQAA TESTING REPORT" # Nhập tên chính xác của nhóm Zalo
+$ZALO_GROUP_NAME  = "MQAA TESTING REPORT"
+$DEFAULT_REPORT_TIME = "08:00"
+
+# === Log file ===
+$LOG_FILE = Join-Path $PSScriptRoot "mqaa_automation.log"
+function Write-Log {
+    param([string]$msg, [string]$level = "INFO")
+    $ts   = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $line = "[$ts] [$level] $msg"
+    Add-Content -Path $LOG_FILE -Value $line -Encoding UTF8
+    if     ($level -eq "ERROR") { Write-Host $line -ForegroundColor Red }
+    elseif ($level -eq "WARN")  { Write-Host $line -ForegroundColor Yellow }
+    else                         { Write-Host $line }
+}
 
 # === Khởi tạo thư viện ===
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# Các nhãn tiếng Việt (Dùng [char] để tránh lỗi encoding)
-$L_HEADER = "*B" + [char]0x00C1 + "O C" + [char]0x00C1 + "O VI PH" + [char]0x1EA0 + "M MQAA*" 
-$L_DATE = "Ng" + [char]0x00E0 + "y:"                                        
-$L_SECTION = "B" + [char]0x1ED9 + " ph" + [char]0x1EAD + "n:"             
-$L_SHIFT = "Ca:"                                                          
-$L_LINE = "Line:"                                                         
-$L_LEADER = "Leader:"                                                     
-$L_WORKER = "Ng" + [char]0x01B0 + [char]0x1EDD + "i vi ph" + [char]0x1EA1 + "m:" 
-$L_ISSUE_TYPE = "Lo" + [char]0x1EA1 + "i vi ph" + [char]0x1EA1 + "m:"       
-$L_DESCRIPTION = "M" + [char]0x00F4 + " t" + [char]0x1EA3 + ":"             
-$L_WEEKLY_TITLE = [char]0xD83D + [char]0xDCC8 + " *T" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T VI PH" + [char]0x1EA0 + "M MQAA TRONG TU" + [char]0x1EA6 + "N*"
-$L_TOTAL_ERRORS = "T" + [char]0x1ED5 + "ng s" + [char]0x1ED1 + " l" + [char]0x1ED7 + "i ghi nh" + [char]0x1EAD + "n:"
-$L_STATS_SECTION = "Th" + [char]0x1ED1 + "ng k" + [char]0x00EA + " theo B" + [char]0x1ED9 + " ph" + [char]0x1EAD + "n:"
-$L_TOP_LINES = "Top 3 Line vi ph" + [char]0x1EA1 + "m nhi" + [char]0x1EC1 + "u nh" + [char]0x1EA5 + "t:"
-$L_SEP = "-----------------------"
-$L_DASHBOARD = [char]0xD83D + [char]0xDCCA + " *Xem Dashboard MQAA t" + [char]0x1EA1 + "i " + [char]0x0111 + [char]0x00E2 + "y:*" 
+# === Win32 API: ShowWindow + SetForegroundWindow ===
+$win32Src = @"
+using System;
+using System.Runtime.InteropServices;
+public class WinHelper {
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmd);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+    // nCmd: 6 = SW_MINIMIZE, 9 = SW_RESTORE
+}
+"@
+Add-Type -TypeDefinition $win32Src -Language CSharp -ErrorAction SilentlyContinue
+
+# Handle của Zalo và cửa sổ terminal hiện tại (set trong main)
+$script:zaloHandle   = [IntPtr]::Zero
+$script:myHandle     = [IntPtr]::Zero
+
+# Hàm focus Zalo trước khi gửi phím
+function Focus-Zalo {
+    if ($script:myHandle -ne [IntPtr]::Zero) {
+        [WinHelper]::ShowWindow($script:myHandle, 6) | Out-Null   # Minimize terminal
+    }
+    
+    $zaloThread = [WinHelper]::GetWindowThreadProcessId($script:zaloHandle, [ref]0)
+    $myThread = [WinHelper]::GetCurrentThreadId()
+    $fgWindow = [WinHelper]::GetForegroundWindow()
+    $fgThread = [WinHelper]::GetWindowThreadProcessId($fgWindow, [ref]0)
+    
+    if ($fgThread -ne $zaloThread) {
+        [WinHelper]::AttachThreadInput($myThread, $zaloThread, $true) | Out-Null
+        [WinHelper]::AttachThreadInput($fgThread, $zaloThread, $true) | Out-Null
+    }
+    
+    [WinHelper]::ShowWindow($script:zaloHandle, 9) | Out-Null   # Restore
+    Start-Sleep -Milliseconds 300
+    [WinHelper]::SetForegroundWindow($script:zaloHandle) | Out-Null
+    
+    if ($fgThread -ne $zaloThread) {
+        [WinHelper]::AttachThreadInput($myThread, $zaloThread, $false) | Out-Null
+        [WinHelper]::AttachThreadInput($fgThread, $zaloThread, $false) | Out-Null
+    }
+    Start-Sleep -Milliseconds 500
+}
+
+# Các nhãn tiếng Việt
+$L_SEP        = "-----------------------"
 $DASHBOARD_LINK = "https://kpi-app-ckg6.vercel.app/mqaa-dashboard"
 
 # Emojis
-$E_ANNOUNCE = [char]0xD83D + [char]0xDCE2                                  
-$E_CALENDAR = [char]0xD83D + [char]0xDDD3                                  
-$E_SECTION = [char]0xD83D + [char]0xDCC1                                   
-$E_CLOCK = [char]0x23F0                                                   
-$E_LOCATION = [char]0xD83D + [char]0xDCCD                                  
-$E_OFFICER = [char]0xD83D + [char]0xDC6E                                  
-$E_USER = [char]0xD83D + [char]0xDC64                                     
-$E_WARNING = [char]0x26A0 + [char]0xFE0F                                  
-$E_NOTE = [char]0xD83D + [char]0xDCDD                                     
-$E_CHART = [char]0xD83D + [char]0xDCC8                                    
-$E_BLUE_DOT = [char]0xD83D + [char]0xDD39                                 
-$E_FIRE = [char]0xD83D + [char]0xDD25                                     
-$E_NUM1 = "1" + [char]0x20E3; $E_NUM2 = "2" + [char]0x20E3; $E_NUM3 = "3" + [char]0x20E3
+$E_USER     = [char]0xD83D + [char]0xDC64
+$E_WARNING  = [char]0x26A0 + [char]0xFE0F
+$E_BLUE_DOT = [char]0xD83D + [char]0xDD39
+$starEmoji  = [char]0xD83D + [char]0xDCAF
 
 function Send-ZaloMessage {
     param([string]$text)
+    Focus-Zalo
     [System.Windows.Forms.Clipboard]::SetText($text, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+    Start-Sleep -Milliseconds 200
     [System.Windows.Forms.SendKeys]::SendWait("^v")
-    Start-Sleep -Milliseconds 500
+    Start-Sleep -Milliseconds 600
     [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-    Start-Sleep -Milliseconds 500
+    Start-Sleep -Milliseconds 800
 }
 
 function Send-ZaloImageGroup {
@@ -62,13 +101,15 @@ function Send-ZaloImageGroup {
     $filePaths = New-Object System.Collections.Specialized.StringCollection
     try {
         foreach ($url in $imageUrls) {
-            $fileName = [System.IO.Path]::GetFileName(([uri]$url).AbsolutePath)
+            $fileName  = [System.IO.Path]::GetFileName(([uri]$url).AbsolutePath)
             if (-not $fileName) { $fileName = "image_$(Get-Random).jpg" }
             $localPath = Join-Path $tempFolder $fileName
             Invoke-WebRequest -Uri $url -OutFile $localPath -UserAgent "Mozilla/5.0"
             if (Test-Path $localPath) { [void]$filePaths.Add($localPath) }
         }
+        Focus-Zalo
         [System.Windows.Forms.Clipboard]::SetFileDropList($filePaths)
+        Start-Sleep -Milliseconds 200
         [System.Windows.Forms.SendKeys]::SendWait("^v")
         Start-Sleep -Milliseconds 3000
         [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
@@ -78,52 +119,60 @@ function Send-ZaloImageGroup {
 }
 
 try {
-    $todayStr = Get-Date -Format "yyyy-MM-dd"
+    $todayStr    = Get-Date -Format "yyyy-MM-dd"
     $currentTime = Get-Date -Format "HH:mm"
-    $headers = @{ "apikey" = $SUPABASE_KEY; "Authorization" = "Bearer $SUPABASE_KEY" }
+    $headers     = @{ "apikey" = $SUPABASE_KEY; "Authorization" = "Bearer $SUPABASE_KEY" }
+
+    Write-Log "=== BAT DAU CHAY MQAA Automation ==="
 
     # 1. Lấy cấu hình hệ thống
     $settingsUrl = "$SUPABASE_URL/rest/v1/mqaa_settings?id=eq.1"
-    $settings = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Get
-    
+    $settings    = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Get
+
     if ($settings) {
-        $ZALO_GROUP_NAME = if ($settings[0].zalo_group) { $settings[0].zalo_group } else { $ZALO_GROUP_NAME }
-        $REPORT_TIME = if ($settings[0].report_time) { $settings[0].report_time } else { "08:00" }
-        $PATROL_ZALO_GROUP = if ($settings[0].patrol_zalo_group) { $settings[0].patrol_zalo_group } else { $ZALO_GROUP_NAME }
-        $PATROL_REPORT_TIME = if ($settings[0].patrol_report_time) { $settings[0].patrol_report_time } else { $REPORT_TIME }
-        $LAST_RUN = $settings[0].last_run_date
+        $ZALO_GROUP_NAME    = if ($settings[0].zalo_group)          { $settings[0].zalo_group }          else { $ZALO_GROUP_NAME }
+        $REPORT_TIME        = if ($settings[0].report_time)          { $settings[0].report_time }          else { $DEFAULT_REPORT_TIME }
+        $PATROL_ZALO_GROUP  = if ($settings[0].patrol_zalo_group)    { $settings[0].patrol_zalo_group }    else { $ZALO_GROUP_NAME }
+        $PATROL_REPORT_TIME = if ($settings[0].patrol_report_time -and $settings[0].patrol_report_time.Trim() -ne "") { $settings[0].patrol_report_time } else { $REPORT_TIME }
+        Write-Log "Settings: ZaloGroup='$ZALO_GROUP_NAME' | PatrolGroup='$PATROL_ZALO_GROUP' | PatrolTime='$PATROL_REPORT_TIME' | LastPatrol='$($settings[0].last_patrol_report_monday)'"
 
-        # Kích hoạt Zalo
+        # Kiểm tra Zalo đang mở
+        Write-Log "Dang kiem tra Zalo PC..."
         $zaloProcess = Get-Process -Name Zalo -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle } | Select-Object -First 1
-        if (-not $zaloProcess) { throw "Hãy mở Zalo PC trước." }
-        Add-Type -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);' -Name "Win32" -Namespace "Util" -ErrorAction SilentlyContinue
-        [Util.Win32]::SetForegroundWindow($zaloProcess.MainWindowHandle)
-        Start-Sleep -Seconds 2
+        if (-not $zaloProcess) {
+            Write-Log "LOI: Zalo PC chua mo." "ERROR"
+            throw "Hay mo Zalo PC truoc khi chay script!"
+        }
+        Write-Log "Zalo dang mo: PID=$($zaloProcess.Id) | Title='$($zaloProcess.MainWindowTitle)'"
 
-        <#
-        # ============================================
-        # PHẦN A: BÁO CÁO VI PHẠM MQAA HÀNG NGÀY
-        # ============================================
-        ... (Đã vô hiệu hóa theo yêu cầu chuyển sang quy trình Patrol) ...
-        #>
+        # Lưu handle
+        $script:zaloHandle = $zaloProcess.MainWindowHandle
+        $script:myHandle   = (Get-Process -Id $PID).MainWindowHandle
+
+        # Minimize terminal + focus Zalo
+        Write-Log "Minimize terminal, focus Zalo..."
+        Focus-Zalo
+        Start-Sleep -Seconds 2
 
         # ============================================
         # PHẦN B: BÁO CÁO PATROL MQAA
         # ============================================
         if ($currentTime -ge $PATROL_REPORT_TIME) {
             $yesterdayDate = (Get-Date).AddDays(-1).Date
-            $yesterdayStr = $yesterdayDate.ToString("yyyy-MM-dd")
-            $lastSentDate = $settings[0].last_patrol_report_monday
+            $yesterdayStr  = $yesterdayDate.ToString("yyyy-MM-dd")
+            $lastSentDate  = $settings[0].last_patrol_report_monday
+            Write-Log "Kiem tra Patrol: HomQua=$yesterdayStr | DaGui=$lastSentDate"
 
             if ($lastSentDate -ne $yesterdayStr) {
-                Write-Host ">>> Kiểm tra báo cáo Patrol ngày $yesterdayStr..." -ForegroundColor Cyan
-                $patrolUrl = "$SUPABASE_URL/rest/v1/mqaa_patrol_logs?date=eq.$yesterdayStr&select=auditor_name,auditor_id,date,section,overall_performance,evaluation_data"
+                Write-Log ">>> Bat dau gui bao cao Patrol ngay $yesterdayStr..."
+                $patrolUrl  = "$SUPABASE_URL/rest/v1/mqaa_patrol_logs?date=eq.$yesterdayStr&select=auditor_name,auditor_id,date,section,overall_performance,evaluation_data"
                 $patrolData = Invoke-RestMethod -Uri $patrolUrl -Headers $headers -Method Get
-            
+
                 if ($patrolData -and $patrolData.Count -gt 0) {
                     $allSections = Invoke-RestMethod -Uri "$SUPABASE_URL/rest/v1/mqaa_patrol_sections?select=name&order=sort_order.asc" -Headers $headers -Method Get
 
-                    # Chuyển sang nhóm Zalo Patrol
+                    # Chuyển sang nhóm Zalo Patrol (Focus trước khi gửi phím)
+                    Focus-Zalo
                     [System.Windows.Forms.SendKeys]::SendWait("^f")
                     Start-Sleep -Milliseconds 800
                     [System.Windows.Forms.Clipboard]::SetText($PATROL_ZALO_GROUP, [System.Windows.Forms.TextDataFormat]::UnicodeText)
@@ -131,16 +180,17 @@ try {
                     Start-Sleep -Seconds 1
                     [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
                     Start-Sleep -Seconds 1
+                    Write-Log "Da chuyen sang nhom Zalo: $PATROL_ZALO_GROUP"
 
-                    $titlePatrol = [char]0xD83D + [char]0xDCCB + " PHI" + [char]0x1EBE + "U T" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T MQAA"
+                    $titlePatrol   = [char]0xD83D + [char]0xDCCB + " PHI" + [char]0x1EBE + "U T" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T MQAA"
                     $subTitleDaily = "(Ng" + [char]0x00E0 + "y: " + $yesterdayDate.ToString("dd/MM/yyyy") + ")"
 
-                    # 1. Gửi phiếu riêng lẻ
+                    # 1. Gửi phiếu riêng lẻ từng Auditor
                     $auditorGroups = $patrolData | Group-Object auditor_id
                     foreach ($auditorGroup in $auditorGroups) {
-                        $auditorName = $auditorGroup.Group[0].auditor_name
+                        $auditorName   = $auditorGroup.Group[0].auditor_name
                         $evidenceItems = @()
-                        $patrolMsg = "$titlePatrol`n$E_USER Auditor: $auditorName - Ng" + [char]0x00E0 + "y: $($yesterdayDate.ToString("dd/MM"))`n$subTitleDaily`n$L_SEP`n"
+                        $patrolMsg     = "$titlePatrol`n$E_USER Auditor: $auditorName - Ng" + [char]0x00E0 + "y: $($yesterdayDate.ToString("dd/MM"))`n$subTitleDaily`n$L_SEP`n"
                         $totalSum = 0; $count = 0
                         $secGroups = $auditorGroup.Group | Group-Object { $_.section.Replace("_", " ") }
                         foreach ($sg in $secGroups) {
@@ -171,50 +221,67 @@ try {
                             }
                             Send-ZaloMessage -text $patrolMsg
                             if ($imgs.Count -gt 0) { Send-ZaloImageGroup -imageUrls ($imgs | Select-Object -Unique) }
-                        } else { Send-ZaloMessage -text $patrolMsg }
+                        } else {
+                            Send-ZaloMessage -text $patrolMsg
+                        }
+                        Write-Log "Da gui phieu auditor: $auditorName"
                     }
 
                     # 2. Bảng tổng kết ngày
-                    $sumMsg = "$titlePatrol`nT" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T B" + [char]0x1ED8 + " PH" + [char]0x1EAC + "N TRONG NG" + [char]0x00C0 + "Y`n$subTitleDaily`n$L_SEP`n"
+                    $sumMsg  = "$titlePatrol`nT" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T B" + [char]0x1ED8 + " PH" + [char]0x1EAC + "N TRONG NG" + [char]0x00C0 + "Y`n$subTitleDaily`n$L_SEP`n"
                     $oSum = 0; $oCount = 0
                     $dStats = $patrolData | Group-Object { $_.section.Replace("_", " ") }
                     foreach ($sec in $allSections) {
                         $match = $dStats | Where-Object { $_.Name -eq $sec.name }
                         if ($match) {
-                            $score = [Math]::Round(($match.Group | Measure-Object overall_performance -Average).Average, 1)
+                            $score   = [Math]::Round(($match.Group | Measure-Object overall_performance -Average).Average, 1)
                             $sumMsg += "$E_BLUE_DOT $($sec.name): $score%`n"
                             $oSum += $score; $oCount++
                         } else { $sumMsg += "$E_BLUE_DOT $($sec.name): ...`n" }
                     }
                     $sumMsg += "$L_SEP`n$starEmoji Overall Daily Performance: " + ([Math]::Round($oSum/$oCount, 1)) + "%"
                     Send-ZaloMessage -text $sumMsg
+                    Write-Log "Da gui bang tong ket ngay."
 
                     # 3. Tổng kết tuần (Chỉ Thứ 7)
                     if ((Get-Date).DayOfWeek -eq [System.DayOfWeek]::Saturday) {
                         $monDate = (Get-Date).AddDays( - (([int](Get-Date).DayOfWeek - 1 + 7) % 7)).Date
-                        $wUrl = "$SUPABASE_URL/rest/v1/mqaa_patrol_logs?date=gte.$($monDate.ToString("yyyy-MM-dd"))&date=lte.$todayStr&select=overall_performance,section"
-                        $wData = Invoke-RestMethod -Uri $wUrl -Headers $headers -Method Get
+                        $wUrl    = "$SUPABASE_URL/rest/v1/mqaa_patrol_logs?date=gte.$($monDate.ToString("yyyy-MM-dd"))&date=lte.$todayStr&select=overall_performance,section"
+                        $wData   = Invoke-RestMethod -Uri $wUrl -Headers $headers -Method Get
                         if ($wData) {
-                            $wMsg = "$titlePatrol`nT" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T VI PH" + [char]0x1EA0 + "M MQAA TRONG TU" + [char]0x1EA6 + "N`n(Tu" + [char]0x1EA7 + "n t" + [char]0x1EEB + " " + $monDate.ToString("dd/MM") + " " + [char]0x0111 + [char]0x1EBF + "n " + (Get-Date).ToString("dd/MM") + ")`n$L_SEP`n"
+                            $wMsg   = "$titlePatrol`nT" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T MQAA TRONG TU" + [char]0x1EA6 + "N`n(Tuan tu " + $monDate.ToString("dd/MM") + " den " + (Get-Date).ToString("dd/MM") + ")`n$L_SEP`n"
                             $wStats = $wData | Group-Object { $_.section.Replace("_", " ") }
                             $ws = 0; $wc = 0
                             foreach ($sec in $allSections) {
                                 $m = $wStats | Where-Object { $_.Name -eq $sec.name }
                                 if ($m) {
-                                    $score = [Math]::Round(($m.Group | Measure-Object overall_performance -Average).Average, 1)
-                                    $wMsg += "$E_BLUE_DOT $($sec.name): $score%`n"
+                                    $score  = [Math]::Round(($m.Group | Measure-Object overall_performance -Average).Average, 1)
+                                    $wMsg  += "$E_BLUE_DOT $($sec.name): $score%`n"
                                     $ws += $score; $wc++
                                 } else { $wMsg += "$E_BLUE_DOT $($sec.name): ...`n" }
                             }
                             $wMsg += "$L_SEP`n$starEmoji Weekly Overall: " + ([Math]::Round($ws/$wc, 1)) + "%"
                             Send-ZaloMessage -text $wMsg
+                            Write-Log "Da gui tong ket tuan."
                         }
                     }
 
                     # Cập nhật trạng thái
                     $null = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Patch -Body ('{"last_patrol_report_monday":"' + $yesterdayStr + '"}') -ContentType "application/json"
+                    Write-Log "Da cap nhat last_patrol_report_monday = $yesterdayStr"
+                } else {
+                    Write-Log "Khong co du lieu Patrol cho ngay $yesterdayStr. Bo qua." "WARN"
                 }
+            } else {
+                Write-Log "Bao cao Patrol ngay $yesterdayStr DA DUOC GUI TRUOC DO. Bo qua." "WARN"
             }
+        } else {
+            Write-Log "Chua den gio gui bao cao ($currentTime < $PATROL_REPORT_TIME). Bo qua." "WARN"
         }
     }
-} catch { Write-Error "Loi: $_" }
+    Write-Log "=== HOAN TAT ==="
+} catch {
+    Write-Log "LOI NGHIEM TRONG: $_" "ERROR"
+    Write-Error "Loi: $_"
+    exit 1
+}
