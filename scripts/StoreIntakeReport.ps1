@@ -70,7 +70,7 @@ try {
         throw "Khong tim thay sheet 'REALTIME STORED' trong file."
     }
 
-    # Láº¥y dá»¯ liá»‡u vÃ  loáº¡i bá» khoáº£ng tráº¯ng hoáº·c text dÆ° thá»«a náº¿u cÃ³ (Ä‘á» phÃ²ng)
+    # Lấy dữ liệu và loại bỏ khoảng trắng hoặc text dư thừa nếu có (đề phòng)
     $molded = $sheet.Range("B2").Text
     $dieCut = $sheet.Range("B3").Text
     $others = $sheet.Range("B4").Text
@@ -80,7 +80,7 @@ try {
     $excel.Quit()
     [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
 
-    # Dá»n dáº¹p Text trÃ¡nh trÃ¹ng láº·p chá»¯ "Pairs" náº¿u trong Ã´ Excel Ä‘Ã£ cÃ³ sáºµn
+    # Dọn dẹp Text tránh trùng lặp chữ "Pairs" nếu trong ô Excel đã có sẵn
     if ($molded -match "Pairs") { $molded = $molded -replace "(?i)\s*Pairs\s*", "" }
     if ($dieCut -match "Pairs") { $dieCut = $dieCut -replace "(?i)\s*Pairs\s*", "" }
     if ($others -match "Pairs") { $others = $others -replace "(?i)\s*Pairs\s*", "" }
@@ -88,7 +88,7 @@ try {
 
     # Format Message
     $currentTime = Get-Date -Format "HH:mm dd/MM/yy"
-    $reportMessage = "Tá»•ng sá»‘ lÆ°á»£ng nháº­p kho Ä‘áº¿n hiá»‡n táº¡i ($currentTime)`nMolded: $molded Pairs`nDie Cut: $dieCut Pairs`nOthers: $others Pairs`nTotal: $total Pairs"
+    $reportMessage = "Tổng số lượng nhập kho đến hiện tại ($currentTime)`nMolded: $molded Pairs`nDie Cut: $dieCut Pairs`nOthers: $others Pairs`nTotal: $total Pairs"
 
     Write-Host "Noi dung bao cao:"
     Write-Host $reportMessage -ForegroundColor Green
@@ -125,7 +125,7 @@ try {
     if ((Get-Date).Hour -eq 16) {
         Write-Host "Kiem tra thoi gian: 16h - Bat dau doc va gui bao cao Hang Bu..." -ForegroundColor Cyan
         
-        $SUPP_EXCEL_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Hiá»n\Report Lá»—i thao tÃ¡c supp 2026.xlsx"
+        $SUPP_EXCEL_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Hiền\Report Lỗi thao tác supp 2026.xlsx"
         if (-not (Test-Path $SUPP_EXCEL_PATH)) {
             Write-Host "Khong tim thay file Excel hang bu: $SUPP_EXCEL_PATH" -ForegroundColor Red
         } else {
@@ -168,7 +168,7 @@ try {
                     
                     # Format message
                     $yesterday = (Get-Date).AddDays(-1).ToString("dd/MM/yy")
-                    $suppMessage = "ThÃ´ng tin hÃ ng bÃ¹ Ä‘áº¿n ngÃ y hÃ´m qua $yesterday.`n% hÃ ng bÃ¹ thao tÃ¡c sáº£n xuáº¥t: $suppProValue;`nTá»•ng % hÃ ng bÃ¹: $suppTotalValue"
+                    $suppMessage = "Thông tin hàng bù đến ngày hôm qua $yesterday.`n% hàng bù thao tác sản xuất: $suppProValue;`nTổng % hàng bù: $suppTotalValue"
                     
                     Write-Host "Noi dung bao cao hang bu:"
                     Write-Host $suppMessage -ForegroundColor Green
