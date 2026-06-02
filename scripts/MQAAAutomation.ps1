@@ -88,9 +88,9 @@ function Send-ZaloMessage {
     [System.Windows.Forms.Clipboard]::SetText($text, [System.Windows.Forms.TextDataFormat]::UnicodeText)
     Start-Sleep -Milliseconds 200
     [System.Windows.Forms.SendKeys]::SendWait("^v")
-    Start-Sleep -Milliseconds 600
+    Start-Sleep -Seconds 2
     [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-    Start-Sleep -Milliseconds 800
+    Start-Sleep -Seconds 2
 }
 
 function Send-ZaloImageGroup {
@@ -177,9 +177,11 @@ try {
                     Start-Sleep -Milliseconds 800
                     [System.Windows.Forms.Clipboard]::SetText($PATROL_ZALO_GROUP, [System.Windows.Forms.TextDataFormat]::UnicodeText)
                     [System.Windows.Forms.SendKeys]::SendWait("^v")
-                    Start-Sleep -Seconds 1
+                    Start-Sleep -Seconds 2
+                    [System.Windows.Forms.SendKeys]::SendWait("{DOWN}")
+                    Start-Sleep -Milliseconds 500
                     [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-                    Start-Sleep -Seconds 1
+    Start-Sleep -Seconds 3
                     Write-Log "Da chuyen sang nhom Zalo: $PATROL_ZALO_GROUP"
 
                     $titlePatrol   = [char]0xD83D + [char]0xDCCB + " PHI" + [char]0x1EBE + "U T" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T MQAA"
@@ -359,9 +361,11 @@ try {
                 Start-Sleep -Milliseconds 800
                 [System.Windows.Forms.Clipboard]::SetText($WIP_TARGET, [System.Windows.Forms.TextDataFormat]::UnicodeText)
                 [System.Windows.Forms.SendKeys]::SendWait("^v")
-                Start-Sleep -Seconds 1
+                Start-Sleep -Seconds 2
+                [System.Windows.Forms.SendKeys]::SendWait("{DOWN}")
+                Start-Sleep -Milliseconds 500
                 [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-                Start-Sleep -Seconds 1
+    Start-Sleep -Seconds 3
                 
                 Send-ZaloMessage -text $wipMsg
                 Write-Log "Da gui bao cao WIP vao $WIP_TARGET."

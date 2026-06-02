@@ -10,6 +10,7 @@ import QuickEntry from "./pages/QuickEntry";
 import Pending from "./pages/Pending";
 import ApprovePage from "./pages/ApprovePage";
 import AdminPage from "./pages/AdminPage";
+import ReportAdmin from "./pages/ReportAdmin";
 import ReportPage from "./pages/ReportPage";
 import RulesPage from "./pages/RulesPage";
 import HelpPage from "./pages/HelpPage";
@@ -64,6 +65,7 @@ function Shell() {
           { to: "/pending", label: "Xét duyệt KPI" },
           { to: "/approve", label: "Tra cứu đơn KPI" },
           { to: "/report", label: "Báo cáo" },
+          { to: "/report-admin", label: "Report Admin" },
           { to: "/admin", label: "Quản lý User" },
           { to: "/rules", label: "Rules điểm SX" },
           { to: "/mqaa-entry", label: "MQAA Nhập liệu" },
@@ -103,6 +105,7 @@ function Shell() {
         <Route path="/pending" element={<Pending />} />
         <Route path="/approve" element={<ApprovePage />} />
         <Route path="/report" element={<ReportPage />} />
+        <Route path="/report-admin" element={<ReportAdmin />} />
         <Route path="/admin" element={<AdminPage />} />
         <Route path="/rules" element={<RulesPage />} />
         <Route path="/help" element={<HelpPage />} />

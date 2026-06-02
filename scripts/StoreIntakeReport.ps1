@@ -1,4 +1,27 @@
-﻿# scripts/StoreIntakeReport.ps1
+# scripts/StoreIntakeReport.ps1
+param(
+    [switch]$ManualTrigger
+)
+
+$SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
+$SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0"
+
+if (-not $ManualTrigger) {
+    # Check if report is enabled
+    $headers = @{ "apikey" = $SUPABASE_KEY; "Authorization" = "Bearer $SUPABASE_KEY" }
+    try {
+        $settingUrl = "$SUPABASE_URL/rest/v1/system_settings?id=eq.1&select=is_report_enabled"
+        $settingData = Invoke-RestMethod -Uri $settingUrl -Headers $headers -Method Get
+        if ($settingData -and $settingData.Count -gt 0) {
+            if ($settingData[0].is_report_enabled -eq $false) {
+                Write-Host "Bao cao tu dong dang bi TAT tren Supabase. Thoat script." -ForegroundColor Yellow
+                exit 0
+            }
+        }
+    } catch {
+        Write-Host "Khong the kiem tra trang thai bao cao, van tiep tuc chay: $_" -ForegroundColor Red
+    }
+}
 
 $EXCEL_FILE_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\TRUONG OFFICE\PROJECT\Dashboard Progress tracking\data\Powerapp (V21.10.25).xlsx"
 $ZALO_TARGET_NAME = "Daily Report"
@@ -107,19 +130,19 @@ try {
 
     # Tim ten nguoi nhan
     [System.Windows.Forms.SendKeys]::SendWait("^f")
-    Start-Sleep -Milliseconds 800
-    [System.Windows.Forms.Clipboard]::SetText($ZALO_TARGET_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
-    [System.Windows.Forms.SendKeys]::SendWait("^v")
-    Start-Sleep -Seconds 1
-    [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-    Start-Sleep -Seconds 1
+            Start-Sleep -Milliseconds 800
+            [System.Windows.Forms.Clipboard]::SetText($ZALO_TARGET_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+            [System.Windows.Forms.SendKeys]::SendWait("^v")
+            Start-Sleep -Seconds 2
+            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+            Start-Sleep -Seconds 2
 
     # Dan va gui tin nhan
     [System.Windows.Forms.Clipboard]::SetText($reportMessage, [System.Windows.Forms.TextDataFormat]::UnicodeText)
     [System.Windows.Forms.SendKeys]::SendWait("^v")
-    Start-Sleep -Milliseconds 600
-    [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-    Start-Sleep -Milliseconds 800
+            Start-Sleep -Milliseconds 600
+            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+            Start-Sleep -Seconds 1
 
     # --- Gui bao cao Hang Bu (chi luc 16h) ---
     if ((Get-Date).Hour -eq 16) {
@@ -178,18 +201,18 @@ try {
                     Start-Sleep -Seconds 1
                     
                     [System.Windows.Forms.SendKeys]::SendWait("^f")
-                    Start-Sleep -Milliseconds 800
-                    [System.Windows.Forms.Clipboard]::SetText($ZALO_TARGET_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
-                    [System.Windows.Forms.SendKeys]::SendWait("^v")
-                    Start-Sleep -Seconds 1
-                    [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-                    Start-Sleep -Seconds 1
+            Start-Sleep -Milliseconds 800
+            [System.Windows.Forms.Clipboard]::SetText($ZALO_TARGET_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+            [System.Windows.Forms.SendKeys]::SendWait("^v")
+            Start-Sleep -Seconds 2
+            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+            Start-Sleep -Seconds 2
 
                     [System.Windows.Forms.Clipboard]::SetText($suppMessage, [System.Windows.Forms.TextDataFormat]::UnicodeText)
                     [System.Windows.Forms.SendKeys]::SendWait("^v")
-                    Start-Sleep -Milliseconds 600
-                    [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-                    Start-Sleep -Milliseconds 800
+            Start-Sleep -Milliseconds 600
+            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+            Start-Sleep -Seconds 1
                 }
             } catch {
                 Write-Host "Loi khi doc file hang bu: $_" -ForegroundColor Red
@@ -286,15 +309,15 @@ try {
             Start-Sleep -Milliseconds 800
             [System.Windows.Forms.Clipboard]::SetText($ZALO_TARGET_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
             [System.Windows.Forms.SendKeys]::SendWait("^v")
-            Start-Sleep -Seconds 1
+            Start-Sleep -Seconds 2
             [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-            Start-Sleep -Seconds 1
+            Start-Sleep -Seconds 2
 
             [System.Windows.Forms.Clipboard]::SetText($dlMessage, [System.Windows.Forms.TextDataFormat]::UnicodeText)
             [System.Windows.Forms.SendKeys]::SendWait("^v")
             Start-Sleep -Milliseconds 600
             [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-            Start-Sleep -Milliseconds 800
+            Start-Sleep -Seconds 1
             
         } catch {
             Write-Host "Loi khi tao bao cao Delay Xuat Gap: $_" -ForegroundColor Red
@@ -384,18 +407,18 @@ try {
                 Start-Sleep -Seconds 1
                 
                 [System.Windows.Forms.SendKeys]::SendWait("^f")
-                Start-Sleep -Milliseconds 800
-                [System.Windows.Forms.Clipboard]::SetText($ZALO_TARGET_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
-                [System.Windows.Forms.SendKeys]::SendWait("^v")
-                Start-Sleep -Seconds 1
-                [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-                Start-Sleep -Seconds 1
+            Start-Sleep -Milliseconds 800
+            [System.Windows.Forms.Clipboard]::SetText($ZALO_TARGET_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+            [System.Windows.Forms.SendKeys]::SendWait("^v")
+            Start-Sleep -Seconds 2
+            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+            Start-Sleep -Seconds 2
 
                 [System.Windows.Forms.Clipboard]::SetText($wipMsg, [System.Windows.Forms.TextDataFormat]::UnicodeText)
                 [System.Windows.Forms.SendKeys]::SendWait("^v")
-                Start-Sleep -Milliseconds 600
-                [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-                Start-Sleep -Milliseconds 800
+            Start-Sleep -Milliseconds 600
+            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+            Start-Sleep -Seconds 1
                 
             } catch {
                 Write-Host "Loi khi tao bao cao WIP: $_" -ForegroundColor Red
