@@ -1,4 +1,4 @@
-# scripts/reset_patrol_and_run.ps1
+﻿# scripts/reset_patrol_and_run.ps1
 # Reset trạng thái gửi Phiếu Tổng Kết và chạy lại script
 
 $SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"

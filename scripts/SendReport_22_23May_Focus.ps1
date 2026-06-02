@@ -1,4 +1,4 @@
-# scripts/SendReport_22_23May_Focus.ps1
+﻿# scripts/SendReport_22_23May_Focus.ps1
 # Script gửi lại báo cáo Patrol ngày 22/05 và 23/05 vào Zalo, có focus window
 
 $SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"

@@ -1,4 +1,4 @@
-# scripts/Test_MQAA_Patrol.ps1
+﻿# scripts/Test_MQAA_Patrol.ps1
 # Script dùng để TEST gửi báo cáo MQAA Patrol (Logic: Báo cáo ngày hôm trước)
 
 $SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"

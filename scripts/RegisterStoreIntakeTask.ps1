@@ -1,4 +1,4 @@
-# scripts/RegisterStoreIntakeTask.ps1
+﻿# scripts/RegisterStoreIntakeTask.ps1
 
 $taskName = "SendStoreIntakeReportZalo"
 $scriptPath = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\TRUONG OFFICE\PROJECT\KPI APP\APP KPI\scripts\StoreIntakeReport.ps1"

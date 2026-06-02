@@ -1,26 +1,33 @@
-# scripts/StoreIntakeReport.ps1
+﻿# scripts/StoreIntakeReport.ps1
 param(
-    [switch]$ManualTrigger
+    [switch]$ManualTrigger,
+    [string]$TargetReport = ""
 )
 
 $SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
 $SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0"
+$headers = @{ "apikey" = $SUPABASE_KEY; "Authorization" = "Bearer $SUPABASE_KEY" }
 
-if (-not $ManualTrigger) {
-    # Check if report is enabled
-    $headers = @{ "apikey" = $SUPABASE_KEY; "Authorization" = "Bearer $SUPABASE_KEY" }
-    try {
-        $settingUrl = "$SUPABASE_URL/rest/v1/system_settings?id=eq.1&select=is_report_enabled"
-        $settingData = Invoke-RestMethod -Uri $settingUrl -Headers $headers -Method Get
-        if ($settingData -and $settingData.Count -gt 0) {
-            if ($settingData[0].is_report_enabled -eq $false) {
-                Write-Host "Bao cao tu dong dang bi TAT tren Supabase. Thoat script." -ForegroundColor Yellow
-                exit 0
-            }
-        }
-    } catch {
-        Write-Host "Khong the kiem tra trang thai bao cao, van tiep tuc chay: $_" -ForegroundColor Red
+$settings = $null
+try {
+    $settingUrl = "$SUPABASE_URL/rest/v1/system_settings?id=eq.1"
+    $settingData = Invoke-RestMethod -Uri $settingUrl -Headers $headers -Method Get
+    if ($settingData -and $settingData.Count -gt 0) {
+        $settings = $settingData[0]
     }
+} catch {
+    Write-Host "Khong the kiem tra trang thai bao cao tu Supabase: $_" -ForegroundColor Red
+}
+
+# Determine which blocks to run
+$runDaily = ($TargetReport -eq "daily_report") -or (-not $ManualTrigger -and $settings -and $settings.is_daily_report_enabled -eq $true)
+$runHangBu = ($TargetReport -eq "hang_bu") -or (-not $ManualTrigger -and $settings -and $settings.is_hang_bu_enabled -eq $true -and (Get-Date).Hour -eq 16)
+$runDelay = ($TargetReport -eq "delay_xuat_gap") -or (-not $ManualTrigger -and $settings -and $settings.is_delay_enabled -eq $true -and ((Get-Date).Hour -eq 10 -or (Get-Date).Hour -eq 16))
+$runWip = ($TargetReport -eq "wip_report") -or (-not $ManualTrigger -and $settings -and $settings.is_wip_enabled -eq $true -and ((Get-Date).Hour -eq 8 -or (Get-Date).Hour -eq 16))
+
+if (-not $runDaily -and -not $runHangBu -and -not $runDelay -and -not $runWip) {
+    Write-Host "Khong co bao cao nao duoc kich hoat. Thoat." -ForegroundColor Yellow
+    exit 0
 }
 
 $EXCEL_FILE_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\TRUONG OFFICE\PROJECT\Dashboard Progress tracking\data\Powerapp (V21.10.25).xlsx"
@@ -75,48 +82,7 @@ function Focus-Zalo {
 
 # --- Main Logic ---
 try {
-    Write-Host "Bat dau lay du lieu Excel..." -ForegroundColor Cyan
-    
-    if (-not (Test-Path $EXCEL_FILE_PATH)) {
-        throw "Khong tim thay file Excel tai: $EXCEL_FILE_PATH"
-    }
-
-    $excel = New-Object -ComObject Excel.Application
-    $excel.Visible = $false
-    $excel.DisplayAlerts = $false
-
-    # Open ReadOnly
-    $workbook = $excel.Workbooks.Open($EXCEL_FILE_PATH, 0, $true)
-    $sheet = $workbook.Sheets.Item("REALTIME STORED")
-
-    if (-not $sheet) {
-        throw "Khong tim thay sheet 'REALTIME STORED' trong file."
-    }
-
-    # Lấy dữ liệu và loại bỏ khoảng trắng hoặc text dư thừa nếu có (đề phòng)
-    $molded = $sheet.Range("B2").Text
-    $dieCut = $sheet.Range("B3").Text
-    $others = $sheet.Range("B4").Text
-    $total  = $sheet.Range("B5").Text
-
-    $workbook.Close($false)
-    $excel.Quit()
-    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
-
-    # Dọn dẹp Text tránh trùng lặp chữ "Pairs" nếu trong ô Excel đã có sẵn
-    if ($molded -match "Pairs") { $molded = $molded -replace "(?i)\s*Pairs\s*", "" }
-    if ($dieCut -match "Pairs") { $dieCut = $dieCut -replace "(?i)\s*Pairs\s*", "" }
-    if ($others -match "Pairs") { $others = $others -replace "(?i)\s*Pairs\s*", "" }
-    if ($total -match "Pairs")  { $total  = $total -replace "(?i)\s*Pairs\s*", "" }
-
-    # Format Message
-    $currentTime = Get-Date -Format "HH:mm dd/MM/yy"
-    $reportMessage = "Tổng số lượng nhập kho đến hiện tại ($currentTime)`nMolded: $molded Pairs`nDie Cut: $dieCut Pairs`nOthers: $others Pairs`nTotal: $total Pairs"
-
-    Write-Host "Noi dung bao cao:"
-    Write-Host $reportMessage -ForegroundColor Green
-
-    # --- Gui Zalo ---
+    # Initialize Zalo
     Write-Host "Dang tim Zalo PC..." -ForegroundColor Cyan
     $zaloProcess = Get-Process -Name Zalo -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle } | Select-Object -First 1
     if (-not $zaloProcess) {
@@ -124,29 +90,61 @@ try {
     }
     $script:zaloHandle = $zaloProcess.MainWindowHandle
 
-    Write-Host "Dang mo va focus Zalo..."
-    Focus-Zalo
-    Start-Sleep -Seconds 1
+    if ($runDaily) {
+        Write-Host "Bat dau lay du lieu Excel cho Daily Report..." -ForegroundColor Cyan
+        if (-not (Test-Path $EXCEL_FILE_PATH)) { throw "Khong tim thay file Excel tai: $EXCEL_FILE_PATH" }
 
-    # Tim ten nguoi nhan
-    [System.Windows.Forms.SendKeys]::SendWait("^f")
-            Start-Sleep -Milliseconds 800
-            [System.Windows.Forms.Clipboard]::SetText($ZALO_TARGET_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
-            [System.Windows.Forms.SendKeys]::SendWait("^v")
-            Start-Sleep -Seconds 2
-            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-            Start-Sleep -Seconds 2
+        $excel = New-Object -ComObject Excel.Application
+        $excel.Visible = $false
+        $excel.DisplayAlerts = $false
 
-    # Dan va gui tin nhan
-    [System.Windows.Forms.Clipboard]::SetText($reportMessage, [System.Windows.Forms.TextDataFormat]::UnicodeText)
-    [System.Windows.Forms.SendKeys]::SendWait("^v")
-            Start-Sleep -Milliseconds 600
-            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-            Start-Sleep -Seconds 1
+        $workbook = $excel.Workbooks.Open($EXCEL_FILE_PATH, 0, $true)
+        $sheet = $workbook.Sheets.Item("REALTIME STORED")
 
-    # --- Gui bao cao Hang Bu (chi luc 16h) ---
-    if ((Get-Date).Hour -eq 16) {
-        Write-Host "Kiem tra thoi gian: 16h - Bat dau doc va gui bao cao Hang Bu..." -ForegroundColor Cyan
+        if (-not $sheet) { throw "Khong tim thay sheet 'REALTIME STORED' trong file." }
+
+        $molded = $sheet.Range("B2").Text
+        $dieCut = $sheet.Range("B3").Text
+        $others = $sheet.Range("B4").Text
+        $total  = $sheet.Range("B5").Text
+
+        $workbook.Close($false)
+        $excel.Quit()
+        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
+        $excel = $null
+
+        if ($molded -match "Pairs") { $molded = $molded -replace "(?i)\s*Pairs\s*", "" }
+        if ($dieCut -match "Pairs") { $dieCut = $dieCut -replace "(?i)\s*Pairs\s*", "" }
+        if ($others -match "Pairs") { $others = $others -replace "(?i)\s*Pairs\s*", "" }
+        if ($total -match "Pairs")  { $total  = $total -replace "(?i)\s*Pairs\s*", "" }
+
+        $currentTime = Get-Date -Format "HH:mm dd/MM/yy"
+        $reportMessage = "Tổng số lượng nhập kho đến hiện tại ($currentTime)`nMolded: $molded Pairs`nDie Cut: $dieCut Pairs`nOthers: $others Pairs`nTotal: $total Pairs"
+
+        Write-Host "Noi dung bao cao Daily:"
+        Write-Host $reportMessage -ForegroundColor Green
+
+        Write-Host "Dang mo va focus Zalo..."
+        Focus-Zalo
+        Start-Sleep -Seconds 1
+
+        [System.Windows.Forms.SendKeys]::SendWait("^f")
+        Start-Sleep -Milliseconds 800
+        [System.Windows.Forms.Clipboard]::SetText($ZALO_TARGET_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+        [System.Windows.Forms.SendKeys]::SendWait("^v")
+        Start-Sleep -Seconds 2
+        [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+        Start-Sleep -Seconds 2
+
+        [System.Windows.Forms.Clipboard]::SetText($reportMessage, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+        [System.Windows.Forms.SendKeys]::SendWait("^v")
+        Start-Sleep -Milliseconds 600
+        [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+        Start-Sleep -Seconds 1
+    }
+
+    if ($runHangBu) {
+        Write-Host "Bat dau doc va gui bao cao Hang Bu..." -ForegroundColor Cyan
         
         $SUPP_EXCEL_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Hiền\Report Lỗi thao tác supp 2026.xlsx"
         if (-not (Test-Path $SUPP_EXCEL_PATH)) {
@@ -158,26 +156,21 @@ try {
             
             try {
                 $wbSupp = $excelSupp.Workbooks.Open($SUPP_EXCEL_PATH, 0, $true)
-                
                 $shSupp = $null
                 try { $shSupp = $wbSupp.Sheets.Item("2026") } catch {}
-                if (-not $shSupp) {
-                    try { $shSupp = $wbSupp.Sheets.Item("DATA SUPPLEMENT") } catch {}
-                }
+                if (-not $shSupp) { try { $shSupp = $wbSupp.Sheets.Item("DATA SUPPLEMENT") } catch {} }
                 
                 if (-not $shSupp) {
                     Write-Host "Khong tim thay sheet 2026 hoac DATA SUPPLEMENT!" -ForegroundColor Red
                 } else {
-                    $startCol = 2 # Column B
+                    $startCol = 2
                     $rowSuppPro = 51
                     $rowSuppTotal = 52
                     
                     $lastCol = $startCol
                     while ($true) {
                         $nextColValue = $shSupp.Cells.Item($rowSuppPro, $lastCol + 1).Text
-                        if ([string]::IsNullOrWhiteSpace($nextColValue)) {
-                            break
-                        }
+                        if ([string]::IsNullOrWhiteSpace($nextColValue)) { break }
                         $lastCol++
                     }
                     
@@ -189,47 +182,40 @@ try {
                     [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelSupp) | Out-Null
                     $excelSupp = $null
                     
-                    # Format message
                     $yesterday = (Get-Date).AddDays(-1).ToString("dd/MM/yy")
                     $suppMessage = "Thông tin hàng bù đến ngày hôm qua $yesterday.`n% hàng bù thao tác sản xuất: $suppProValue;`nTổng % hàng bù: $suppTotalValue"
                     
                     Write-Host "Noi dung bao cao hang bu:"
                     Write-Host $suppMessage -ForegroundColor Green
                     
-                    # Gui vao Zalo
                     Focus-Zalo
                     Start-Sleep -Seconds 1
                     
                     [System.Windows.Forms.SendKeys]::SendWait("^f")
-            Start-Sleep -Milliseconds 800
-            [System.Windows.Forms.Clipboard]::SetText($ZALO_TARGET_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
-            [System.Windows.Forms.SendKeys]::SendWait("^v")
-            Start-Sleep -Seconds 2
-            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-            Start-Sleep -Seconds 2
+                    Start-Sleep -Milliseconds 800
+                    [System.Windows.Forms.Clipboard]::SetText($ZALO_TARGET_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+                    [System.Windows.Forms.SendKeys]::SendWait("^v")
+                    Start-Sleep -Seconds 2
+                    [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+                    Start-Sleep -Seconds 2
 
                     [System.Windows.Forms.Clipboard]::SetText($suppMessage, [System.Windows.Forms.TextDataFormat]::UnicodeText)
                     [System.Windows.Forms.SendKeys]::SendWait("^v")
-            Start-Sleep -Milliseconds 600
-            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-            Start-Sleep -Seconds 1
+                    Start-Sleep -Milliseconds 600
+                    [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+                    Start-Sleep -Seconds 1
                 }
             } catch {
                 Write-Host "Loi khi doc file hang bu: $_" -ForegroundColor Red
                 if ($excelSupp) {
-                    try {
-                        $excelSupp.Quit()
-                        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelSupp) | Out-Null
-                    } catch {}
+                    try { $excelSupp.Quit(); [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelSupp) | Out-Null } catch {}
                 }
             }
         }
     }
 
-    # --- Gui bao cao Delay Xuat Gap (10h va 16h) ---
-    $currentHour = (Get-Date).Hour
-    if ($currentHour -eq 10 -or $currentHour -eq 16) {
-        Write-Host "Kiem tra thoi gian: $currentHour h - Bat dau doc va gui bao cao Delay-Xuat Gap..." -ForegroundColor Cyan
+    if ($runDelay) {
+        Write-Host "Bat dau doc va gui bao cao Delay-Xuat Gap..." -ForegroundColor Cyan
         
         $excelDLXG = New-Object -ComObject Excel.Application
         $excelDLXG.Visible = $false
@@ -248,9 +234,7 @@ try {
                 $qtyText = $shDLXG.Cells.Item($row, 3).Text
                 $typeText = $shDLXG.Cells.Item($row, 5).Text
                 
-                if ([string]::IsNullOrWhiteSpace($reasonText) -and [string]::IsNullOrWhiteSpace($typeText)) {
-                    break
-                }
+                if ([string]::IsNullOrWhiteSpace($reasonText) -and [string]::IsNullOrWhiteSpace($typeText)) { break }
                 
                 $reason = $reasonText.Trim().ToUpper()
                 $type = $typeText.Trim().ToUpper()
@@ -301,7 +285,6 @@ try {
             Write-Host "Noi dung bao cao Delay Xuat Gap:"
             Write-Host $dlMessage -ForegroundColor Green
             
-            # Gui vao Zalo
             Focus-Zalo
             Start-Sleep -Seconds 1
             
@@ -321,18 +304,12 @@ try {
             
         } catch {
             Write-Host "Loi khi tao bao cao Delay Xuat Gap: $_" -ForegroundColor Red
-            if ($excelDLXG) {
-                try {
-                    $excelDLXG.Quit()
-                    [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelDLXG) | Out-Null
-                } catch {}
-            }
+            if ($excelDLXG) { try { $excelDLXG.Quit(); [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelDLXG) | Out-Null } catch {} }
         }
     }
 
-    # --- Gui bao cao WIP (16h) ---
-    if ($currentHour -eq 16) {
-        Write-Host "Kiem tra thoi gian: 16h - Bat dau doc va gui bao cao WIP..." -ForegroundColor Cyan
+    if ($runWip) {
+        Write-Host "Bat dau doc va gui bao cao WIP..." -ForegroundColor Cyan
         $WIP_EXCEL_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Nhân Lg\Schedule\Ovn Pro Schedule.xlsb"
         if (Test-Path $WIP_EXCEL_PATH) {
             $excelWIP = New-Object -ComObject Excel.Application
@@ -350,15 +327,7 @@ try {
                     }
                 }
                 
-                $colNames = @(
-                    $shWIP.Cells.Item(1,2).Text.Trim(),
-                    $shWIP.Cells.Item(1,3).Text.Trim(),
-                    $shWIP.Cells.Item(1,4).Text.Trim(),
-                    $shWIP.Cells.Item(1,5).Text.Trim(),
-                    $shWIP.Cells.Item(1,6).Text.Trim(),
-                    $shWIP.Cells.Item(1,7).Text.Trim(),
-                    $shWIP.Cells.Item(1,8).Text.Trim()
-                )
+                $colNames = @($shWIP.Cells.Item(1,2).Text.Trim(), $shWIP.Cells.Item(1,3).Text.Trim(), $shWIP.Cells.Item(1,4).Text.Trim(), $shWIP.Cells.Item(1,5).Text.Trim(), $shWIP.Cells.Item(1,6).Text.Trim(), $shWIP.Cells.Item(1,7).Text.Trim(), $shWIP.Cells.Item(1,8).Text.Trim())
                 
                 $wipValues = @()
                 $totalWIP = 0
@@ -402,32 +371,26 @@ try {
                 Write-Host "Noi dung bao cao WIP:"
                 Write-Host $wipMsg -ForegroundColor Green
                 
-                # Gui vao Zalo
                 Focus-Zalo
                 Start-Sleep -Seconds 1
                 
                 [System.Windows.Forms.SendKeys]::SendWait("^f")
-            Start-Sleep -Milliseconds 800
-            [System.Windows.Forms.Clipboard]::SetText($ZALO_TARGET_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
-            [System.Windows.Forms.SendKeys]::SendWait("^v")
-            Start-Sleep -Seconds 2
-            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-            Start-Sleep -Seconds 2
+                Start-Sleep -Milliseconds 800
+                [System.Windows.Forms.Clipboard]::SetText($ZALO_TARGET_NAME, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+                [System.Windows.Forms.SendKeys]::SendWait("^v")
+                Start-Sleep -Seconds 2
+                [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+                Start-Sleep -Seconds 2
 
                 [System.Windows.Forms.Clipboard]::SetText($wipMsg, [System.Windows.Forms.TextDataFormat]::UnicodeText)
                 [System.Windows.Forms.SendKeys]::SendWait("^v")
-            Start-Sleep -Milliseconds 600
-            [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-            Start-Sleep -Seconds 1
+                Start-Sleep -Milliseconds 600
+                [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+                Start-Sleep -Seconds 1
                 
             } catch {
                 Write-Host "Loi khi tao bao cao WIP: $_" -ForegroundColor Red
-                if ($excelWIP) {
-                    try {
-                        $excelWIP.Quit()
-                        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelWIP) | Out-Null
-                    } catch {}
-                }
+                if ($excelWIP) { try { $excelWIP.Quit(); [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelWIP) | Out-Null } catch {} }
             }
         }
     }
@@ -435,13 +398,6 @@ try {
     Write-Host "=== HOAN TAT GUI BAO CAO ===" -ForegroundColor Green
 } catch {
     Write-Host "LOI: $_" -ForegroundColor Red
-    
-    # Don dep COM Object neu co loi
-    if ($excel) {
-        try {
-            $excel.Quit()
-            [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
-        } catch {}
-    }
+    if ($excel) { try { $excel.Quit(); [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null } catch {} }
     exit 1
 }

@@ -1,4 +1,4 @@
-# scripts/ReportWatcher.ps1
+﻿# scripts/ReportWatcher.ps1
 # Script này sẽ chạy ẩn (hoặc qua Task Scheduler) để lắng nghe yêu cầu gửi báo cáo từ Web App.
 
 $SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
@@ -13,6 +13,7 @@ $headers = @{
 # Lấy đường dẫn thư mục hiện tại để gọi script con
 $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $storeIntakeScript = Join-Path $scriptPath "StoreIntakeReport.ps1"
+$mqaaScript = Join-Path $scriptPath "MQAAAutomation.ps1"
 
 Write-Host ">>> BAT DAU LANG NGHE YEU CAU GUI BAO CAO TU SUPABASE <<<" -ForegroundColor Cyan
 
@@ -33,12 +34,14 @@ while ($true) {
                 Invoke-RestMethod -Uri $updateProcessingUrl -Headers $headers -Method Patch -Body $bodyProcessing | Out-Null
                 
                 # 3. Kích hoạt báo cáo tương ứng
-                if ($req.report_type -eq "daily_report") {
-                    Write-Host "Dang thuc thi StoreIntakeReport.ps1..."
-                    # Chạy script gửi báo cáo (chờ hoàn thành) và bypass check Tắt/Bật
-                    & powershell.exe -File $storeIntakeScript -ManualTrigger
+                $reportType = $req.report_type
+                
+                if ($reportType -eq "mqaa_patrol") {
+                    Write-Host "Dang thuc thi MQAAAutomation.ps1..."
+                    & powershell.exe -File $mqaaScript -ManualTrigger -TargetReport $reportType
                 } else {
-                    Write-Host "Chua ho tro loai bao cao: $($req.report_type)" -ForegroundColor Red
+                    Write-Host "Dang thuc thi StoreIntakeReport.ps1 cho $reportType..."
+                    & powershell.exe -File $storeIntakeScript -ManualTrigger -TargetReport $reportType
                 }
 
                 # 4. Đánh dấu hoàn thành

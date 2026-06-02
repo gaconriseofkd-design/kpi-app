@@ -2,6 +2,11 @@
 # Script tự động gửi báo cáo MQAA vào Zalo mỗi sáng 08:00
 # Logic: Báo cáo hàng ngày cho ngày hôm trước + Tổng kết tuần vào Thứ 7
 
+param(
+    [switch]$ManualTrigger,
+    [string]$TargetReport = ""
+)
+
 # === Cấu hình (Người dùng thay đổi tại đây) ===
 $SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
 $SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0"
@@ -154,10 +159,22 @@ try {
         Focus-Zalo
         Start-Sleep -Seconds 2
 
+        $sysSettings = $null
+        try {
+            $sysData = Invoke-RestMethod -Uri "$SUPABASE_URL/rest/v1/system_settings?id=eq.1" -Headers $headers -Method Get
+            if ($sysData) { $sysSettings = $sysData[0] }
+        } catch {}
+
+        $isMqaaEnabled = $sysSettings.is_mqaa_patrol_enabled -ne $false
+        $isWipEnabled = $sysSettings.is_wip_enabled -ne $false
+
+        $runPatrol = ($TargetReport -eq "mqaa_patrol") -or (-not $ManualTrigger -and $isMqaaEnabled -and $currentTime -ge $PATROL_REPORT_TIME)
+        $runWip = ($TargetReport -eq "wip_report") -or (-not $ManualTrigger -and $isWipEnabled -and (Get-Date).Hour -eq 8)
+
         # ============================================
         # PHẦN B: BÁO CÁO PATROL MQAA
         # ============================================
-        if ($currentTime -ge $PATROL_REPORT_TIME) {
+        if ($runPatrol) {
             $yesterdayDate = (Get-Date).AddDays(-1).Date
             $yesterdayStr  = $yesterdayDate.ToString("yyyy-MM-dd")
             $lastSentDate  = $settings[0].last_patrol_report_monday
@@ -284,7 +301,7 @@ try {
     # ============================================
     # PHẦN C: BÁO CÁO WIP (08:00)
     # ============================================
-    if ((Get-Date).Hour -eq 8) {
+    if ($runWip) {
         Write-Log "Kiem tra thoi gian: 8h - Bat dau doc va gui bao cao WIP..."
         $WIP_EXCEL_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Nhân Lg\Schedule\Ovn Pro Schedule.xlsb"
         if (Test-Path $WIP_EXCEL_PATH) {

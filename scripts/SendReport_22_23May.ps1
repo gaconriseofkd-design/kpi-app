@@ -1,4 +1,4 @@
-# scripts/SendReport_22_23May.ps1
+﻿# scripts/SendReport_22_23May.ps1
 # Script gửi lại báo cáo Patrol ngày 22/05 và 23/05 vào Zalo
 # Sau khi gửi xong, cập nhật last_patrol_report_monday = 2026-05-23
 
