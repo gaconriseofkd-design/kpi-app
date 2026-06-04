@@ -420,22 +420,89 @@ function PatrolSummaryTab() {
     const exportSummary = async () => {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet("MQAA Summary");
-        worksheet.columns = [
-            { header: "Từ tháng", key: "from", width: 15 },
-            { header: "Đến tháng", key: "to", width: 15 },
-            { header: "Section", key: "section", width: 25 },
-            { header: "Số lượt Audit", key: "count", width: 15 },
-            { header: "% Hiệu suất trung bình", key: "perf", width: 20 }
+
+        const columns = [
+            { header: "Khu vực / Section", key: "section", width: 30 }
         ];
-        data.forEach(d => {
-            worksheet.addRow({
-                from: monthFrom,
-                to: monthTo,
-                section: d.sectionName,
-                count: d.count,
-                perf: d.avgPerformance.toFixed(1) + "%"
+
+        trendData.forEach(m => {
+            columns.push({
+                header: m.name,
+                key: m.rawMonth,
+                width: 18
             });
         });
+
+        worksheet.columns = columns;
+
+        SECTIONS.forEach(sec => {
+            if (sec === "All") return;
+            const displayName = sec.replace(/_/g, " ");
+            const rowData = { section: displayName };
+            
+            trendData.forEach(m => {
+                const val = m[displayName];
+                rowData[m.rawMonth] = val !== null ? `${val}%` : "-";
+            });
+            worksheet.addRow(rowData);
+        });
+
+        const overallRowData = { section: "Trung bình chung" };
+        trendData.forEach(m => {
+            const val = m["Trung bình chung"];
+            overallRowData[m.rawMonth] = val !== null ? `${val}%` : "-";
+        });
+        worksheet.addRow(overallRowData);
+
+        // Style Header Row
+        const headerRow = worksheet.getRow(1);
+        headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
+        headerRow.eachCell((cell) => {
+            cell.fill = {
+                type: "pattern",
+                pattern: "solid",
+                fgColor: { argb: "FF4F46E5" } // Indigo
+            };
+            cell.alignment = { horizontal: "center", vertical: "middle" };
+            cell.border = {
+                top: { style: "thin" },
+                left: { style: "thin" },
+                bottom: { style: "thin" },
+                right: { style: "thin" }
+            };
+        });
+
+        // Style Data Rows
+        worksheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+            if (rowNumber === 1) return; // Skip header
+
+            const isOverall = row.getCell(1).value === "Trung bình chung";
+
+            row.eachCell((cell, colNumber) => {
+                cell.border = {
+                    top: { style: "thin" },
+                    left: { style: "thin" },
+                    bottom: { style: "thin" },
+                    right: { style: "thin" }
+                };
+
+                if (colNumber > 1) {
+                    cell.alignment = { horizontal: "center", vertical: "middle" };
+                } else {
+                    cell.alignment = { horizontal: "left", vertical: "middle" };
+                }
+
+                if (isOverall) {
+                    cell.font = { bold: true, color: { argb: "FF92400E" } }; // Dark amber text
+                    cell.fill = {
+                        type: "pattern",
+                        pattern: "solid",
+                        fgColor: { argb: "FFFDE68A" } // Amber 200
+                    };
+                }
+            });
+        });
+
         const buffer = await workbook.xlsx.writeBuffer();
         saveAs(new Blob([buffer]), `MQAA_Patrol_Summary_${monthFrom}_to_${monthTo}.xlsx`);
     };
@@ -516,7 +583,7 @@ function PatrolSummaryTab() {
             <div className="bg-white rounded-xl shadow-sm border p-6">
                 <h3 className="font-bold text-slate-700 mb-6 uppercase text-sm">Biểu đồ xu hướng hiệu suất theo tháng ({monthFrom} → {monthTo})</h3>
                 {data.length > 0 ? (
-                    <div className="h-[400px] w-full">
+                    <div className="h-[400px] w-full relative">
                         <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={trendData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
