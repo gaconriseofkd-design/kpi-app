@@ -1,4 +1,4 @@
-# scripts/MQAAAutomation.ps1
+﻿# scripts/MQAAAutomation.ps1
 # Script tự động gửi báo cáo MQAA vào Zalo mỗi sáng 08:00
 # Logic: Báo cáo hàng ngày cho ngày hôm trước + Tổng kết tuần vào Thứ 7
 
