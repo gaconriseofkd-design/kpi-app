@@ -287,6 +287,36 @@ function RulesContent() {
     XLSX.writeFile(workbook, `MQAA_KPI_Rules_All_${new Date().toISOString().split('T')[0]}.xlsx`);
   }
 
+  // 📥 Tải template Excel
+  function handleDownloadTemplate() {
+    const currentSection = section.toUpperCase();
+    const templateData = [
+      {
+        section: currentSection,
+        category: needsCategory ? "100s" : "%OE",
+        threshold: 100,
+        score: 10,
+        note: "Ví dụ: ngưỡng 100 đạt 10 điểm",
+        active: "TRUE"
+      },
+      {
+        section: currentSection,
+        category: needsCategory ? "100s" : "%OE",
+        threshold: 90,
+        score: 9,
+        note: "Ví dụ: ngưỡng 90 đạt 9 điểm",
+        active: "TRUE"
+      }
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(templateData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Template_KPI_Rules");
+
+    // Tải file về
+    XLSX.writeFile(workbook, `KPI_Rules_Template_${currentSection}.xlsx`);
+  }
+
   // 💾 Lưu tất cả rule hiện tại..
   async function saveAll() {
     const pass = prompt("Nhập mật khẩu để Lưu:");
@@ -396,6 +426,9 @@ function RulesContent() {
               </button>
               <button className="btn btn-sm bg-indigo-600 text-white hover:bg-indigo-700" onClick={addRow}>
                 + Thêm dòng
+              </button>
+              <button className="btn btn-sm bg-amber-500 hover:bg-amber-600 text-white" onClick={handleDownloadTemplate}>
+                📄 Tải template
               </button>
               <label className="btn btn-sm cursor-pointer bg-green-600 hover:bg-green-700 text-white">
                 📤 Import Excel
