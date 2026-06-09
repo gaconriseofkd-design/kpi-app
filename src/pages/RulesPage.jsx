@@ -287,6 +287,42 @@ function RulesContent() {
     XLSX.writeFile(workbook, `MQAA_KPI_Rules_All_${new Date().toISOString().split('T')[0]}.xlsx`);
   }
 
+  // 📥 Xuất Excel Q&C
+  function handleExportComplianceExcel() {
+    if (!complianceDict || complianceDict.length === 0) {
+      return alert("Không có dữ liệu Q&C để xuất.");
+    }
+
+    let filteredData = complianceDict;
+    let fileName = `MQAA_KPI_Rules_QC_All_${new Date().toISOString().split('T')[0]}.xlsx`;
+
+    if (!showAllSections) {
+      const s = (section || "").toUpperCase();
+      const secKey = s === "MOLDING" ? "MOLDING" : (s === "LAMINATION" ? "LAMINATION" : "OTHERS");
+      filteredData = complianceDict.filter(r => r.section === secKey);
+      fileName = `MQAA_KPI_Rules_QC_${s}_${new Date().toISOString().split('T')[0]}.xlsx`;
+    }
+
+    if (filteredData.length === 0) {
+      return alert("Không có dữ liệu Q&C cho bộ phận này để xuất.");
+    }
+
+    // Chuẩn bị dữ liệu cho Excel (loại bỏ timestamps và id)
+    const exportData = filteredData.map(r => ({
+      "Bộ phận (Section)": r.section,
+      "Phân loại (Category)": r.category === "QUALITY" ? "Chất lượng (Q)" : "Tuân thủ (C)",
+      "Mức độ (Severity)": r.severity === "SEVERE" ? "Nghiêm trọng" : "Bình thường",
+      "Nội dung quy định (Content)": r.content
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "QC_Rules");
+
+    // Tải file về
+    XLSX.writeFile(workbook, fileName);
+  }
+
   // 📥 Tải template Excel
   function handleDownloadTemplate() {
     const currentSection = section.toUpperCase();
@@ -525,6 +561,12 @@ function RulesContent() {
                 title="Lấy dữ liệu mới nhất từ Database"
               >
                 🔄 Làm mới
+              </button>
+              <button
+                onClick={handleExportComplianceExcel}
+                className="btn btn-sm bg-teal-600 hover:bg-teal-700 text-white flex items-center gap-1"
+              >
+                📥 Xuất Excel Q&C
               </button>
               <button
                 className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border ${showAllSections
