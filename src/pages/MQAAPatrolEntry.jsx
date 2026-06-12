@@ -207,6 +207,12 @@ export default function MQAAPatrolEntry() {
             return;
         }
 
+        const activeCriteria = rows.filter(r => !r.isHeader);
+        if (activeCriteria.length === 0) {
+            alert("Không thể lưu phiếu đánh giá vì không có hạng mục chấm điểm nào. Vui lòng tải lại biểu mẫu.");
+            return;
+        }
+
         setLoading(true);
         try {
             const rowsWithRemoteUrls = [...rows];

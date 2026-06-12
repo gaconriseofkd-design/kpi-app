@@ -342,7 +342,7 @@ function PatrolSummaryTab() {
 
             const { data: logs, error } = await supabase
                 .from("mqaa_patrol_logs")
-                .select("section, overall_performance, date")
+                .select("section, overall_performance, date, evaluation_data")
                 .gte("date", dateFrom)
                 .lte("date", dateTo);
 
@@ -350,6 +350,9 @@ function PatrolSummaryTab() {
 
             const stats = {};
             logs.forEach(l => {
+                const hasDetails = l.evaluation_data && Array.isArray(l.evaluation_data) && l.evaluation_data.filter(item => !item.is_header && !item.isHeader).length > 0;
+                if (!hasDetails) return;
+
                 const s = l.section || "Unknown";
                 if (!stats[s]) stats[s] = { count: 0, sum: 0 };
                 stats[s].count++;
@@ -381,7 +384,10 @@ function PatrolSummaryTab() {
                     rawMonth: m
                 };
 
-                const monthLogs = logs.filter(l => l.date && l.date.startsWith(m));
+                const monthLogs = logs.filter(l => {
+                    const hasDetails = l.evaluation_data && Array.isArray(l.evaluation_data) && l.evaluation_data.filter(item => !item.is_header && !item.isHeader).length > 0;
+                    return l.date && l.date.startsWith(m) && hasDetails;
+                });
 
                 // Overall average
                 if (monthLogs.length > 0) {

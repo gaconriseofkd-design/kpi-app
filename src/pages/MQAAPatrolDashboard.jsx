@@ -76,6 +76,9 @@ export default function MQAAPatrolDashboard() {
 
             const grouped = {};
             dayData.forEach(row => {
+                const hasDetails = row.evaluation_data && Array.isArray(row.evaluation_data) && row.evaluation_data.filter(item => !item.is_header && !item.isHeader).length > 0;
+                if (!hasDetails) return;
+
                 if (!grouped[row.section]) grouped[row.section] = [];
                 grouped[row.section].push(row);
             });
@@ -107,7 +110,7 @@ export default function MQAAPatrolDashboard() {
 
             let histQuery = supabase
                 .from("mqaa_patrol_logs")
-                .select("date, section, overall_performance")
+                .select("date, section, overall_performance, evaluation_data")
                 .order("date", { ascending: true });
             
             if (selectedAuditorId) {
@@ -122,7 +125,10 @@ export default function MQAAPatrolDashboard() {
             const trend = dates.map(date => {
                 const dayPoints = { name: date };
                 sections.forEach(s => {
-                    const matches = histData.filter(d => d.date === date && d.section === s.id);
+                    const matches = histData.filter(d => {
+                        const hasDetails = d.evaluation_data && Array.isArray(d.evaluation_data) && d.evaluation_data.filter(item => !item.is_header && !item.isHeader).length > 0;
+                        return d.date === date && d.section === s.id && hasDetails;
+                    });
                     if (matches.length > 0) {
                         const avg = matches.reduce((sum, m) => sum + (Number(m.overall_performance) || 0), 0) / matches.length;
                         dayPoints[s.name] = avg.toFixed(0);
