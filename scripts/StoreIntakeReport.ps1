@@ -411,3 +411,7 @@ try {
     if ($excel) { try { $excel.Quit(); [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null } catch {} }
     exit 1
 }
+
+finally {
+    & (Join-Path $PSScriptRoot "Cleanup-Excel.ps1")
+}

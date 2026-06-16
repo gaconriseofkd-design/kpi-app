@@ -404,3 +404,7 @@ try {
     Write-Error "Loi: $_"
     exit 1
 }
+
+finally {
+    & (Join-Path $PSScriptRoot "Cleanup-Excel.ps1")
+}
