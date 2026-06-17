@@ -541,3 +541,27 @@
 [2026-06-16 08:01:58] [INFO] Da tao xong bao cao WIP.
 [2026-06-16 08:02:11] [INFO] Da gui bao cao WIP vao Daily Report.
 [2026-06-16 08:02:11] [INFO] === HOAN TAT ===
+[2026-06-17 08:00:06] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-06-17 08:00:06] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-06-15'
+[2026-06-17 08:00:06] [INFO] Dang kiem tra Zalo PC...
+[2026-06-17 08:00:07] [INFO] Zalo dang mo: PID=14632 | Title='Zalo'
+[2026-06-17 08:00:07] [INFO] Minimize terminal, focus Zalo...
+[2026-06-17 08:00:10] [INFO] Kiem tra Patrol: HomQua=2026-06-16 | DaGui=2026-06-15
+[2026-06-17 08:00:10] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-06-16...
+[2026-06-17 08:00:20] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-06-17 08:00:38] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-06-17 08:00:43] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-06-17 08:00:48] [INFO] Da gui phieu auditor: Giang Thị Diễm Sương
+[2026-06-17 08:01:02] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-06-17 08:01:07] [INFO] Da gui phieu auditor: Lâm Ngọc Thảo
+[2026-06-17 08:01:13] [INFO] Da gui phieu auditor: Lê Thị Ngân
+[2026-06-17 08:01:18] [INFO] Da gui phieu auditor: Trần Thị Tinh Vi
+[2026-06-17 08:01:23] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-06-17 08:01:28] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-06-17 08:01:33] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-06-17 08:01:39] [INFO] Da gui bang tong ket ngay.
+[2026-06-17 08:01:39] [INFO] Da cap nhat last_patrol_report_monday = 2026-06-16
+[2026-06-17 08:01:39] [INFO] Kiem tra thoi gian: 8h - Bat dau doc va gui bao cao WIP...
+[2026-06-17 08:02:03] [INFO] Da tao xong bao cao WIP.
+[2026-06-17 08:02:15] [INFO] Da gui bao cao WIP vao Daily Report.
+[2026-06-17 08:02:15] [INFO] === HOAN TAT ===
