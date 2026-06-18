@@ -1,4 +1,4 @@
-# scripts/Cleanup-Excel.ps1
+﻿# scripts/Cleanup-Excel.ps1
 param([switch]$ManualTrigger)
 
 try {

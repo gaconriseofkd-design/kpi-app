@@ -1,4 +1,4 @@
-# scripts/StoreIntakeReport.ps1
+﻿# scripts/StoreIntakeReport.ps1
 param(
     [switch]$ManualTrigger,
     [string]$TargetReport = ""
