@@ -1,4 +1,4 @@
-﻿# scripts/MQAAAutomation.ps1
+# scripts/MQAAAutomation.ps1
 # Script tự động gửi báo cáo MQAA vào Zalo mỗi sáng 08:00
 # Logic: Báo cáo hàng ngày cho ngày hôm trước + Tổng kết tuần vào Thứ 7
 
@@ -303,7 +303,9 @@ try {
     # ============================================
     if ($runWip) {
         Write-Log "Kiem tra thoi gian: 8h - Bat dau doc va gui bao cao WIP..."
-        $WIP_EXCEL_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Nhân Lg\Schedule\Ovn Pro Schedule.xlsb"
+        $ORIGINAL_WIP_EXCEL_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Nhân Lg\Schedule\Ovn Pro Schedule.xlsb"
+        $WIP_EXCEL_PATH = "$env:TEMP\Ovn_Pro_Schedule_Temp.xlsb"
+        Copy-Item -Path $ORIGINAL_WIP_EXCEL_PATH -Destination $WIP_EXCEL_PATH -Force
         if (Test-Path $WIP_EXCEL_PATH) {
             $excelWIP = New-Object -ComObject Excel.Application
             $excelWIP.Visible = $false

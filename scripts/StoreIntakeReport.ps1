@@ -1,4 +1,4 @@
-﻿# scripts/StoreIntakeReport.ps1
+# scripts/StoreIntakeReport.ps1
 param(
     [switch]$ManualTrigger,
     [string]$TargetReport = ""
@@ -30,7 +30,9 @@ if (-not $runDaily -and -not $runHangBu -and -not $runDelay -and -not $runWip) {
     exit 0
 }
 
-$EXCEL_FILE_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\TRUONG OFFICE\PROJECT\Dashboard Progress tracking\data\Powerapp (V21.10.25).xlsx"
+$ORIGINAL_EXCEL_FILE_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\TRUONG OFFICE\PROJECT\Dashboard Progress tracking\data\Powerapp (V21.10.25).xlsx"
+$EXCEL_FILE_PATH = "$env:TEMP\Powerapp_Temp_Report.xlsx"
+Copy-Item -Path $ORIGINAL_EXCEL_FILE_PATH -Destination $EXCEL_FILE_PATH -Force
 $ZALO_TARGET_NAME = "Daily Report"
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
