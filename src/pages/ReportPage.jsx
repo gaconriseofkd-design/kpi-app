@@ -1904,7 +1904,7 @@ function AdjustEmployeeRecordsMolding() {
               <div className="lg:col-span-4 flex justify-end gap-2 mt-2">
                 <button
                   type="button"
-                  className="btn btn-outline"
+                  className="btn btn-outline text-slate-700 hover:bg-slate-50"
                   onClick={() => {
                     setDateFrom(firstDayOfMonthStr());
                     setDateTo(todayStr());
@@ -2002,7 +2002,7 @@ function AdjustEmployeeRecordsMolding() {
                 Nhân viên: <b>{editRecord.worker_name} ({editRecord.worker_id})</b>
               </p>
             </div>
-            <button className="btn btn-outline" onClick={handleBackToRecords}>
+            <button className="btn btn-outline text-slate-700 hover:bg-slate-50" onClick={handleBackToRecords}>
               ◀ Quay lại danh sách
             </button>
           </div>
@@ -2129,7 +2129,7 @@ function AdjustEmployeeRecordsMolding() {
               <div className="pt-4 flex justify-end gap-3 border-t border-slate-100">
                 <button
                   type="button"
-                  className="btn btn-outline"
+                  className="btn btn-outline text-slate-700 hover:bg-slate-50"
                   onClick={handleBackToRecords}
                   disabled={saving}
                 >
