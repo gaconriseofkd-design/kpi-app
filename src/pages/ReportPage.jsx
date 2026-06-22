@@ -1799,7 +1799,6 @@ function AdjustEmployeeRecordsMolding() {
     setSaving(true);
     try {
       const payload = {
-        id: editRecord.id,
         date: editRecord.date,
         ca: editRecord.ca,
         worker_id: editRecord.worker_id,
@@ -1828,7 +1827,8 @@ function AdjustEmployeeRecordsMolding() {
 
       const { error } = await supabase
         .from("kpi_entries_molding")
-        .upsert(payload, { onConflict: "worker_id,date,section" });
+        .update(payload)
+        .eq("id", editRecord.id);
 
       if (error) throw error;
       alert("Đã lưu chỉnh sửa thành công!");
