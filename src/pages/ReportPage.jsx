@@ -1649,16 +1649,9 @@ function calculateScoresMoldingLocal({ shift, working_input, mold_hours, output,
 }
 
 function AdjustEmployeeRecordsMolding() {
-  const [phase, setPhase] = useState(1); // 1: Search Employee, 2: Find Records, 3: Edit Record
+  const [phase, setPhase] = useState(1); // 1: Search & List Records, 2: Edit Record
 
-  // Phase 1 States
-  const [employeeQuery, setEmployeeQuery] = useState("");
-  const [approverQuery, setApproverQuery] = useState("");
-  const [loadingSearch, setLoadingSearch] = useState(false);
-  const [searchResults, setSearchResults] = useState([]);
-
-  // Phase 2 States
-  const [selectedWorker, setSelectedWorker] = useState(null);
+  // Search & Filter States
   const todayStr = () => new Date().toISOString().slice(0, 10);
   const firstDayOfMonthStr = () => {
     const n = new Date();
@@ -1666,20 +1659,22 @@ function AdjustEmployeeRecordsMolding() {
   };
   const [dateFrom, setDateFrom] = useState(firstDayOfMonthStr());
   const [dateTo, setDateTo] = useState(todayStr());
+  const [employeeQuery, setEmployeeQuery] = useState("");
+  const [approverQuery, setApproverQuery] = useState("");
   const [records, setRecords] = useState([]);
   const [loadingRecords, setLoadingRecords] = useState(false);
 
-  // Phase 3 States
+  // Edit Record States
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [editRecord, setEditRecord] = useState(null); // local working copy
 
-  // Rule configs
+  // Rule & Dict configs
   const [prodRules, setProdRules] = useState([]);
   const [complianceDict, setComplianceDict] = useState([]);
   const [categoryOptions, setCategoryOptions] = useState([]);
   const [saving, setSaving] = useState(false);
 
-  // Load rules & compliance dict on mount
+  // Load rules & compliance dict and initial search on mount
   useEffect(() => {
     supabase.from("kpi_compliance_dictionary").select("*").then(({ data }) => {
       if (data) setComplianceDict(data);
@@ -1696,25 +1691,31 @@ function AdjustEmployeeRecordsMolding() {
         setCategoryOptions(list);
       });
 
-    // Load initial workers
-    loadWorkers("", "");
+    // Execute initial load of records
+    loadMoldingRecords(firstDayOfMonthStr(), todayStr(), "", "");
   }, []);
 
   const getComplianceOptions = () => {
     return ["NONE", ...new Set(complianceDict.filter(r => r.section === "MOLDING" && r.category === "COMPLIANCE").map(r => r.content))];
   };
 
-  async function loadWorkers(emp, app) {
-    setLoadingSearch(true);
+  async function loadMoldingRecords(from, to, emp, app) {
+    setLoadingRecords(true);
     try {
-      let query = supabase.from("users").select("msnv, full_name, section, line, approver_msnv, approver_name").eq("section", "MOLDING");
+      let query = supabase
+        .from("kpi_entries_molding")
+        .select("*")
+        .eq("section", "MOLDING");
+
+      if (from) query = query.gte("date", from);
+      if (to) query = query.lte("date", to);
 
       const trimmedEmp = emp.trim();
       if (trimmedEmp) {
         if (isNaN(Number(trimmedEmp))) {
-          query = query.ilike("full_name", `%${trimmedEmp}%`);
+          query = query.ilike("worker_name", `%${trimmedEmp}%`);
         } else {
-          query = query.eq("msnv", trimmedEmp);
+          query = query.eq("worker_id", trimmedEmp);
         }
       }
 
@@ -1727,34 +1728,9 @@ function AdjustEmployeeRecordsMolding() {
         }
       }
 
-      const { data, error } = await query.limit(100);
-      if (error) throw error;
-      setSearchResults((data || []).map(w => ({ ...w, msnv: (w.msnv || "").trim() })));
-    } catch (err) {
-      alert("Lỗi tải nhân viên: " + err.message);
-    } finally {
-      setLoadingSearch(false);
-    }
-  }
+      query = query.order("date", { ascending: false }).order("worker_id", { ascending: true });
 
-  function handleSearch(e) {
-    e?.preventDefault();
-    loadWorkers(employeeQuery, approverQuery);
-  }
-
-  // Phase 2: Load records for worker
-  async function loadRecordsForWorker(worker) {
-    if (!worker) return;
-    setLoadingRecords(true);
-    try {
-      const { data, error } = await supabase
-        .from("kpi_entries_molding")
-        .select("*")
-        .eq("worker_id", worker.msnv.trim())
-        .gte("date", dateFrom)
-        .lte("date", dateTo)
-        .order("date", { ascending: false });
-
+      const { data, error } = await query;
       if (error) throw error;
       setRecords(data || []);
     } catch (err) {
@@ -1764,25 +1740,12 @@ function AdjustEmployeeRecordsMolding() {
     }
   }
 
-  function selectWorker(worker) {
-    setSelectedWorker(worker);
-    setPhase(2);
-    // Fetch records
-    loadRecordsForWorker(worker);
-  }
-
-  function handleQueryRecords(e) {
+  function handleSearch(e) {
     e?.preventDefault();
-    loadRecordsForWorker(selectedWorker);
+    loadMoldingRecords(dateFrom, dateTo, employeeQuery, approverQuery);
   }
 
-  function handleBackToSearch() {
-    setSelectedWorker(null);
-    setRecords([]);
-    setPhase(1);
-  }
-
-  // Phase 3: Edit Record
+  // Phase 2: Edit Record
   function startEdit(record) {
     setSelectedRecord(record);
     setEditRecord({
@@ -1795,14 +1758,15 @@ function AdjustEmployeeRecordsMolding() {
       status: record.status ?? "approved",
       approver_note: record.approver_note ?? ""
     });
-    setPhase(3);
+    setPhase(2);
   }
 
   function handleBackToRecords() {
     setSelectedRecord(null);
     setEditRecord(null);
-    setPhase(2);
-    loadRecordsForWorker(selectedWorker);
+    setPhase(1);
+    // Refresh records list
+    loadMoldingRecords(dateFrom, dateTo, employeeQuery, approverQuery);
   }
 
   function updateEditField(key, val) {
@@ -1892,124 +1856,14 @@ function AdjustEmployeeRecordsMolding() {
         </span>
       </div>
 
-      {/* PHASE 1: SEARCH WORKERS */}
+      {/* PHASE 1: SEARCH & LIST RECORDS DIRECTLY */}
       {phase === 1 && (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
           <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
             <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
-              🔍 Tìm kiếm nhân viên Molding
+              🔍 Bộ lọc tìm kiếm bản ghi
             </h3>
-            <form onSubmit={handleSearch} className="grid md:grid-cols-3 gap-4 items-end">
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Nhân viên (MSNV hoặc Tên)</label>
-                <input
-                  type="text"
-                  className="input w-full"
-                  placeholder="Nhập MSNV hoặc họ tên..."
-                  value={employeeQuery}
-                  onChange={e => setEmployeeQuery(e.target.value)}
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Người duyệt (MSNV hoặc Tên)</label>
-                <input
-                  type="text"
-                  className="input w-full"
-                  placeholder="Nhập người duyệt..."
-                  value={approverQuery}
-                  onChange={e => setApproverQuery(e.target.value)}
-                />
-              </div>
-              <div className="flex gap-2">
-                <button type="submit" className="btn btn-primary flex-1 bg-indigo-600 border-indigo-600 hover:bg-indigo-700 text-white" disabled={loadingSearch}>
-                  {loadingSearch ? "Đang tìm..." : "Tìm kiếm"}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={() => {
-                    setEmployeeQuery("");
-                    setApproverQuery("");
-                    loadWorkers("", "");
-                  }}
-                >
-                  Xóa bộ lọc
-                </button>
-              </div>
-            </form>
-          </div>
-
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-              <h4 className="font-bold text-slate-700">Danh sách nhân viên ({searchResults.length})</h4>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-                  <tr>
-                    <th className="px-6 py-3 text-left">MSNV</th>
-                    <th className="px-6 py-3 text-left">Họ & Tên</th>
-                    <th className="px-6 py-3 text-left">Line</th>
-                    <th className="px-6 py-3 text-left">Người duyệt</th>
-                    <th className="px-6 py-3 text-center">Hành động</th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200 text-sm text-gray-700">
-                  {searchResults.map(w => (
-                    <tr key={w.msnv} className="hover:bg-indigo-50/45 transition-colors">
-                      <td className="px-6 py-4 font-semibold text-slate-800">{w.msnv}</td>
-                      <td className="px-6 py-4 font-medium text-slate-900">{w.full_name}</td>
-                      <td className="px-6 py-4">{w.line || "N/A"}</td>
-                      <td className="px-6 py-4">
-                        {w.approver_name ? `${w.approver_name} (${w.approver_msnv})` : "N/A"}
-                      </td>
-                      <td className="px-6 py-4 text-center">
-                        <button
-                          className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs transition"
-                          onClick={() => selectWorker(w)}
-                        >
-                          Chọn nhân viên
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {!searchResults.length && !loadingSearch && (
-                    <tr>
-                      <td colSpan={5} className="px-6 py-10 text-center text-gray-500 italic bg-gray-50">
-                        Không tìm thấy nhân viên nào
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* PHASE 2: SELECT DATE RANGE & LIST RECORDS */}
-      {phase === 2 && selectedWorker && (
-        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
-          <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-xl shadow-sm flex items-center justify-between flex-wrap gap-4">
-            <div>
-              <span className="text-xs font-semibold text-indigo-500 uppercase tracking-wider">Nhân viên đang chọn</span>
-              <h3 className="text-xl font-bold text-indigo-950 mt-1">
-                {selectedWorker.full_name} ({selectedWorker.msnv})
-              </h3>
-              <p className="text-sm text-indigo-700 mt-1">
-                Bộ phận: <b>{selectedWorker.section}</b> &nbsp;|&nbsp; Line: <b>{selectedWorker.line || "N/A"}</b> &nbsp;|&nbsp; Người duyệt: <b>{selectedWorker.approver_name || "N/A"} ({selectedWorker.approver_msnv || "N/A"})</b>
-              </p>
-            </div>
-            <button className="btn btn-outline border-indigo-200 text-indigo-700 hover:bg-indigo-100" onClick={handleBackToSearch}>
-              ◀ Chọn nhân viên khác
-            </button>
-          </div>
-
-          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
-            <h3 className="text-lg font-bold text-slate-800 mb-4">
-              📅 Chọn khoảng ngày tìm bản ghi
-            </h3>
-            <form onSubmit={handleQueryRecords} className="grid md:grid-cols-3 gap-4 items-end">
+            <form onSubmit={handleSearch} className="grid md:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
               <div>
                 <label className="block text-sm font-medium text-gray-600 mb-1">Từ ngày</label>
                 <input
@@ -2028,40 +1882,83 @@ function AdjustEmployeeRecordsMolding() {
                   onChange={e => setDateTo(e.target.value)}
                 />
               </div>
-              <button type="submit" className="btn btn-primary w-full bg-indigo-600 border-indigo-600 hover:bg-indigo-700 text-white" disabled={loadingRecords}>
-                {loadingRecords ? "Đang tìm bản ghi..." : "Tìm bản ghi đã nhập"}
-              </button>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Nhân viên (MSNV hoặc Tên)</label>
+                <input
+                  type="text"
+                  className="input w-full"
+                  placeholder="Để trống để tìm tất cả..."
+                  value={employeeQuery}
+                  onChange={e => setEmployeeQuery(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Người duyệt (MSNV hoặc Tên)</label>
+                <input
+                  type="text"
+                  className="input w-full"
+                  placeholder="Để trống để tìm tất cả..."
+                  value={approverQuery}
+                  onChange={e => setApproverQuery(e.target.value)}
+                />
+              </div>
+              <div className="lg:col-span-4 flex justify-end gap-2 mt-2">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => {
+                    setDateFrom(firstDayOfMonthStr());
+                    setDateTo(todayStr());
+                    setEmployeeQuery("");
+                    setApproverQuery("");
+                    loadMoldingRecords(firstDayOfMonthStr(), todayStr(), "", "");
+                  }}
+                >
+                  Xóa bộ lọc
+                </button>
+                <button type="submit" className="btn btn-primary bg-indigo-600 border-indigo-600 hover:bg-indigo-700 text-white min-w-[120px]" disabled={loadingRecords}>
+                  {loadingRecords ? "Đang tìm..." : "Tìm bản ghi"}
+                </button>
+              </div>
             </form>
           </div>
 
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
-              <h4 className="font-bold text-slate-700">Các bản ghi đã nhập ({records.length})</h4>
+            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+              <h4 className="font-bold text-slate-700">Các bản ghi Molding đã nhập ({records.length})</h4>
             </div>
             <div className="overflow-x-auto">
               <table className="min-w-full divide-y divide-gray-200 text-sm text-gray-700">
                 <thead className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   <tr>
-                    <th className="px-6 py-3 text-center">Ngày</th>
-                    <th className="px-6 py-3 text-center">Ca</th>
-                    <th className="px-6 py-3 text-center">Loại hàng</th>
-                    <th className="px-6 py-3 text-right">Sản lượng</th>
-                    <th className="px-6 py-3 text-right">Số đôi phế</th>
-                    <th className="px-6 py-3 text-center">Điểm KPI</th>
-                    <th className="px-6 py-3 text-center">Trạng thái</th>
-                    <th className="px-6 py-3 text-center">Hành động</th>
+                    <th className="px-4 py-3 text-center">Ngày</th>
+                    <th className="px-4 py-3 text-left">MSNV</th>
+                    <th className="px-4 py-3 text-left">Nhân viên</th>
+                    <th className="px-4 py-3 text-center">Ca</th>
+                    <th className="px-4 py-3 text-center">Mã hàng</th>
+                    <th className="px-4 py-3 text-right">Sản lượng</th>
+                    <th className="px-4 py-3 text-right">Phế</th>
+                    <th className="px-4 py-3 text-center">KPI</th>
+                    <th className="px-4 py-3 text-left">Người duyệt</th>
+                    <th className="px-4 py-3 text-center">Trạng thái</th>
+                    <th className="px-4 py-3 text-center">Hành động</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {records.map(r => (
-                    <tr key={r.id} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-6 py-4 text-center font-medium text-slate-800">{fmtDate(r.date)}</td>
-                      <td className="px-6 py-4 text-center">{r.ca}</td>
-                      <td className="px-6 py-4 text-center font-semibold text-indigo-600">{r.category || "N/A"}</td>
-                      <td className="px-6 py-4 text-right">{r.output?.toLocaleString()}</td>
-                      <td className="px-6 py-4 text-right">{r.defects}</td>
-                      <td className="px-6 py-4 text-center font-bold text-blue-600 text-base">{r.day_score}</td>
-                      <td className="px-6 py-4 text-center">
+                    <tr key={r.id} className="hover:bg-indigo-50/40 transition-colors">
+                      <td className="px-4 py-4 text-center font-medium text-slate-800 whitespace-nowrap">{fmtDate(r.date)}</td>
+                      <td className="px-4 py-4 font-semibold text-slate-700">{r.worker_id}</td>
+                      <td className="px-4 py-4 font-medium text-slate-900 whitespace-nowrap">{r.worker_name}</td>
+                      <td className="px-4 py-4 text-center">{r.ca}</td>
+                      <td className="px-4 py-4 text-center font-semibold text-indigo-600 whitespace-nowrap">{r.category || "N/A"}</td>
+                      <td className="px-4 py-4 text-right">{r.output?.toLocaleString()}</td>
+                      <td className="px-4 py-4 text-right">{r.defects}</td>
+                      <td className="px-4 py-4 text-center font-bold text-blue-600 text-base">{r.day_score}</td>
+                      <td className="px-4 py-4 text-left whitespace-nowrap">
+                        {r.approver_name ? `${r.approver_name} (${r.approver_msnv || ''})` : "N/A"}
+                      </td>
+                      <td className="px-4 py-4 text-center">
                         <span className={`px-2 py-1 rounded-full text-xs font-bold ${
                           r.status === 'approved' ? 'bg-green-100 text-green-700' :
                           r.status === 'rejected' ? 'bg-red-100 text-red-700' :
@@ -2070,9 +1967,9 @@ function AdjustEmployeeRecordsMolding() {
                           {r.status || 'pending'}
                         </span>
                       </td>
-                      <td className="px-6 py-4 text-center">
+                      <td className="px-4 py-4 text-center whitespace-nowrap">
                         <button
-                          className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs transition"
+                          className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs transition"
                           onClick={() => startEdit(r)}
                         >
                           ✏️ Điều chỉnh
@@ -2082,8 +1979,8 @@ function AdjustEmployeeRecordsMolding() {
                   ))}
                   {!records.length && !loadingRecords && (
                     <tr>
-                      <td colSpan={8} className="px-6 py-10 text-center text-gray-500 italic bg-gray-50">
-                        Không tìm thấy bản ghi nào của nhân viên này trong khoảng ngày được chọn.
+                      <td colSpan={11} className="px-6 py-10 text-center text-gray-500 italic bg-gray-50">
+                        Không tìm thấy bản ghi nào của Molding trong khoảng ngày và bộ lọc đã chọn.
                       </td>
                     </tr>
                   )}
@@ -2094,8 +1991,8 @@ function AdjustEmployeeRecordsMolding() {
         </div>
       )}
 
-      {/* PHASE 3: EDIT RECORD */}
-      {phase === 3 && editRecord && liveScores && (
+      {/* PHASE 2: EDIT RECORD */}
+      {phase === 2 && editRecord && liveScores && (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
           <div className="flex justify-between items-center bg-slate-50 p-4 border rounded-xl shadow-sm flex-wrap gap-2">
             <div>
