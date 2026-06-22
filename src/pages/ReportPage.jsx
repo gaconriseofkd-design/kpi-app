@@ -1823,8 +1823,7 @@ function AdjustEmployeeRecordsMolding() {
         compliance_code: editRecord.compliance_code,
         status: editRecord.status || "approved",
         approver_note: editRecord.approver_note || null,
-        section: "MOLDING",
-        updated_at: new Date().toISOString()
+        section: "MOLDING"
       };
 
       const { error } = await supabase
