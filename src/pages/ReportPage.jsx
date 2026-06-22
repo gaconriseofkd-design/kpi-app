@@ -11,6 +11,11 @@ import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
   ResponsiveContainer
 } from "recharts";
+import {
+  scoreByQualityMolding,
+  scoreByCompliance,
+  getMoldingCompliancePenalty
+} from "../lib/scoring";
 
 /* =============== Helper Logic =============== */
 const HYBRID_SECTIONS = ["LAMINATION", "PREFITTING", "BÀO", "TÁCH", "BAO", "TACH"]; // Thêm BAO/TACH không dấu dự phòng
@@ -114,7 +119,14 @@ export default function ReportPage() {
 }
 
 function ReportShell() {
-  const [tab, setTab] = useState("detail"); // "detail" | "summary"
+  const { section } = useKpiSection();
+  const [tab, setTab] = useState("detail"); // "detail" | "summary" | "adjust"
+
+  useEffect(() => {
+    if (section !== "MOLDING" && tab === "adjust") {
+      setTab("detail");
+    }
+  }, [section, tab]);
 
   return (
     <div className="p-4 max-w-7xl mx-auto space-y-6">
@@ -127,6 +139,14 @@ function ReportShell() {
           >
              📊 Báo cáo chi tiết
           </button>
+          {section === "MOLDING" && (
+            <button 
+               className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${tab === 'adjust' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+               onClick={() => setTab('adjust')}
+            >
+               ✏️ Điều chỉnh bản ghi nhân viên
+            </button>
+          )}
           <button 
              className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${tab === 'summary' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
              onClick={() => setTab('summary')}
@@ -137,7 +157,13 @@ function ReportShell() {
       </div>
 
       <div className="animate-in fade-in slide-in-from-bottom-2 duration-300">
-        {tab === "detail" ? <ReportContent /> : <MonthlySectionSummary />}
+        {tab === "detail" ? (
+          <ReportContent />
+        ) : tab === "adjust" ? (
+          <AdjustEmployeeRecordsMolding />
+        ) : (
+          <MonthlySectionSummary />
+        )}
       </div>
     </div>
   );
@@ -1562,4 +1588,730 @@ function MonthlySectionSummary() {
     </div>
   );
 }
+
+/* =============== HỢP PHẦN ĐIỀU CHỈNH BẢN GHI NHÂN VIÊN MOLDING =============== */
+function calcWorkingRealLocal(shift, inputHours) {
+  const h = Number(inputHours || 0);
+  if (h < 8) return h;
+  const BASE_BY_SHIFT = {
+    "Ca 1": 7.17,
+    "Ca 2": 7.17,
+    "Ca 3": 6.92,
+    "Ca HC": 6.67,
+  };
+  const base = BASE_BY_SHIFT[shift] ?? 7.17;
+  if (h < 9) return base;
+  const extra = h - 8;
+  const adj = extra >= 2 ? extra - 0.5 : extra;
+  return base + adj;
+}
+
+function calculateScoresMoldingLocal({ shift, working_input, mold_hours, output, defects, category, compliance }, rules) {
+  const workingReal = calcWorkingRealLocal(shift, working_input);
+  let dt = (Number(workingReal) * 24 - Number(mold_hours || 0)) / 24;
+  if (dt > 1) dt = 1;
+  if (dt < 0) dt = 0;
+
+  const workingExact = Math.max(0, Number(workingReal) - dt);
+  const q = scoreByQualityMolding(defects);
+  const penalty = getMoldingCompliancePenalty(compliance);
+  const c = scoreByCompliance(penalty);
+
+  let p = 0;
+  const prod = workingExact > 0 ? Number(output || 0) / workingExact : 0;
+
+  if (category && prod > 0) {
+    const relevantRules = (rules || [])
+      .filter(r => r.category === category && r.active !== false)
+      .sort((a, b) => Number(b.threshold) - Number(a.threshold));
+
+    for (const r of relevantRules) {
+      if (prod >= Number(r.threshold)) {
+        p = Number(r.score);
+        break;
+      }
+    }
+  }
+
+  const total = p + q + c;
+
+  return {
+    q_score: q,
+    p_score: p,
+    c_score: c,
+    day_score: Math.min(15, total),
+    rawTotal: total,
+    working_real: Number(workingReal.toFixed(2)),
+    working_exact: Number(workingExact.toFixed(2)),
+    downtime: Number(dt.toFixed(2)),
+    prodRate: prod
+  };
+}
+
+function AdjustEmployeeRecordsMolding() {
+  const [phase, setPhase] = useState(1); // 1: Search Employee, 2: Find Records, 3: Edit Record
+
+  // Phase 1 States
+  const [employeeQuery, setEmployeeQuery] = useState("");
+  const [approverQuery, setApproverQuery] = useState("");
+  const [loadingSearch, setLoadingSearch] = useState(false);
+  const [searchResults, setSearchResults] = useState([]);
+
+  // Phase 2 States
+  const [selectedWorker, setSelectedWorker] = useState(null);
+  const todayStr = () => new Date().toISOString().slice(0, 10);
+  const firstDayOfMonthStr = () => {
+    const n = new Date();
+    return new Date(n.getFullYear(), n.getMonth(), 1).toISOString().slice(0, 10);
+  };
+  const [dateFrom, setDateFrom] = useState(firstDayOfMonthStr());
+  const [dateTo, setDateTo] = useState(todayStr());
+  const [records, setRecords] = useState([]);
+  const [loadingRecords, setLoadingRecords] = useState(false);
+
+  // Phase 3 States
+  const [selectedRecord, setSelectedRecord] = useState(null);
+  const [editRecord, setEditRecord] = useState(null); // local working copy
+
+  // Rule configs
+  const [prodRules, setProdRules] = useState([]);
+  const [complianceDict, setComplianceDict] = useState([]);
+  const [categoryOptions, setCategoryOptions] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  // Load rules & compliance dict on mount
+  useEffect(() => {
+    supabase.from("kpi_compliance_dictionary").select("*").then(({ data }) => {
+      if (data) setComplianceDict(data);
+    });
+
+    supabase.from("kpi_rule_productivity").select("category, threshold, score")
+      .eq("section", "MOLDING").eq("active", true)
+      .order("category", { ascending: true }).order("threshold", { ascending: false })
+      .then(({ data, error }) => {
+        if (error) return console.error(error);
+        const rules = data || [];
+        setProdRules(rules);
+        const list = [...new Set(rules.map((r) => r.category).filter(Boolean))];
+        setCategoryOptions(list);
+      });
+
+    // Load initial workers
+    loadWorkers("", "");
+  }, []);
+
+  const getComplianceOptions = () => {
+    return ["NONE", ...new Set(complianceDict.filter(r => r.section === "MOLDING" && r.category === "COMPLIANCE").map(r => r.content))];
+  };
+
+  async function loadWorkers(emp, app) {
+    setLoadingSearch(true);
+    try {
+      let query = supabase.from("users").select("msnv, full_name, section, line, approver_msnv, approver_name").eq("section", "MOLDING");
+
+      const trimmedEmp = emp.trim();
+      if (trimmedEmp) {
+        if (isNaN(Number(trimmedEmp))) {
+          query = query.ilike("full_name", `%${trimmedEmp}%`);
+        } else {
+          query = query.eq("msnv", trimmedEmp);
+        }
+      }
+
+      const trimmedApp = app.trim();
+      if (trimmedApp) {
+        if (isNaN(Number(trimmedApp))) {
+          query = query.ilike("approver_name", `%${trimmedApp}%`);
+        } else {
+          query = query.eq("approver_msnv", trimmedApp);
+        }
+      }
+
+      const { data, error } = await query.limit(100);
+      if (error) throw error;
+      setSearchResults((data || []).map(w => ({ ...w, msnv: (w.msnv || "").trim() })));
+    } catch (err) {
+      alert("Lỗi tải nhân viên: " + err.message);
+    } finally {
+      setLoadingSearch(false);
+    }
+  }
+
+  function handleSearch(e) {
+    e?.preventDefault();
+    loadWorkers(employeeQuery, approverQuery);
+  }
+
+  // Phase 2: Load records for worker
+  async function loadRecordsForWorker(worker) {
+    if (!worker) return;
+    setLoadingRecords(true);
+    try {
+      const { data, error } = await supabase
+        .from("kpi_entries_molding")
+        .select("*")
+        .eq("worker_id", worker.msnv.trim())
+        .gte("date", dateFrom)
+        .lte("date", dateTo)
+        .order("date", { ascending: false });
+
+      if (error) throw error;
+      setRecords(data || []);
+    } catch (err) {
+      alert("Lỗi tải bản ghi: " + err.message);
+    } finally {
+      setLoadingRecords(false);
+    }
+  }
+
+  function selectWorker(worker) {
+    setSelectedWorker(worker);
+    setPhase(2);
+    // Fetch records
+    loadRecordsForWorker(worker);
+  }
+
+  function handleQueryRecords(e) {
+    e?.preventDefault();
+    loadRecordsForWorker(selectedWorker);
+  }
+
+  function handleBackToSearch() {
+    setSelectedWorker(null);
+    setRecords([]);
+    setPhase(1);
+  }
+
+  // Phase 3: Edit Record
+  function startEdit(record) {
+    setSelectedRecord(record);
+    setEditRecord({
+      ...record,
+      working_input: record.working_input ?? 8,
+      mold_hours: record.mold_hours ?? 0,
+      output: record.output ?? 0,
+      defects: record.defects ?? 0,
+      compliance_code: record.compliance_code ?? "NONE",
+      status: record.status ?? "approved",
+      approver_note: record.approver_note ?? ""
+    });
+    setPhase(3);
+  }
+
+  function handleBackToRecords() {
+    setSelectedRecord(null);
+    setEditRecord(null);
+    setPhase(2);
+    loadRecordsForWorker(selectedWorker);
+  }
+
+  function updateEditField(key, val) {
+    setEditRecord(prev => {
+      const updated = { ...prev };
+      if (["ca", "category", "compliance_code", "status", "approver_note"].includes(key)) {
+        updated[key] = val;
+      } else {
+        updated[key] = Number(val) || 0;
+      }
+      return updated;
+    });
+  }
+
+  const liveScores = useMemo(() => {
+    if (!editRecord) return null;
+    return calculateScoresMoldingLocal({
+      shift: editRecord.ca,
+      working_input: editRecord.working_input,
+      mold_hours: editRecord.mold_hours,
+      output: editRecord.output,
+      defects: editRecord.defects,
+      category: editRecord.category,
+      compliance: editRecord.compliance_code
+    }, prodRules);
+  }, [editRecord, prodRules]);
+
+  async function saveRecord() {
+    if (!editRecord || !liveScores) return;
+    setSaving(true);
+    try {
+      const payload = {
+        id: editRecord.id,
+        date: editRecord.date,
+        ca: editRecord.ca,
+        worker_id: editRecord.worker_id,
+        worker_name: editRecord.worker_name,
+        approver_msnv: editRecord.approver_msnv,
+        approver_name: editRecord.approver_name,
+        line: editRecord.line,
+        category: editRecord.category,
+        working_input: Number(editRecord.working_input),
+        working_real: liveScores.working_real,
+        working_exact: liveScores.working_exact,
+        downtime: liveScores.downtime,
+        mold_hours: Number(editRecord.mold_hours),
+        output: Number(editRecord.output),
+        defects: Number(editRecord.defects),
+        q_score: liveScores.q_score,
+        p_score: liveScores.p_score,
+        c_score: liveScores.c_score,
+        day_score: liveScores.day_score,
+        overflow: liveScores.rawTotal > 15 ? (liveScores.rawTotal - 15) : 0,
+        compliance_code: editRecord.compliance_code,
+        status: editRecord.status || "approved",
+        approver_note: editRecord.approver_note || null,
+        section: "MOLDING",
+        updated_at: new Date().toISOString()
+      };
+
+      const { error } = await supabase
+        .from("kpi_entries_molding")
+        .upsert(payload, { onConflict: "worker_id,date,section" });
+
+      if (error) throw error;
+      alert("Đã lưu chỉnh sửa thành công!");
+      handleBackToRecords();
+    } catch (err) {
+      alert("Lỗi khi lưu chỉnh sửa: " + err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const fmtDate = (iso) => {
+    if (!iso) return "";
+    const [y, m, d] = iso.split("-").map(Number);
+    return `${d}/${m}/${y}`;
+  };
+
+  return (
+    <div className="p-4 space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold text-slate-800">Điều chỉnh bản ghi nhân viên Molding</h2>
+        <span className="text-xs bg-indigo-100 text-indigo-700 px-3 py-1 rounded-full font-semibold">
+          Section: Molding
+        </span>
+      </div>
+
+      {/* PHASE 1: SEARCH WORKERS */}
+      {phase === 1 && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+              🔍 Tìm kiếm nhân viên Molding
+            </h3>
+            <form onSubmit={handleSearch} className="grid md:grid-cols-3 gap-4 items-end">
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Nhân viên (MSNV hoặc Tên)</label>
+                <input
+                  type="text"
+                  className="input w-full"
+                  placeholder="Nhập MSNV hoặc họ tên..."
+                  value={employeeQuery}
+                  onChange={e => setEmployeeQuery(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Người duyệt (MSNV hoặc Tên)</label>
+                <input
+                  type="text"
+                  className="input w-full"
+                  placeholder="Nhập người duyệt..."
+                  value={approverQuery}
+                  onChange={e => setApproverQuery(e.target.value)}
+                />
+              </div>
+              <div className="flex gap-2">
+                <button type="submit" className="btn btn-primary flex-1 bg-indigo-600 border-indigo-600 hover:bg-indigo-700 text-white" disabled={loadingSearch}>
+                  {loadingSearch ? "Đang tìm..." : "Tìm kiếm"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={() => {
+                    setEmployeeQuery("");
+                    setApproverQuery("");
+                    loadWorkers("", "");
+                  }}
+                >
+                  Xóa bộ lọc
+                </button>
+              </div>
+            </form>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
+              <h4 className="font-bold text-slate-700">Danh sách nhân viên ({searchResults.length})</h4>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-6 py-3 text-left">MSNV</th>
+                    <th className="px-6 py-3 text-left">Họ & Tên</th>
+                    <th className="px-6 py-3 text-left">Line</th>
+                    <th className="px-6 py-3 text-left">Người duyệt</th>
+                    <th className="px-6 py-3 text-center">Hành động</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200 text-sm text-gray-700">
+                  {searchResults.map(w => (
+                    <tr key={w.msnv} className="hover:bg-indigo-50/45 transition-colors">
+                      <td className="px-6 py-4 font-semibold text-slate-800">{w.msnv}</td>
+                      <td className="px-6 py-4 font-medium text-slate-900">{w.full_name}</td>
+                      <td className="px-6 py-4">{w.line || "N/A"}</td>
+                      <td className="px-6 py-4">
+                        {w.approver_name ? `${w.approver_name} (${w.approver_msnv})` : "N/A"}
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs transition"
+                          onClick={() => selectWorker(w)}
+                        >
+                          Chọn nhân viên
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {!searchResults.length && !loadingSearch && (
+                    <tr>
+                      <td colSpan={5} className="px-6 py-10 text-center text-gray-500 italic bg-gray-50">
+                        Không tìm thấy nhân viên nào
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PHASE 2: SELECT DATE RANGE & LIST RECORDS */}
+      {phase === 2 && selectedWorker && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="bg-indigo-50 border border-indigo-100 p-6 rounded-xl shadow-sm flex items-center justify-between flex-wrap gap-4">
+            <div>
+              <span className="text-xs font-semibold text-indigo-500 uppercase tracking-wider">Nhân viên đang chọn</span>
+              <h3 className="text-xl font-bold text-indigo-950 mt-1">
+                {selectedWorker.full_name} ({selectedWorker.msnv})
+              </h3>
+              <p className="text-sm text-indigo-700 mt-1">
+                Bộ phận: <b>{selectedWorker.section}</b> &nbsp;|&nbsp; Line: <b>{selectedWorker.line || "N/A"}</b> &nbsp;|&nbsp; Người duyệt: <b>{selectedWorker.approver_name || "N/A"} ({selectedWorker.approver_msnv || "N/A"})</b>
+              </p>
+            </div>
+            <button className="btn btn-outline border-indigo-200 text-indigo-700 hover:bg-indigo-100" onClick={handleBackToSearch}>
+              ◀ Chọn nhân viên khác
+            </button>
+          </div>
+
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+            <h3 className="text-lg font-bold text-slate-800 mb-4">
+              📅 Chọn khoảng ngày tìm bản ghi
+            </h3>
+            <form onSubmit={handleQueryRecords} className="grid md:grid-cols-3 gap-4 items-end">
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Từ ngày</label>
+                <input
+                  type="date"
+                  className="input w-full"
+                  value={dateFrom}
+                  onChange={e => setDateFrom(e.target.value)}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-600 mb-1">Đến ngày</label>
+                <input
+                  type="date"
+                  className="input w-full"
+                  value={dateTo}
+                  onChange={e => setDateTo(e.target.value)}
+                />
+              </div>
+              <button type="submit" className="btn btn-primary w-full bg-indigo-600 border-indigo-600 hover:bg-indigo-700 text-white" disabled={loadingRecords}>
+                {loadingRecords ? "Đang tìm bản ghi..." : "Tìm bản ghi đã nhập"}
+              </button>
+            </form>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
+              <h4 className="font-bold text-slate-700">Các bản ghi đã nhập ({records.length})</h4>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200 text-sm text-gray-700">
+                <thead className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  <tr>
+                    <th className="px-6 py-3 text-center">Ngày</th>
+                    <th className="px-6 py-3 text-center">Ca</th>
+                    <th className="px-6 py-3 text-center">Loại hàng</th>
+                    <th className="px-6 py-3 text-right">Sản lượng</th>
+                    <th className="px-6 py-3 text-right">Số đôi phế</th>
+                    <th className="px-6 py-3 text-center">Điểm KPI</th>
+                    <th className="px-6 py-3 text-center">Trạng thái</th>
+                    <th className="px-6 py-3 text-center">Hành động</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {records.map(r => (
+                    <tr key={r.id} className="hover:bg-slate-50 transition-colors">
+                      <td className="px-6 py-4 text-center font-medium text-slate-800">{fmtDate(r.date)}</td>
+                      <td className="px-6 py-4 text-center">{r.ca}</td>
+                      <td className="px-6 py-4 text-center font-semibold text-indigo-600">{r.category || "N/A"}</td>
+                      <td className="px-6 py-4 text-right">{r.output?.toLocaleString()}</td>
+                      <td className="px-6 py-4 text-right">{r.defects}</td>
+                      <td className="px-6 py-4 text-center font-bold text-blue-600 text-base">{r.day_score}</td>
+                      <td className="px-6 py-4 text-center">
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                          r.status === 'approved' ? 'bg-green-100 text-green-700' :
+                          r.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                          'bg-amber-100 text-amber-700'
+                        }`}>
+                          {r.status || 'pending'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-center">
+                        <button
+                          className="px-4 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs transition"
+                          onClick={() => startEdit(r)}
+                        >
+                          ✏️ Điều chỉnh
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                  {!records.length && !loadingRecords && (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-10 text-center text-gray-500 italic bg-gray-50">
+                        Không tìm thấy bản ghi nào của nhân viên này trong khoảng ngày được chọn.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PHASE 3: EDIT RECORD */}
+      {phase === 3 && editRecord && liveScores && (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-300">
+          <div className="flex justify-between items-center bg-slate-50 p-4 border rounded-xl shadow-sm flex-wrap gap-2">
+            <div>
+              <h3 className="text-lg font-bold text-slate-800">
+                ✏️ Điều chỉnh bản ghi ngày {fmtDate(editRecord.date)} - Ca {editRecord.ca}
+              </h3>
+              <p className="text-sm text-gray-600">
+                Nhân viên: <b>{editRecord.worker_name} ({editRecord.worker_id})</b>
+              </p>
+            </div>
+            <button className="btn btn-outline" onClick={handleBackToRecords}>
+              ◀ Quay lại danh sách
+            </button>
+          </div>
+
+          <div className="grid lg:grid-cols-3 gap-6">
+            {/* Input Form */}
+            <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4">
+              <h4 className="text-base font-bold text-slate-800 pb-2 border-b border-slate-100">
+                Thông số đầu vào (Từ nhân viên)
+              </h4>
+
+              <div className="grid md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Ca làm việc</label>
+                  <select
+                    className="input w-full"
+                    value={editRecord.ca}
+                    onChange={e => updateEditField("ca", e.target.value)}
+                  >
+                    <option value="Ca 1">Ca 1</option>
+                    <option value="Ca 2">Ca 2</option>
+                    <option value="Ca 3">Ca 3</option>
+                    <option value="Ca HC">Ca HC</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Loại hàng / Mã hàng</label>
+                  <select
+                    className="input w-full font-semibold text-indigo-700"
+                    value={editRecord.category || ""}
+                    onChange={e => updateEditField("category", e.target.value)}
+                  >
+                    <option value="">-- Chọn loại hàng --</option>
+                    {categoryOptions.map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Giờ làm việc (Người nhập)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    className="input w-full"
+                    value={editRecord.working_input}
+                    onChange={e => updateEditField("working_input", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Số giờ khuôn chạy thực tế</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    className="input w-full"
+                    value={editRecord.mold_hours}
+                    onChange={e => updateEditField("mold_hours", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Sản lượng đầu ra (Output / Ca)</label>
+                  <input
+                    type="number"
+                    className="input w-full font-semibold text-slate-800"
+                    value={editRecord.output}
+                    onChange={e => updateEditField("output", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Số đôi phế</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    className="input w-full font-semibold text-red-600"
+                    value={editRecord.defects}
+                    onChange={e => updateEditField("defects", e.target.value)}
+                  />
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-medium text-red-700 mb-1">Lỗi tuân thủ (C)</label>
+                  <select
+                    className="input w-full text-red-800"
+                    value={editRecord.compliance_code || "NONE"}
+                    onChange={e => updateEditField("compliance_code", e.target.value)}
+                  >
+                    {getComplianceOptions().map(o => (
+                      <option key={o} value={o}>
+                        {o === "NONE" ? "Không vi phạm" : o}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Trạng thái duyệt</label>
+                  <select
+                    className="input w-full"
+                    value={editRecord.status || "approved"}
+                    onChange={e => updateEditField("status", e.target.value)}
+                  >
+                    <option value="approved">Approved</option>
+                    <option value="pending">Pending</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Ghi chú người duyệt</label>
+                  <input
+                    type="text"
+                    className="input w-full"
+                    placeholder="Nhập lý do hoặc lưu ý..."
+                    value={editRecord.approver_note || ""}
+                    onChange={e => updateEditField("approver_note", e.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="pt-4 flex justify-end gap-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={handleBackToRecords}
+                  disabled={saving}
+                >
+                  Hủy bỏ
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-primary bg-indigo-600 hover:bg-indigo-700 border-indigo-600 text-white min-w-[120px]"
+                  onClick={saveRecord}
+                  disabled={saving}
+                >
+                  {saving ? "Đang lưu..." : "💾 Lưu thay đổi"}
+                </button>
+              </div>
+            </div>
+
+            {/* Live Recalculations summary card */}
+            <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white p-6 rounded-xl border border-indigo-950 shadow-md flex flex-col justify-between">
+              <div>
+                <h4 className="text-base font-bold tracking-wide uppercase border-b border-indigo-800 pb-3 text-indigo-200">
+                  ⚡ Kết quả tính điểm KPI ngày
+                </h4>
+
+                <div className="mt-6 space-y-4">
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-indigo-200">Điểm Sản lượng (P):</span>
+                    <span className="font-extrabold text-lg text-emerald-400">{liveScores.p_score}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-indigo-200">Điểm Chất lượng (Q):</span>
+                    <span className="font-extrabold text-lg text-amber-400">{liveScores.q_score}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-indigo-200">Điểm Tuân thủ (C):</span>
+                    <span className="font-extrabold text-lg text-red-400">{liveScores.c_score}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-indigo-200">Điểm dư (Overflow):</span>
+                    <span className="font-extrabold text-lg text-sky-400">
+                      {liveScores.rawTotal > 15 ? (liveScores.rawTotal - 15).toFixed(1) : 0}
+                    </span>
+                  </div>
+
+                  <hr className="border-indigo-800 my-4" />
+
+                  <div className="flex justify-between items-end">
+                    <span className="text-indigo-200 text-sm pb-1">Tổng điểm KPI ngày:</span>
+                    <span className="font-black text-4xl text-white">
+                      {liveScores.day_score} <span className="text-lg font-medium text-indigo-300">/ 15</span>
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-8 bg-slate-800/50 p-4 rounded-lg border border-slate-700/50 text-xs space-y-2 text-indigo-100">
+                <div className="flex justify-between">
+                  <span>Giờ thực tế (quy đổi):</span>
+                  <span className="font-semibold text-white">{liveScores.working_real}h</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Downtime /24 khuôn:</span>
+                  <span className="font-semibold text-white">{liveScores.downtime}h</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Giờ làm việc chính xác:</span>
+                  <span className="font-semibold text-white">{liveScores.working_exact}h</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Năng suất thực tế:</span>
+                  <span className="font-semibold text-white">{liveScores.prodRate.toFixed(2)} đôi/h</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 
