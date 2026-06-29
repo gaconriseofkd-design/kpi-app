@@ -77,30 +77,67 @@ export function scoreByCompliance(penalty) {
 
 /**
  * Leanline Compliance Penalty Logic
- * Lỗi 1-7: Trừ 3 | Lỗi 8-13: Trừ 1
+ * Lỗi nghiêm trọng: Trừ 3 | Lỗi thường: Trừ 1
  */
 export function getLeanlineCompliancePenalty(code) {
   const severe = [
     "Không có/không có mẫu đầu chuyền",
+    "No first sample of the production line (Không có mẫu đầu chuyền)",
     "Không thực hiện checklist trước khi làm việc",
+    "No checklist performed before work (Không có checklist tại nơi làm việc)",
     "Không thực hiện checklist dò kim",
+    "Không thực hiện checklist dò kim loại",
+    "No metal detection checklist performed (Không thực hiện checklist dò kim loại)",
     "Không có mộc dò kim",
+    "Không có mộc dò kim loại",
+    "No metal detector stamp (Không có mộc dò kim loại)",
     "Dao chặt không có thông tin",
+    "Cutting last without information (Dao chặt không có thông tin)",
     "Không tuân thủ/không đo nhiệt độ tiêu chuẩn máy",
-    "Không sử dụng bảo hộ lao động, chắn lối thoát hiểm"
+    "Không tuân thủ đo nhiệt độ máy in logo theo tiêu chuẩn",
+    "Failure to comply with/measure logo machine temperature standards (Không tuân thủ đo nhiệt độ máy in logo theo tiêu chuẩn)",
+    "Không sử dụng bảo hộ lao động, chắn lối thoát hiểm",
+    "Safety violations (Vi phạm an toàn)",
+    "Production process violations (Vi phạm quy trình sản xuất)",
+    "Asset/material management violations (Vi phạm quản lý tài sản/nguyên vật liệu)"
   ];
   if (code === "NONE") return 0;
   if (severe.includes(code)) return 3;
-  return 1; // 8-13
+  return 1; // Lỗi thường
 }
 
 /**
  * Molding Compliance Penalty Logic
- * Lỗi 1: Trừ 3 | Lỗi 2: Trừ 1
+ * Lỗi nghiêm trọng: Trừ 3 | Lỗi thường: Trừ 1
  */
 export function getMoldingCompliancePenalty(code) {
+  const severe = [
+    "Không kiểm soát nhiệt độ theo quy định",
+    "Failure to control temperature as required (Vi phạm kiểm soát nhiệt độ theo quy định)",
+    "Safety violations (Vi phạm an toàn)",
+    "Production process violations (Vi phạm quy trình sản xuất)",
+    "Asset/material management violations (Vi phạm quản lý tài sản/nguyên vật liệu)"
+  ];
   if (code === "NONE") return 0;
-  if (code === "Không kiểm soát nhiệt độ theo quy định") return 3;
-  return 1;
+  if (severe.includes(code)) return 3;
+  return 1; // Lỗi thường
 }
+
+/**
+ * Lamination / Prefitting / Tách / Bào Compliance Penalty Logic
+ * Lỗi nghiêm trọng: Trừ 3 | Lỗi thường: Trừ 1
+ */
+export function getLaminationCompliancePenalty(code) {
+  const severe = [
+    "Rework (Fail test Dry) (Rớt hạng mục test Khô)",
+    "Saw cutting not according to the required specifications. (Cắt không theo điều kiện tiêu chuẩn)",
+    "Safety violations (Vi phạm an toàn)",
+    "Production process violations (Vi phạm quy trình sản xuất)",
+    "Asset/material management violations (Vi phạm quản lý tài sản/nguyên vật liệu)"
+  ];
+  if (code === "NONE") return 0;
+  if (severe.includes(code)) return 3;
+  return 1; // Lỗi thường
+}
+
 

@@ -8,7 +8,8 @@ import {
   scoreByQualityMolding,
   scoreByCompliance,
   getLeanlineCompliancePenalty,
-  getMoldingCompliancePenalty
+  getMoldingCompliancePenalty,
+  getLaminationCompliancePenalty
 } from "../lib/scoring";
 import ApproverModeHybrid from "./QuickEntryLPS";
 
@@ -81,7 +82,8 @@ function useMachines(section) {
  */
 function calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compliance) {
   const q = scoreByQualityLeanline(defects);
-  const penalty = getLeanlineCompliancePenalty(compliance);
+  const isHybrid = ["LAMINATION", "PREFITTING", "BÀO", "TÁCH"].includes(sec?.toUpperCase());
+  const penalty = isHybrid ? getLaminationCompliancePenalty(compliance) : getLeanlineCompliancePenalty(compliance);
   const c = scoreByCompliance(penalty);
   const p = scoreByProductivityLeanlineQuick(oe, rules, sec, line);
   const total = q + p + c;
@@ -246,7 +248,7 @@ function ApproverModeLeanline({ section }) {
   }, []);
 
   const getComplianceOptions = (cat = "COMPLIANCE") => {
-    const secKey = section === "MOLDING" ? "MOLDING" : (section === "LAMINATION" ? "LAMINATION" : "OTHERS");
+    const secKey = section === "MOLDING" ? "MOLDING" : (["LAMINATION", "PREFITTING", "BÀO", "TÁCH"].includes(section) ? "LAMINATION" : "OTHERS");
     return ["NONE", ...new Set(complianceDict.filter(r => r.section === secKey && r.category === cat).map(r => r.content))];
   };
 
@@ -639,7 +641,22 @@ function ApproverModeLeanline({ section }) {
                 </select>
               </div>
               <div className="flex-1">
-                <label className="font-bold text-red-700">Lỗi Tuân thủ (C)</label>
+                <label className="font-bold text-red-700 flex items-center flex-wrap gap-1">
+                  Lỗi Tuân thủ (C)
+                  {(() => {
+                    if (!tplCompliance || tplCompliance === "NONE") return null;
+                    const secKey = section === "MOLDING" ? "MOLDING" : (["LAMINATION", "PREFITTING", "BÀO", "TÁCH"].includes(section) ? "LAMINATION" : "OTHERS");
+                    const item = complianceDict.find(r => r.section === secKey && r.category === "COMPLIANCE" && r.content === tplCompliance);
+                    if (!item) return null;
+                    const isSevere = item.severity === "SEVERE";
+                    return (
+                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${isSevere ? "bg-red-50 text-red-700 border-red-200" : "bg-amber-50 text-amber-700 border-amber-200"} inline-flex items-center gap-1`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${isSevere ? "bg-red-500" : "bg-amber-500"}`}></span>
+                        {isSevere ? "Nghiêm trọng (Trừ 3đ)" : "Thường (Trừ 1đ)"}
+                      </span>
+                    );
+                  })()}
+                </label>
                 <select className="input w-full" value={tplCompliance} onChange={(e) => setTplCompliance(e.target.value)}>
                   {getComplianceOptions("COMPLIANCE").map(o => <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>)}
                 </select>
@@ -724,12 +741,26 @@ function ApproverModeLeanline({ section }) {
                           {getComplianceOptions("QUALITY").map(o => <option key={o} value={o}>{o === "NONE" ? "--" : o}</option>)}
                         </select>
                       </td>
-                      <td className="p-2">
-                        <select className="input text-center w-[140px]" value={r.compliance} onChange={e => updateRow(i, "compliance", e.target.value)}>
-                          {getComplianceOptions("COMPLIANCE").map(o => (
-                            <option key={o} value={o}>{o === "NONE" ? (section === 'LAMINATION' ? "Không vi phạm" : "--") : o}</option>
-                          ))}
-                        </select>
+                      <td className="p-2 text-center">
+                        <div className="flex flex-col gap-1 items-center">
+                          <select className="input text-center w-[140px] text-xs" value={r.compliance} onChange={e => updateRow(i, "compliance", e.target.value)}>
+                            {getComplianceOptions("COMPLIANCE").map(o => (
+                              <option key={o} value={o}>{o === "NONE" ? (section === 'LAMINATION' ? "Không vi phạm" : "--") : o}</option>
+                            ))}
+                          </select>
+                          {(() => {
+                            if (!r.compliance || r.compliance === "NONE") return null;
+                            const secKey = section === "MOLDING" ? "MOLDING" : (["LAMINATION", "PREFITTING", "BÀO", "TÁCH"].includes(section) ? "LAMINATION" : "OTHERS");
+                            const item = complianceDict.find(it => it.section === secKey && it.category === "COMPLIANCE" && it.content === r.compliance);
+                            if (!item) return null;
+                            const isSevere = item.severity === "SEVERE";
+                            return (
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${isSevere ? "bg-red-50 text-red-600 border-red-100" : "bg-amber-50 text-amber-600 border-amber-100"}`}>
+                                {isSevere ? "Nghiêm trọng (-3đ)" : "Thường (-1đ)"}
+                              </span>
+                            );
+                          })()}
+                        </div>
                       </td>
 
                       <td className="p-2 text-center text-gray-600">{r.p_score}</td>
@@ -982,7 +1013,26 @@ function ApproverModeMolding({ section }) {
               <label>Loại hàng: <select className="input" value={tplCategory} onChange={e => setTplCategory(e.target.value)}><option value="">--Chọn--</option>{categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
               <label>Sản lượng đầu ra: <input type="number" className="input" value={tplOutput} onChange={e => setTplOutput(e.target.value)} /></label>
               <label>Số đôi phế: <input type="number" step="0.5" className="input" value={tplDefects} onChange={e => setTplDefects(e.target.value)} /></label>
-              <label>Lỗi Tuân thủ (C): <select className="input" value={tplCompliance} onChange={e => setTplCompliance(e.target.value)}>{getComplianceOptions("COMPLIANCE").map(o => <option key={o} value={o}>{o === "NONE" ? "Không" : o}</option>)}</select></label>
+              <label className="flex flex-col gap-1">
+                <span className="flex items-center flex-wrap gap-1">
+                  Lỗi Tuân thủ (C):
+                  {(() => {
+                    if (!tplCompliance || tplCompliance === "NONE") return null;
+                    const item = complianceDict.find(r => r.section === "MOLDING" && r.category === "COMPLIANCE" && r.content === tplCompliance);
+                    if (!item) return null;
+                    const isSevere = item.severity === "SEVERE";
+                    return (
+                      <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${isSevere ? "bg-red-50 text-red-700 border-red-200" : "bg-amber-50 text-amber-700 border-amber-200"} inline-flex items-center gap-1`}>
+                        <span className={`w-1.5 h-1.5 rounded-full ${isSevere ? "bg-red-500" : "bg-amber-500"}`}></span>
+                        {isSevere ? "Nghiêm trọng (Trừ 3đ)" : "Thường (Trừ 1đ)"}
+                      </span>
+                    );
+                  })()}
+                </span>
+                <select className="input w-full animate-none" value={tplCompliance} onChange={e => setTplCompliance(e.target.value)}>
+                  {getComplianceOptions("COMPLIANCE").map(o => <option key={o} value={o}>{o === "NONE" ? "Không" : o}</option>)}
+                </select>
+              </label>
             </div>
             <div className="mt-4 flex justify-between items-center">
               <div className="flex flex-wrap gap-1 max-w-[70%]">{selectedWorkers.map(w => (
@@ -1021,7 +1071,24 @@ function ApproverModeMolding({ section }) {
                     <td className="p-1"><input className="input w-12 h-7 py-0" type="number" value={r.work_hours} onChange={e => updateRow(i, 'work_hours', e.target.value)} /></td>
                     <td className="p-1"><input className="input w-12 h-7 py-0" type="number" value={r.stop_hours} onChange={e => updateRow(i, 'stop_hours', e.target.value)} /></td>
                     <td className="p-1"><input className="input w-12 h-7 py-0" type="number" step="0.5" value={r.defects} onChange={e => updateRow(i, 'defects', e.target.value)} /></td>
-                    <td className="p-1"><select className="input w-32 h-7 py-0" value={r.compliance} onChange={e => updateRow(i, 'compliance', e.target.value)}>{getComplianceOptions("COMPLIANCE").map(o => <option key={o} value={o}>{o === "NONE" ? "Không" : o}</option>)}</select></td>
+                    <td className="p-1 text-center">
+                      <div className="flex flex-col gap-1 items-center">
+                        <select className="input w-32 h-7 py-0 text-xs" value={r.compliance} onChange={e => updateRow(i, 'compliance', e.target.value)}>
+                          {getComplianceOptions("COMPLIANCE").map(o => <option key={o} value={o}>{o === "NONE" ? "Không" : o}</option>)}
+                        </select>
+                        {(() => {
+                          if (!r.compliance || r.compliance === "NONE") return null;
+                          const item = complianceDict.find(it => it.section === "MOLDING" && it.category === "COMPLIANCE" && it.content === r.compliance);
+                          if (!item) return null;
+                          const isSevere = item.severity === "SEVERE";
+                          return (
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${isSevere ? "bg-red-50 text-red-600 border-red-100" : "bg-amber-50 text-amber-600 border-amber-100"}`}>
+                              {isSevere ? "Nghiêm trọng (-3đ)" : "Thường (-1đ)"}
+                            </span>
+                          );
+                        })()}
+                      </div>
+                    </td>
                     <td className="p-1 text-center">{r.p_score}</td><td className="p-1 text-center">{r.q_score}</td><td className="p-1 text-center">{r.c_score}</td><td className="p-1 font-bold text-blue-600">{r.total_score}</td>
                     <td className="p-1"><input className="input w-full h-7 py-0" value={r.approver_note} onChange={e => updateRow(i, 'approver_note', e.target.value)} /></td>
                   </tr>)

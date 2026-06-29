@@ -5,7 +5,9 @@ import { useKpiSection } from "../context/KpiSectionContext";
 import {
   scoreByQualityLeanline,
   scoreByCompliance,
-  getLeanlineCompliancePenalty
+  getLeanlineCompliancePenalty,
+  getMoldingCompliancePenalty,
+  getLaminationCompliancePenalty
 } from "../lib/scoring";
 
 /* ================= Helpers & Scoring ================= */
@@ -99,13 +101,18 @@ function deriveDayScores({ section, oe, defects, category, output, workHours, st
   let q = 0;
   let c = 0;
 
-  if (section === "LEANLINE_MOLDED") {
+  if (section === "MOLDING") {
+    q = scoreByQualityLeanline(defects);
+    const penalty = getMoldingCompliancePenalty(compliance);
+    c = scoreByCompliance(penalty);
+  } else if (section === "LEANLINE_MOLDED") {
     q = scoreByQualityLeanline(defects);
     const penalty = getLeanlineCompliancePenalty(compliance);
     c = scoreByCompliance(penalty);
   } else if (section === "LEANLINE_DEFAULT") {
     q = scoreByQualityLeanline(defects);
-    c = scoreByCompliance(compliancePairs);
+    const penalty = getLeanlineCompliancePenalty(compliance);
+    c = scoreByCompliance(penalty);
   } else if (isHybrid) {
     const d = Number(defects || 0);
     if (section === 'LAMINATION') {
@@ -113,7 +120,9 @@ function deriveDayScores({ section, oe, defects, category, output, workHours, st
     } else {
       q = (d <= 1) ? 5 : (d <= 2) ? 4 : (d <= 3) ? 3 : (d <= 4) ? 2 : (d <= 5) ? 1 : 0;
     }
-    c = scoreByCompliance(compliancePairs);
+    const count = compliance === "NONE" ? 0 : Math.max(1, Number(compliancePairs || 1));
+    const penalty = getLaminationCompliancePenalty(compliance) * count;
+    c = scoreByCompliance(penalty);
   }
 
   let p = 0;
@@ -247,7 +256,7 @@ export default function EntryPage() {
   }, [section]);
 
   const getComplianceOptions = (cat = "COMPLIANCE") => {
-    const secKey = section === "MOLDING" ? "MOLDING" : (section === "LAMINATION" ? "LAMINATION" : "OTHERS");
+    const secKey = section === "MOLDING" ? "MOLDING" : (isHybridSection(section) ? "LAMINATION" : "OTHERS");
     return ["NONE", ...new Set(complianceDict.filter(r => r.section === secKey && r.category === cat).map(r => r.content))];
   };
 
@@ -495,9 +504,26 @@ export default function EntryPage() {
           </label>
         )}
 
-        <label>Lỗi Tuân thủ:
+        <label className="flex flex-col gap-1">
+          <span className="flex items-center flex-wrap gap-1">
+            Lỗi Tuân thủ:
+            {(() => {
+              if (!form.compliance || form.compliance === "NONE") return null;
+              const secKey = section === "MOLDING" ? "MOLDING" : (isHybrid ? "LAMINATION" : "OTHERS");
+              const item = complianceDict.find(r => r.section === secKey && r.category === "COMPLIANCE" && r.content === form.compliance);
+              if (!item) return null;
+              const isSevere = item.severity === "SEVERE";
+              const text = isSevere ? "Nghiêm trọng (Trừ 3đ)" : "Thường (Trừ 1đ)";
+              return (
+                <span className={`ml-2 px-2 py-0.5 text-[10px] font-bold rounded-full border ${isSevere ? "bg-red-50 text-red-700 border-red-200" : "bg-amber-50 text-amber-700 border-amber-200"} inline-flex items-center gap-1`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${isSevere ? "bg-red-500" : "bg-amber-500"}`}></span>
+                  {text}
+                </span>
+              );
+            })()}
+          </span>
           <select
-            className="input"
+            className="input animate-none"
             value={form.compliance}
             onChange={(e) => handleChange("compliance", e.target.value)}
           >

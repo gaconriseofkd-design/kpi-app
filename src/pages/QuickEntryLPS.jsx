@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { supabase } from "../lib/supabaseClient";
+import { scoreByCompliance, getLaminationCompliancePenalty } from "../lib/scoring";
 
 /* ================= Scoring & Helpers ================= */
 const MACHINE_MAP = {
@@ -60,8 +61,9 @@ function scoreByQualityLamination(type, defects) {
 // Helper mới cho LAMINATION (Tuân thủ)
 function scoreByComplianceLamination(type, count) {
   if (!type || type === 'NONE') return 3;
-  const c = Number(count || 0);
-  return Math.max(0, 3 - c);
+  const multiplier = getLaminationCompliancePenalty(type);
+  const c = Math.max(1, Number(count || 1));
+  return scoreByCompliance(multiplier * c);
 }
 
 function scoreByProductivityHybrid(prodRate, category, allRules) {
@@ -148,7 +150,7 @@ export default function ApproverModeHybrid({ section }) {
   }, []);
 
   const getComplianceOptions = (cat = "COMPLIANCE") => {
-    const secKey = section === "MOLDING" ? "MOLDING" : (section === "LAMINATION" ? "LAMINATION" : "OTHERS");
+    const secKey = section === "MOLDING" ? "MOLDING" : (["LAMINATION", "PREFITTING", "BÀO", "TÁCH"].includes(section) ? "LAMINATION" : "OTHERS");
     return ["NONE", ...new Set(complianceDict.filter(r => r.section === secKey && r.category === cat).map(r => r.content))];
   };
 
@@ -637,8 +639,23 @@ export default function ApproverModeHybrid({ section }) {
                 {/* KHỐI TUÂN THỦ CHO LAMINATION */}
                 <div className="md:col-span-2">
                   <div>
-                    <label className="text-sm font-bold block mb-1">Tuân thủ</label>
-                    <select className="input input-bordered w-full" value={tplCompliance} onChange={e => setTplCompliance(e.target.value)}>
+                    <label className="text-sm font-bold flex items-center flex-wrap gap-1 mb-1">
+                      Tuân thủ
+                      {(() => {
+                        if (!tplCompliance || tplCompliance === "NONE") return null;
+                        const secKey = section === "MOLDING" ? "MOLDING" : (["LAMINATION", "PREFITTING", "BÀO", "TÁCH"].includes(section) ? "LAMINATION" : "OTHERS");
+                        const item = complianceDict.find(r => r.section === secKey && r.category === "COMPLIANCE" && r.content === tplCompliance);
+                        if (!item) return null;
+                        const isSevere = item.severity === "SEVERE";
+                        return (
+                          <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${isSevere ? "bg-red-50 text-red-700 border-red-200" : "bg-amber-50 text-amber-700 border-amber-200"} inline-flex items-center gap-1`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${isSevere ? "bg-red-500" : "bg-amber-500"}`}></span>
+                            {isSevere ? "Nghiêm trọng (Trừ 3đ)" : "Thường (Trừ 1đ)"}
+                          </span>
+                        );
+                      })()}
+                    </label>
+                    <select className="input input-bordered w-full animate-none" value={tplCompliance} onChange={e => setTplCompliance(e.target.value)}>
                       {getComplianceOptions("COMPLIANCE").map(o => (
                         <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>
                       ))}
@@ -656,8 +673,23 @@ export default function ApproverModeHybrid({ section }) {
               <>
                 <div><label>Lỗi/Phế</label><input type="number" step="1" className="input" value={tplDefects} onChange={(e) => setTplDefects(e.target.value)} /></div>
                 <div>
-                  <label>Tuân thủ</label>
-                  <select className="input input-bordered w-full" value={tplCompliance} onChange={e => setTplCompliance(e.target.value)}>
+                  <label className="flex items-center flex-wrap gap-1">
+                    Tuân thủ
+                    {(() => {
+                      if (!tplCompliance || tplCompliance === "NONE") return null;
+                      const secKey = section === "MOLDING" ? "MOLDING" : (["LAMINATION", "PREFITTING", "BÀO", "TÁCH"].includes(section) ? "LAMINATION" : "OTHERS");
+                      const item = complianceDict.find(r => r.section === secKey && r.category === "COMPLIANCE" && r.content === tplCompliance);
+                      if (!item) return null;
+                      const isSevere = item.severity === "SEVERE";
+                      return (
+                        <span className={`px-2 py-0.5 text-[10px] font-bold rounded-full border ${isSevere ? "bg-red-50 text-red-700 border-red-200" : "bg-amber-50 text-amber-700 border-amber-200"} inline-flex items-center gap-1`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${isSevere ? "bg-red-500" : "bg-amber-500"}`}></span>
+                          {isSevere ? "Nghiêm trọng (Trừ 3đ)" : "Thường (Trừ 1đ)"}
+                        </span>
+                      );
+                    })()}
+                  </label>
+                  <select className="input input-bordered w-full animate-none" value={tplCompliance} onChange={e => setTplCompliance(e.target.value)}>
                     {getComplianceOptions("COMPLIANCE").map(o => (
                       <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>
                     ))}
@@ -778,12 +810,26 @@ export default function ApproverModeHybrid({ section }) {
                       <td className="p-2 font-semibold text-orange-600">{r.c_score}</td>
                       <td className="p-2 font-bold text-lg text-blue-700">{r.total_score}</td>
 
-                      <td className="p-2">
-                        <select className="input text-center w-[140px]" value={r.compliance} onChange={e => updateRow(idx, "compliance", e.target.value)}>
-                          {getComplianceOptions("COMPLIANCE").map(o => (
-                            <option key={o} value={o}>{o === "NONE" ? (section === 'LAMINATION' ? "Không vi phạm" : "--") : o}</option>
-                          ))}
-                        </select>
+                      <td className="p-2 text-center">
+                        <div className="flex flex-col gap-1 items-center animate-none">
+                          <select className="input text-center w-[140px] text-xs" value={r.compliance} onChange={e => updateRow(idx, "compliance", e.target.value)}>
+                            {getComplianceOptions("COMPLIANCE").map(o => (
+                              <option key={o} value={o}>{o === "NONE" ? (section === 'LAMINATION' ? "Không vi phạm" : "--") : o}</option>
+                            ))}
+                          </select>
+                          {(() => {
+                            if (!r.compliance || r.compliance === "NONE") return null;
+                            const secKey = section === "MOLDING" ? "MOLDING" : (["LAMINATION", "PREFITTING", "BÀO", "TÁCH"].includes(section) ? "LAMINATION" : "OTHERS");
+                            const item = complianceDict.find(it => it.section === secKey && it.category === "COMPLIANCE" && it.content === r.compliance);
+                            if (!item) return null;
+                            const isSevere = item.severity === "SEVERE";
+                            return (
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border ${isSevere ? "bg-red-50 text-red-600 border-red-100" : "bg-amber-50 text-amber-600 border-amber-100"}`}>
+                                {isSevere ? "Nghiêm trọng (-3đ)" : "Thường (-1đ)"}
+                              </span>
+                            );
+                          })()}
+                        </div>
                       </td>
 
                       {/* Cột Số lần vi phạm */}
