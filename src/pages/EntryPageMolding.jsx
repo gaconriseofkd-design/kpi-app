@@ -31,11 +31,7 @@ function calcWorkingReal(shift, inputHours) {
   return base + adj;
 }
 
-const MOLDING_COMPLIANCE_OPTIONS = [
-  "NONE",
-  "Không kiểm soát nhiệt độ theo quy định",
-  "Lỗi Tuân thủ khác"
-];
+// MOLDING_COMPLIANCE_OPTIONS dynamically fetched from database
 
 export default function EntryPageMolding() {
   const { section } = useKpiSection(); // sẽ là "MOLDING"
@@ -63,6 +59,21 @@ export default function EntryPageMolding() {
   const [defects, setDefects] = useState(0);
   const [output, setOutput] = useState(0);           // sản lượng/ca
   const [complianceCode, setComplianceCode] = useState("NONE"); // NONE/...
+  const [complianceDict, setComplianceDict] = useState([]);
+
+  useEffect(() => {
+    supabase.from("kpi_compliance_dictionary")
+      .select("*")
+      .eq("section", "MOLDING")
+      .eq("category", "COMPLIANCE")
+      .then(({ data }) => {
+        if (data) setComplianceDict(data);
+      });
+  }, []);
+
+  const getComplianceOptions = () => {
+    return ["NONE", ...new Set(complianceDict.map(r => r.content))];
+  };
 
   // Kết quả tính
   const workingReal = useMemo(() => calcWorkingReal(shift, inputHours), [shift, inputHours]);
@@ -279,9 +290,23 @@ export default function EntryPageMolding() {
           />
         </div>
         <div>
-          <label>Tuân thủ</label>
-          <select className="input" value={complianceCode} onChange={e => setComplianceCode(e.target.value)}>
-            {MOLDING_COMPLIANCE_OPTIONS.map(o => <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>)}
+          <label className="flex items-center flex-wrap gap-1">
+            Tuân thủ
+            {(() => {
+              if (!complianceCode || complianceCode === "NONE") return null;
+              const item = complianceDict.find(r => r.content === complianceCode);
+              if (!item) return null;
+              const isSevere = item.severity === "SEVERE";
+              return (
+                <span className={`ml-2 px-2 py-0.5 text-[10px] font-bold rounded-full border ${isSevere ? "bg-red-50 text-red-700 border-red-200" : "bg-amber-50 text-amber-700 border-amber-200"} inline-flex items-center gap-1`}>
+                  <span className={`w-1.5 h-1.5 rounded-full ${isSevere ? "bg-red-500" : "bg-amber-500"}`}></span>
+                  {isSevere ? "Nghiêm trọng (Trừ 3đ)" : "Thường (Trừ 1đ)"}
+                </span>
+              );
+            })()}
+          </label>
+          <select className="input animate-none" value={complianceCode} onChange={e => setComplianceCode(e.target.value)}>
+            {getComplianceOptions().map(o => <option key={o} value={o}>{o === "NONE" ? "Không vi phạm" : o}</option>)}
           </select>
         </div>
       </div>
