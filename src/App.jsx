@@ -68,9 +68,7 @@ function Shell() {
           { to: "/report-admin", label: "Report Admin" },
           { to: "/admin", label: "Quản lý User" },
           { to: "/rules", label: "Rules điểm SX" },
-          { to: "/mqaa-entry", label: "MQAA Nhập liệu" },
           { to: "/mqaa-patrol", label: "MQAA Patrol" },
-          { to: "/mqaa-dashboard", label: "MQAA Dashboard" },
           { to: "/help", label: "Hướng dẫn" },
         ].map((item) => (
           <NavLink
