@@ -393,7 +393,18 @@ function RulesContent() {
     ];
 
     setSaving(true);
-    const { error } = await supabase.from("kpi_compliance_dictionary").upsert(defaults, { onConflict: 'section,category,content' });
+    // Xóa toàn bộ dữ liệu cũ để tránh trùng lặp hoặc giữ lại lỗi cũ không cần thiết
+    const { error: delError } = await supabase
+      .from("kpi_compliance_dictionary")
+      .delete()
+      .neq("content", "");
+
+    if (delError) {
+      setSaving(false);
+      return alert("Lỗi khi xoá dữ liệu cũ: " + delError.message);
+    }
+
+    const { error } = await supabase.from("kpi_compliance_dictionary").insert(defaults);
     setSaving(false);
 
     if (error) alert("Đồng bộ lỗi: " + error.message);
