@@ -330,6 +330,88 @@ function RulesContent() {
     XLSX.writeFile(workbook, fileName);
   }
 
+  // 🔄 Đồng bộ dữ liệu gốc lên database
+  async function handleSeed() {
+    const pass = prompt("Nhập mật khẩu hệ thống:");
+    if (pass !== "davidtu") return;
+
+    const defaults = [
+      // 1. LAMINATION
+      { section: "LAMINATION", category: "COMPLIANCE", severity: "SEVERE", content: "Rework (Fail test Dry) (Rớt hạng mục test Khô)" },
+      { section: "LAMINATION", category: "COMPLIANCE", severity: "SEVERE", content: "Saw cutting not according to the required specifications. (Cắt không theo điều kiện tiêu chuẩn)" },
+      { section: "LAMINATION", category: "COMPLIANCE", severity: "SEVERE", content: "Safety violations (Vi phạm an toàn)" },
+      { section: "LAMINATION", category: "COMPLIANCE", severity: "SEVERE", content: "Production process violations (Vi phạm quy trình sản xuất)" },
+      { section: "LAMINATION", category: "COMPLIANCE", severity: "SEVERE", content: "Asset/material management violations (Vi phạm quản lý tài sản/nguyên vật liệu)" },
+      { section: "LAMINATION", category: "COMPLIANCE", severity: "NORMAL", content: "Violations of MQAA (Vi phạm tuân thủ MQAA)" },
+      { section: "LAMINATION", category: "COMPLIANCE", severity: "NORMAL", content: "Attendance violations (Vi phạm chuyên cần)" },
+      { section: "LAMINATION", category: "COMPLIANCE", severity: "NORMAL", content: "Uniform violations (Vi phạm đồng phục)" },
+      { section: "LAMINATION", category: "COMPLIANCE", severity: "NORMAL", content: "5S violations (Vi phạm 5S nhà xưởng)" },
+      { section: "LAMINATION", category: "COMPLIANCE", severity: "NORMAL", content: "Unauthorized use of mobile phone (Vi phạm sử dụng điện thoại mà không được cấp phép)" },
+      { section: "LAMINATION", category: "COMPLIANCE", severity: "NORMAL", content: "Failure to follow company regulations (Vi phạm nội quy lao động)" },
+
+      // 2. MOLDING
+      { section: "MOLDING", category: "COMPLIANCE", severity: "SEVERE", content: "Failure to control temperature as required (Vi phạm kiểm soát nhiệt độ theo quy định)" },
+      { section: "MOLDING", category: "COMPLIANCE", severity: "SEVERE", content: "Safety violations (Vi phạm an toàn)" },
+      { section: "MOLDING", category: "COMPLIANCE", severity: "SEVERE", content: "Production process violations (Vi phạm quy trình sản xuất)" },
+      { section: "MOLDING", category: "COMPLIANCE", severity: "SEVERE", content: "Asset/material management violations (Vi phạm quản lý tài sản/nguyên vật liệu)" },
+      { section: "MOLDING", category: "COMPLIANCE", severity: "NORMAL", content: "Violations of MQAA (Vi phạm tuân thủ MQAA)" },
+      { section: "MOLDING", category: "COMPLIANCE", severity: "NORMAL", content: "Attendance violations (Vi phạm chuyên cần)" },
+      { section: "MOLDING", category: "COMPLIANCE", severity: "NORMAL", content: "Uniform violations (Vi phạm đồng phục)" },
+      { section: "MOLDING", category: "COMPLIANCE", severity: "NORMAL", content: "5S violations (Vi phạm 5S nhà xưởng)" },
+      { section: "MOLDING", category: "COMPLIANCE", severity: "NORMAL", content: "Unauthorized use of mobile phone (Vi phạm sử dụng điện thoại mà không được cấp phép)" },
+      { section: "MOLDING", category: "COMPLIANCE", severity: "NORMAL", content: "Failure to follow company regulations (Vi phạm nội quy lao động)" },
+
+      // 3. OTHERS (LEANLINE...)
+      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "No first sample of the production line (Không có mẫu đầu chuyền)" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "No checklist performed before work (Không có checklist tại nơi làm việc)" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "No metal detection checklist performed (Không thực hiện checklist dò kim loại)" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "No metal detector stamp (Không có mộc dò kim loại)" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Cutting last without information (Dao chặt không có thông tin)" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Failure to comply with/measure logo machine temperature standards (Không tuân thủ đo nhiệt độ máy in logo theo tiêu chuẩn)" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Safety violations (Vi phạm an toàn)" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Production process violations (Vi phạm quy trình sản xuất)" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Asset/material management violations (Vi phạm quản lý tài sản/nguyên vật liệu)" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Violations of MQAA (Vi phạm tuân thủ MQAA)" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Attendance violations (Vi phạm chuyên cần)" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Uniform violations (Vi phạm đồng phục)" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "5S violations (Vi phạm 5S nhà xưởng)" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Unauthorized use of mobile phone (Vi phạm sử dụng điện thoại mà không được cấp phép)" },
+      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Failure to follow company regulations (Vi phạm nội quy lao động)" },
+
+      // CHẤT LƯỢNG (Q)
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Đóng gói sai thiếu (theo đôi)" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Đóng dư, ghi số thiếu sai/ không ghi số thiếu" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Dán nhầm tem size run" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Không in logo" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Chặt sai dao" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "In sai logo/ in sai phân đoạn" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Chặt in đóng gói sai yêu cầu đối với chỉ lệnh" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Lỗi in khác" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Lỗi đóng gói khác" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Phàn nàn khách hàng" },
+      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Lỗi Phế" }
+    ];
+
+    setSaving(true);
+    const { error } = await supabase.from("kpi_compliance_dictionary").upsert(defaults, { onConflict: 'section,category,content' });
+    setSaving(false);
+
+    if (error) alert("Đồng bộ lỗi: " + error.message);
+    else {
+      alert("✅ Đã đồng bộ dữ liệu gốc lên hệ thống!");
+      loadCompliance();
+    }
+  }
+
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "QC_Rules");
+
+    // Tải file về
+    XLSX.writeFile(workbook, fileName);
+  }
+
   // 📥 Tải template Excel
   function handleDownloadTemplate() {
     const currentSection = section.toUpperCase();
@@ -570,6 +652,12 @@ function RulesContent() {
                 🔄 Làm mới
               </button>
               <button
+                onClick={handleSeed}
+                className="btn btn-sm bg-indigo-600 hover:bg-indigo-700 text-white flex items-center gap-1"
+              >
+                🔄 Đồng bộ dữ liệu gốc
+              </button>
+              <button
                 onClick={handleExportComplianceExcel}
                 className="btn btn-sm bg-teal-600 hover:bg-teal-700 text-white flex items-center gap-1"
               >
@@ -646,74 +734,7 @@ function QualityRulesInfo({ section, isSingle = true, complianceDict = [], onRef
     }
   };
 
-  const handleSeed = async () => {
-    const pass = prompt("Nhập mật khẩu hệ thống:");
-    if (pass !== "davidtu") return;
-
-    const defaults = [
-      // 1. LAMINATION
-      { section: "LAMINATION", category: "COMPLIANCE", severity: "SEVERE", content: "Rework (Fail test Dry) (Rớt hạng mục test Khô)" },
-      { section: "LAMINATION", category: "COMPLIANCE", severity: "SEVERE", content: "Saw cutting not according to the required specifications. (Cắt không theo điều kiện tiêu chuẩn)" },
-      { section: "LAMINATION", category: "COMPLIANCE", severity: "SEVERE", content: "Safety violations (Vi phạm an toàn)" },
-      { section: "LAMINATION", category: "COMPLIANCE", severity: "SEVERE", content: "Production process violations (Vi phạm quy trình sản xuất)" },
-      { section: "LAMINATION", category: "COMPLIANCE", severity: "SEVERE", content: "Asset/material management violations (Vi phạm quản lý tài sản/nguyên vật liệu)" },
-      { section: "LAMINATION", category: "COMPLIANCE", severity: "NORMAL", content: "Violations of MQAA (Vi phạm tuân thủ MQAA)" },
-      { section: "LAMINATION", category: "COMPLIANCE", severity: "NORMAL", content: "Attendance violations (Vi phạm chuyên cần)" },
-      { section: "LAMINATION", category: "COMPLIANCE", severity: "NORMAL", content: "Uniform violations (Vi phạm đồng phục)" },
-      { section: "LAMINATION", category: "COMPLIANCE", severity: "NORMAL", content: "5S violations (Vi phạm 5S nhà xưởng)" },
-      { section: "LAMINATION", category: "COMPLIANCE", severity: "NORMAL", content: "Unauthorized use of mobile phone (Vi phạm sử dụng điện thoại mà không được cấp phép)" },
-      { section: "LAMINATION", category: "COMPLIANCE", severity: "NORMAL", content: "Failure to follow company regulations (Vi phạm nội quy lao động)" },
-
-      // 2. MOLDING
-      { section: "MOLDING", category: "COMPLIANCE", severity: "SEVERE", content: "Failure to control temperature as required (Vi phạm kiểm soát nhiệt độ theo quy định)" },
-      { section: "MOLDING", category: "COMPLIANCE", severity: "SEVERE", content: "Safety violations (Vi phạm an toàn)" },
-      { section: "MOLDING", category: "COMPLIANCE", severity: "SEVERE", content: "Production process violations (Vi phạm quy trình sản xuất)" },
-      { section: "MOLDING", category: "COMPLIANCE", severity: "SEVERE", content: "Asset/material management violations (Vi phạm quản lý tài sản/nguyên vật liệu)" },
-      { section: "MOLDING", category: "COMPLIANCE", severity: "NORMAL", content: "Violations of MQAA (Vi phạm tuân thủ MQAA)" },
-      { section: "MOLDING", category: "COMPLIANCE", severity: "NORMAL", content: "Attendance violations (Vi phạm chuyên cần)" },
-      { section: "MOLDING", category: "COMPLIANCE", severity: "NORMAL", content: "Uniform violations (Vi phạm đồng phục)" },
-      { section: "MOLDING", category: "COMPLIANCE", severity: "NORMAL", content: "5S violations (Vi phạm 5S nhà xưởng)" },
-      { section: "MOLDING", category: "COMPLIANCE", severity: "NORMAL", content: "Unauthorized use of mobile phone (Vi phạm sử dụng điện thoại mà không được cấp phép)" },
-      { section: "MOLDING", category: "COMPLIANCE", severity: "NORMAL", content: "Failure to follow company regulations (Vi phạm nội quy lao động)" },
-
-      // 3. OTHERS (LEANLINE...)
-      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "No first sample of the production line (Không có mẫu đầu chuyền)" },
-      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "No checklist performed before work (Không có checklist tại nơi làm việc)" },
-      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "No metal detection checklist performed (Không thực hiện checklist dò kim loại)" },
-      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "No metal detector stamp (Không có mộc dò kim loại)" },
-      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Cutting last without information (Dao chặt không có thông tin)" },
-      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Failure to comply with/measure logo machine temperature standards (Không tuân thủ đo nhiệt độ máy in logo theo tiêu chuẩn)" },
-      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Safety violations (Vi phạm an toàn)" },
-      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Production process violations (Vi phạm quy trình sản xuất)" },
-      { section: "OTHERS", category: "COMPLIANCE", severity: "SEVERE", content: "Asset/material management violations (Vi phạm quản lý tài sản/nguyên vật liệu)" },
-      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Violations of MQAA (Vi phạm tuân thủ MQAA)" },
-      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Attendance violations (Vi phạm chuyên cần)" },
-      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Uniform violations (Vi phạm đồng phục)" },
-      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "5S violations (Vi phạm 5S nhà xưởng)" },
-      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Unauthorized use of mobile phone (Vi phạm sử dụng điện thoại mà không được cấp phép)" },
-      { section: "OTHERS", category: "COMPLIANCE", severity: "NORMAL", content: "Failure to follow company regulations (Vi phạm nội quy lao động)" },
-
-      // CHẤT LƯỢNG (Q)
-      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Đóng gói sai thiếu (theo đôi)" },
-      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Đóng dư, ghi số thiếu sai/ không ghi số thiếu" },
-      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Dán nhầm tem size run" },
-      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Không in logo" },
-      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Chặt sai dao" },
-      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "In sai logo/ in sai phân đoạn" },
-      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Chặt in đóng gói sai yêu cầu đối với chỉ lệnh" },
-      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Lỗi in khác" },
-      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Lỗi đóng gói khác" },
-      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Phàn nàn khách hàng" },
-      { section: "OTHERS", category: "QUALITY", severity: "NORMAL", content: "Lỗi Phế" }
-    ];
-
-    const { error } = await supabase.from("kpi_compliance_dictionary").upsert(defaults, { onConflict: 'section,category,content' });
-    if (error) alert(error.message);
-    else {
-      alert("Đã đồng bộ dữ liệu gốc lên hệ thống!");
-      onRefresh?.();
-    }
-  };
+  // (Đã chuyển handleSeed lên component cha RulesPage)
 
   const getComplianceOptions = (cat = "COMPLIANCE") => {
     const secKey = getSecKey(s);
