@@ -404,14 +404,6 @@ function RulesContent() {
   }
 
 
-    const worksheet = XLSX.utils.json_to_sheet(exportData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "QC_Rules");
-
-    // Tải file về
-    XLSX.writeFile(workbook, fileName);
-  }
-
   // 📥 Tải template Excel
   function handleDownloadTemplate() {
     const currentSection = section.toUpperCase();
