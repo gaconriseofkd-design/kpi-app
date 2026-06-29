@@ -98,11 +98,14 @@ export default function MQAAPatrolEntry() {
                     // Merge record data with current criteria
                     const mergedRows = record.evaluation_data.map(r => {
                         const original = formattedCriteria.find(c => c.no === r.no);
+                        // Hỗ trợ cả image_urls mới (dạng mảng) và image_url cũ (dạng string)
+                        const urls = Array.isArray(r.image_urls) ? r.image_urls : (r.image_url ? [r.image_url] : []);
+                        const images = urls.map(url => ({ file: null, url }));
                         return {
                             ...r,
                             isHeader: original?.isHeader ?? r.is_header,
                             subLabel: original?.subLabel || (original?.sub_label) || "",
-                            imageUrl: r.image_url,
+                            images: images,
                         };
                     });
                     // Sort mergedRows by no according to criteria order if possible, or just keep as is
@@ -113,8 +116,7 @@ export default function MQAAPatrolEntry() {
                         ...item,
                         score: item.isHeader ? 0 : (item.maxScore || 6),
                         level: item.isHeader ? 0 : (item.maxScore || 6),
-                        imageFile: null,
-                        imageUrl: "",
+                        images: [],
                         description: "",
                     })));
                 }
@@ -149,13 +151,33 @@ export default function MQAAPatrolEntry() {
     };
 
     const handleImageChange = (index, e) => {
-        const file = e.target.files[0];
-        if (file) {
+        const files = Array.from(e.target.files);
+        if (files.length > 0) {
             const newRows = [...rows];
-            newRows[index].imageFile = file;
-            newRows[index].imageUrl = URL.createObjectURL(file);
+            const currentImages = newRows[index].images || [];
+
+            if (currentImages.length + files.length > 5) {
+                alert("Tối đa chỉ được upload 5 ảnh cho mỗi hạng mục.");
+                return;
+            }
+
+            const newImagesAdded = files.map(file => ({
+                file,
+                url: URL.createObjectURL(file)
+            }));
+
+            newRows[index].images = [...currentImages, ...newImagesAdded];
             setRows(newRows);
         }
+        e.target.value = ""; // Reset input value
+    };
+
+    const handleRemoveImage = (rowIndex, imageIndex) => {
+        const newRows = [...rows];
+        const currentImages = [...(newRows[rowIndex].images || [])];
+        currentImages.splice(imageIndex, 1);
+        newRows[rowIndex].images = currentImages;
+        setRows(newRows);
     };
 
     const compressImage = (file) => {
@@ -220,20 +242,31 @@ export default function MQAAPatrolEntry() {
             // Upload images
             for (let i = 0; i < rowsWithRemoteUrls.length; i++) {
                 const row = rowsWithRemoteUrls[i];
-                if (row.imageFile && !row.isHeader) {
-                    const compressed = await compressImage(row.imageFile);
-                    const fileName = `mqaa_patrol/${Date.now()}_${i}_${section}.jpg`;
-                    const { data, error } = await supabase.storage
-                        .from("mqaa-images")
-                        .upload(fileName, compressed);
+                if (!row.isHeader && row.images && row.images.length > 0) {
+                    const finalUrls = [];
+                    for (let j = 0; j < row.images.length; j++) {
+                        const imgObj = row.images[j];
+                        if (imgObj.file) {
+                            const compressed = await compressImage(imgObj.file);
+                            const fileName = `mqaa_patrol/${Date.now()}_${i}_${j}_${section}.jpg`;
+                            const { data, error } = await supabase.storage
+                                .from("mqaa-images")
+                                .upload(fileName, compressed);
 
-                    if (error) throw error;
+                            if (error) throw error;
 
-                    const { data: { publicUrl } } = supabase.storage
-                        .from("mqaa-images")
-                        .getPublicUrl(fileName);
+                            const { data: { publicUrl } } = supabase.storage
+                                .from("mqaa-images")
+                                .getPublicUrl(fileName);
 
-                    rowsWithRemoteUrls[i].imageUrl = publicUrl;
+                            finalUrls.push(publicUrl);
+                        } else {
+                            finalUrls.push(imgObj.url);
+                        }
+                    }
+                    rowsWithRemoteUrls[i].imageUrls = finalUrls;
+                } else {
+                    rowsWithRemoteUrls[i].imageUrls = [];
                 }
             }
 
@@ -253,7 +286,8 @@ export default function MQAAPatrolEntry() {
                     is_header: r.isHeader,
                     score: r.score,
                     level: r.level,
-                    image_url: r.imageUrl,
+                    image_url: r.imageUrls && r.imageUrls.length > 0 ? r.imageUrls[0] : "",
+                    image_urls: r.imageUrls || [],
                     description: r.description
                 })),
             };
@@ -406,15 +440,27 @@ export default function MQAAPatrolEntry() {
                                 <td className={`border p-2 text-center ${row.isHeader ? 'bg-orange-400' : ''}`}>
                                     {!row.isHeader && (
                                         <div className="flex flex-col items-center gap-2">
-                                            <label className="cursor-pointer bg-white border px-2 py-1 rounded text-xs hover:bg-gray-50 flex items-center gap-1 shadow-sm font-semibold">
-                                                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M16 5l-4-4-4 4M12 1v13" /></svg>
-                                                Upload
-                                                <input type="file" className="hidden" accept="image/*" onChange={(e) => handleImageChange(idx, e)} />
-                                            </label>
-                                            {row.imageUrl && (
-                                                <div className="relative w-16 h-16 border rounded shadow-inner overflow-hidden">
-                                                    <img src={row.imageUrl} className="w-full h-full object-cover" alt="ref" />
-                                                    <button onClick={() => handleRowChange(idx, "imageUrl", "")} className="absolute top-0 right-0 bg-red-500 text-white w-4 h-4 flex items-center justify-center text-[10px] rounded-bl">x</button>
+                                            {(!row.images || row.images.length < 5) && (
+                                                <label className="cursor-pointer bg-white border px-2 py-1 rounded text-xs hover:bg-gray-50 flex items-center gap-1 shadow-sm font-semibold">
+                                                    <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a2 2 0 002 2h12a2 2 0 002-2v-1M16 5l-4-4-4 4M12 1v13" /></svg>
+                                                    Upload ({row.images ? row.images.length : 0}/5)
+                                                    <input type="file" className="hidden" accept="image/*" multiple onChange={(e) => handleImageChange(idx, e)} />
+                                                </label>
+                                            )}
+                                            {row.images && row.images.length > 0 && (
+                                                <div className="grid grid-cols-2 gap-1 mt-1 max-w-[120px]">
+                                                    {row.images.map((img, imgIdx) => (
+                                                        <div key={imgIdx} className="relative w-12 h-12 border rounded shadow-inner overflow-hidden group">
+                                                            <img src={img.url} className="w-full h-full object-cover" alt="ref" />
+                                                            <button 
+                                                                onClick={() => handleRemoveImage(idx, imgIdx)} 
+                                                                className="absolute top-0 right-0 bg-red-500 text-white w-4 h-4 flex items-center justify-center text-[10px] rounded-bl"
+                                                                title="Xoá ảnh"
+                                                            >
+                                                                ×
+                                                            </button>
+                                                        </div>
+                                                    ))}
                                                 </div>
                                             )}
                                         </div>
