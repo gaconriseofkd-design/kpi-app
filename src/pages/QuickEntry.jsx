@@ -238,6 +238,8 @@ function ApproverModeLeanline({ section }) {
   const [tplQualityCode, setTplQualityCode] = useState("NONE");
   const [tplCompliance, setTplCompliance] = useState("NONE");
   const [complianceDict, setComplianceDict] = useState([]);
+  const [tplCategory, setTplCategory] = useState("CHẶT ĐÔI MOLDED");
+  const [tplOutput, setTplOutput] = useState(0);
 
   // Fetch Compliance Options
   useEffect(() => {
@@ -288,6 +290,9 @@ function ApproverModeLeanline({ section }) {
   }, [searchResults, lineFilter]);
 
   const calculateScores = (oe, defects, rules, sec, line, compl) => {
+    if (sec === "LEANLINE_TRAINING") {
+      return { qScore: 0, pScore: 0, cScore: 0, day_score: 0, rawTotal: 0 };
+    }
     return calculateScoresLeanlineQuick(oe, defects, rules, sec, line, compl);
   };
 
@@ -377,7 +382,7 @@ function ApproverModeLeanline({ section }) {
 
   // 3. LOGIC CHUYỂN BƯỚC: Gán Line từ Filter
   function proceedToTemplate() {
-    const requiredRulesLoaded = section === "LEANLINE_MOLDED" || prodRules.length > 0;
+    const requiredRulesLoaded = section === "LEANLINE_MOLDED" || section === "LEANLINE_TRAINING" || prodRules.length > 0;
     if (!requiredRulesLoaded) return alert("Không thể tải Rule tính điểm sản lượng.");
     if (!selectedWorkers.length) return alert("Chưa chọn nhân viên nào.");
 
@@ -394,14 +399,18 @@ function ApproverModeLeanline({ section }) {
     if (tplDate > today) return alert("Không thể chọn ngày trong tương lai.");
     if (!selectedWorkers.length) return alert("Chưa chọn nhân viên.");
 
+    const isTraining = section === "LEANLINE_TRAINING";
     const rows = selectedWorkers.map((w) => {
-      const scores = calculateScores(tplOE, tplDefects, prodRules, section, tplLine, tplCompliance);
+      const scores = calculateScores(isTraining ? 0 : tplOE, tplDefects, prodRules, section, tplLine, tplCompliance);
       return {
         section, work_date: tplDate, shift: tplShift, msnv: w.msnv, hoten: w.full_name,
         approver_id: w.approver_msnv || approverIdInput, approver_name: w.approver_name,
-        line: tplLine,
+        line: isTraining ? "Leanline Training" : tplLine,
         work_hours: toNum(tplWorkHours), downtime: toNum(tplStopHours),
-        oe: toNum(tplOE), defects: toNum(tplDefects),
+        oe: isTraining ? 0 : toNum(tplOE),
+        output: isTraining ? toNum(tplOutput) : 0,
+        category: isTraining ? tplCategory : "",
+        defects: toNum(tplDefects),
         quality_code: tplQualityCode,
         compliance: tplCompliance,
         q_score: scores.qScore, p_score: scores.pScore, c_score: scores.cScore,
@@ -422,7 +431,7 @@ function ApproverModeLeanline({ section }) {
       const arr = [...old];
       const r0 = arr[i] || {};
       let r = { ...r0 };
-      if (["compliance", "quality_code", "line", "shift", "work_date", "approver_note"].includes(key)) {
+      if (["compliance", "quality_code", "line", "shift", "work_date", "approver_note", "category"].includes(key)) {
         r[key] = val;
       } else {
         r[key] = toNum(val, 0);
@@ -451,9 +460,10 @@ function ApproverModeLeanline({ section }) {
     const list = idxs.map((i) => reviewRows[i]);
     const now = new Date().toISOString();
 
+    const isTraining = section === "LEANLINE_TRAINING";
     const payload = list.map((r) => {
       const rawScores = calculateScores(r.oe, r.defects, prodRules, section, r.line, r.compliance);
-      const overflow = Math.max(0, rawScores.rawTotal - 15);
+      const overflow = isTraining ? 0 : Math.max(0, rawScores.rawTotal - 15);
       return {
         date: r.work_date,
         ca: r.shift,
@@ -464,7 +474,9 @@ function ApproverModeLeanline({ section }) {
         line: r.line,
         work_hours: r.work_hours,
         stop_hours: r.downtime,
-        oe: r.oe,
+        oe: isTraining ? 0 : r.oe,
+        output: isTraining ? r.output : 0,
+        category: isTraining ? r.category : null,
         defects: r.defects,
         quality_code: r.quality_code || null,
         compliance_code: r.compliance,
@@ -630,7 +642,26 @@ function ApproverModeLeanline({ section }) {
             <div><label>Máy làm việc</label><select className="input" value={tplLine} onChange={(e) => setTplLine(e.target.value)}>{currentMachines.map(m => (<option key={m} value={m}>{m}</option>))}</select></div>
             <div><label>Giờ làm việc</label><input type="number" step="0.1" className="input" value={tplWorkHours} onChange={(e) => setTplWorkHours(e.target.value)} /></div>
             <div><label>Giờ dừng máy</label><input type="number" step="0.1" className="input" value={tplStopHours} onChange={(e) => setTplStopHours(e.target.value)} /></div>
-            <div><label>%OE</label><input type="number" step="1" className="input" value={tplOE} onChange={(e) => setTplOE(e.target.value)} /></div>
+            {section === "LEANLINE_TRAINING" ? (
+              <>
+                <div>
+                  <label>Công đoạn học việc</label>
+                  <select className="input" value={tplCategory} onChange={(e) => setTplCategory(e.target.value)}>
+                    <option value="CHẶT ĐÔI MOLDED">CHẶT ĐÔI MOLDED</option>
+                    <option value="CHẶT ĐÔI DC">CHẶT ĐÔI DC</option>
+                    <option value="IN LOGO MOLDED">IN LOGO MOLDED</option>
+                    <option value="IN LOGO DC">IN LOGO DC</option>
+                    <option value="MÀI">MÀI</option>
+                  </select>
+                </div>
+                <div>
+                  <label>Sản lượng (Đôi/ca)</label>
+                  <input type="number" step="1" className="input" value={tplOutput} onChange={(e) => setTplOutput(e.target.value)} />
+                </div>
+              </>
+            ) : (
+              <div><label>%OE</label><input type="number" step="1" className="input" value={tplOE} onChange={(e) => setTplOE(e.target.value)} /></div>
+            )}
             <div><label>Số đôi phế</label><input type="number" step="0.5" className="input" value={tplDefects} onChange={(e) => setTplDefects(e.target.value)} /></div>
 
             <div className="md:col-span-2 flex gap-4">
@@ -664,11 +695,17 @@ function ApproverModeLeanline({ section }) {
             </div>
           </div>
 
-          <div className="p-3 bg-yellow-50 rounded border border-yellow-200">
-            <h4 className="font-semibold text-yellow-800">Điểm KPI Tạm tính (Template):</h4>
-            <p>Sản Lượng: <b>{tplP}</b> | Chất Lượng: <b>{tplQ}</b> | Tuân Thủ: <b>{previewScores.cScore}</b></p>
-            <p className="text-lg">Tổng điểm: <b className="text-blue-600">{tplKPI}</b> / 15</p>
-          </div>
+          {section === "LEANLINE_TRAINING" ? (
+            <div className="p-3 bg-blue-50 rounded border border-blue-200">
+              <p className="text-blue-800 font-semibold italic">💡 Lưu ý: Bộ phận Leanline Training chỉ ghi nhận thông tin và không tính điểm KPI tự động.</p>
+            </div>
+          ) : (
+            <div className="p-3 bg-yellow-50 rounded border border-yellow-200">
+              <h4 className="font-semibold text-yellow-800">Điểm KPI Tạm tính (Template):</h4>
+              <p>Sản Lượng: <b>{tplP}</b> | Chất Lượng: <b>{tplQ}</b> | Tuân Thủ: <b>{previewScores.cScore}</b></p>
+              <p className="text-lg">Tổng điểm: <b className="text-blue-600">{tplKPI}</b> / 15</p>
+            </div>
+          )}
 
           <div className="flex justify-end gap-3">
             <button className="btn" onClick={() => setStep(1)}>‹ Quay lại</button>
@@ -705,7 +742,14 @@ function ApproverModeLeanline({ section }) {
                   <th className="p-2">Line</th>
                   <th className="p-2 w-16">Giờ làm</th>
                   <th className="p-2 w-16">Dừng</th>
-                  <th className="p-2 w-16">%OE</th>
+                  {section === "LEANLINE_TRAINING" ? (
+                    <>
+                      <th className="p-2 min-w-[120px]">Công đoạn</th>
+                      <th className="p-2 w-16">Sản lượng</th>
+                    </>
+                  ) : (
+                    <th className="p-2 w-16">%OE</th>
+                  )}
                   <th className="p-2 w-16">Phế</th>
                   <th className="p-2 min-w-[150px]">Lỗi CL</th>
                   <th className="p-2 min-w-[150px]">Tuân thủ</th>
@@ -733,7 +777,22 @@ function ApproverModeLeanline({ section }) {
                       <td className="p-2"><input className="input w-20 p-1" value={r.line} onChange={e => updateRow(i, 'line', e.target.value)} /></td>
                       <td className="p-2"><input type="number" className="input w-16 p-1" value={r.work_hours} onChange={e => updateRow(i, 'work_hours', e.target.value)} /></td>
                       <td className="p-2"><input type="number" className="input w-16 p-1" value={r.downtime} onChange={e => updateRow(i, 'downtime', e.target.value)} /></td>
-                      <td className="p-2"><input type="number" className="input w-16 p-1" value={r.oe} onChange={e => updateRow(i, 'oe', e.target.value)} /></td>
+                      {section === "LEANLINE_TRAINING" ? (
+                        <>
+                          <td className="p-2">
+                            <select className="input w-36 p-1 text-xs" value={r.category} onChange={e => updateRow(i, 'category', e.target.value)}>
+                              <option value="CHẶT ĐÔI MOLDED">CHẶT ĐÔI MOLDED</option>
+                              <option value="CHẶT ĐÔI DC">CHẶT ĐÔI DC</option>
+                              <option value="IN LOGO MOLDED">IN LOGO MOLDED</option>
+                              <option value="IN LOGO DC">IN LOGO DC</option>
+                              <option value="MÀI">MÀI</option>
+                            </select>
+                          </td>
+                          <td className="p-2"><input type="number" className="input w-16 p-1" value={r.output} onChange={e => updateRow(i, 'output', e.target.value)} /></td>
+                        </>
+                      ) : (
+                        <td className="p-2"><input type="number" className="input w-16 p-1" value={r.oe} onChange={e => updateRow(i, 'oe', e.target.value)} /></td>
+                      )}
                       <td className="p-2"><input type="number" className="input w-16 p-1" value={r.defects} onChange={e => updateRow(i, 'defects', e.target.value)} /></td>
 
                       <td className="p-2">

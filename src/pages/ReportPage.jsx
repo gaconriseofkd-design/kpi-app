@@ -644,6 +644,27 @@ function ReportContent() {
 
         return rowObj;
       });
+    } else if (section === "LEANLINE_TRAINING") {
+      data = allData.map((r) => {
+        const excelDate = dateToExcelSerial(r.date);
+        return {
+          "VỊ TRÍ LÀM VIỆC": "Leanline Training",
+          "MSNV": r.worker_id || "",
+          "HỌ VÀ TÊN": r.worker_name || "",
+          "CA LÀM VIỆC": r.ca || "",
+          "NGÀY LÀM VIỆC": excelDate ? { v: excelDate, t: 'n', z: 'mm/dd/yyyy' } : null,
+          "CÔNG ĐOẠN HỌC VIỆC": r.category || "",
+          "THỜI GIAN LÀM VIỆC": Number(r.work_hours ?? 0),
+          "THỜI GIAN DỪNG MÁY": Number(r.stop_hours ?? 0),
+          "SỐ ĐÔI PHẾ": Number(r.defects ?? 0),
+          "SẢN LƯỢNG (ĐÔI/CA)": Number(r.output ?? 0),
+          "TUÂN THỦ": complianceLabel(r.compliance_code),
+          "MSNV người duyệt": r.approver_id || "",
+          "Người duyệt": r.approver_name || "",
+          "Ghi chú duyệt": r.approver_note || "",
+          "Trạng thái": r.status || "pending",
+        };
+      });
     } else {
       // Leanline DC / Leanline Molded
       data = allData.map((r) => {
@@ -1001,16 +1022,23 @@ function ReportContent() {
       </div>
 
       {/* Summary nhanh */}
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
-        <SummaryCard title="Số bản ghi" value={summary.records} />
-        <SummaryCard title="Điểm tổng" value={summary.total.toFixed(1)} />
-        <SummaryCard title="Điểm TB" value={summary.avg.toFixed(2)} />
-        <SummaryCard title="Số vi phạm" value={summary.violations} />
-        <SummaryCard title="Số nhân viên" value={summary.workers} />
-      </div>
+      {section === "LEANLINE_TRAINING" ? (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
+          <SummaryCard title="Số bản ghi" value={summary.records} />
+          <SummaryCard title="Số nhân viên" value={summary.workers} />
+        </div>
+      ) : (
+        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-3">
+          <SummaryCard title="Số bản ghi" value={summary.records} />
+          <SummaryCard title="Điểm tổng" value={summary.total.toFixed(1)} />
+          <SummaryCard title="Điểm TB" value={summary.avg.toFixed(2)} />
+          <SummaryCard title="Số vi phạm" value={summary.violations} />
+          <SummaryCard title="Số nhân viên" value={summary.workers} />
+        </div>
+      )}
 
       {/* === BÁO CÁO NHANH THEO NGÀY === */}
-      {approverWorkers.length > 0 && (
+      {section !== "LEANLINE_TRAINING" && approverWorkers.length > 0 && (
         <div className="p-4 border rounded bg-white space-y-3">
           <div className="flex items-center justify-between gap-2 flex-wrap">
             <h3 className="text-lg font-semibold">Thống kê gửi KPI theo ngày</h3>
@@ -1110,8 +1138,9 @@ function ReportContent() {
       )}
 
       {/* Tra cứu ngày thiếu KPI theo Nhân viên */}
-      <div className="p-4 border rounded bg-white space-y-3">
-        <h3 className="text-lg font-semibold">Tra cứu ngày thiếu KPI theo Nhân viên</h3>
+      {section !== "LEANLINE_TRAINING" && (
+        <div className="p-4 border rounded bg-white space-y-3">
+          <h3 className="text-lg font-semibold">Tra cứu ngày thiếu KPI theo Nhân viên</h3>
 
         {approverWorkers.length === 0 && !loading && (
           <p className="text-gray-500">
@@ -1167,10 +1196,12 @@ function ReportContent() {
           </>
         )}
         {!missingReportData.length && !loading && <p className="text-gray-500">Đang chờ tải dữ liệu KPI chi tiết để kiểm tra.</p>}
-      </div>
+        </div>
+      )}
 
       {/* Chart */}
-      <div className="space-y-2">
+      {section !== "LEANLINE_TRAINING" && (
+        <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2">
             Nhân viên:
@@ -1206,10 +1237,12 @@ function ReportContent() {
             <div className="h-full flex items-center justify-center text-gray-500">Chưa có dữ liệu để vẽ</div>
           )}
         </div>
-      </div>
+        </div>
+      )}
 
       {/* TOP 5 */}
-      <div>
+      {section !== "LEANLINE_TRAINING" && (
+        <div>
         <h3 className="font-semibold mb-2">TOP 5 tổng điểm cao nhất</h3>
         <div className="overflow-auto">
           <table className="min-w-full text-sm">
@@ -1239,6 +1272,7 @@ function ReportContent() {
           </table>
         </div>
       </div>
+      )}
 
       {/* Bảng dữ liệu chi tiết */}
       <div>
@@ -1340,8 +1374,50 @@ function ReportContent() {
             </table>
           )}
 
+          {section === "LEANLINE_TRAINING" && (
+            <table className="min-w-[1100px] text-sm">
+              <thead className="bg-gray-100 text-xs uppercase">
+                <tr>
+                  <th className="p-2 text-center">Ngày</th>
+                  <th className="p-2 text-center">MSNV</th>
+                  <th className="p-2 text-center">Họ tên</th>
+                  <th className="p-2 text-center">Ca</th>
+                  <th className="p-2 text-center">Công đoạn học việc</th>
+                  <th className="p-2 text-center">Giờ làm việc</th>
+                  <th className="p-2 text-center">Giờ dừng máy</th>
+                  <th className="p-2 text-center">Số đôi phế</th>
+                  <th className="p-2 text-center">Sản lượng (Đôi/ca)</th>
+                  <th className="p-2 text-center">Tuân thủ</th>
+                  <th className="p-2 text-center">Duyệt</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((r, i) => (
+                  <tr key={`${r.worker_id}-${r.date}-${i}`} className="border-b hover:bg-gray-50">
+                    <td className="p-2 text-center">{r.date}</td>
+                    <td className="p-2 text-center">{r.worker_id}</td>
+                    <td className="p-2 text-center">{r.worker_name}</td>
+                    <td className="p-2 text-center">{r.ca}</td>
+                    <td className="p-2 text-center">{r.category}</td>
+                    <td className="p-2 text-center">{fmt(r.work_hours, 2)}</td>
+                    <td className="p-2 text-center">{fmt(r.stop_hours, 2)}</td>
+                    <td className="p-2 text-center">{fmt(r.defects, 1)}</td>
+                    <td className="p-2 text-center">{fmt(r.output, 0)}</td>
+                    <td className="p-2 text-center text-xs text-gray-600 truncate max-w-[150px]" title={r.compliance_code}>
+                      {r.compliance_code === "NONE" ? "" : r.compliance_code}
+                    </td>
+                    <td className="p-2 text-center">{r.status}</td>
+                  </tr>
+                ))}
+                {!pageRows.length && (
+                  <tr><td colSpan={11} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>
+                )}
+              </tbody>
+            </table>
+          )}
+
           {/* TABLE CHO LEANLINE (DC / MOLDED) - ĐÃ CẬP NHẬT CỘT */}
-          {!isMolding && !isHybrid && (
+          {!isMolding && !isHybrid && section !== "LEANLINE_TRAINING" && (
             <table className="min-w-[1200px] text-sm">
               <thead className="bg-gray-100 text-xs uppercase">
                 <tr>

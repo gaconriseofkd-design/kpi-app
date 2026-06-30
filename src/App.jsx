@@ -6,6 +6,7 @@ import SectionGate from "./pages/SectionGate";
 
 import EntryPage from "./pages/EntryPage";
 import EntryPageMolding from "./pages/EntryPageMolding";
+import EntryPageLeanlineTraining from "./pages/EntryPageLeanlineTraining";
 import QuickEntry from "./pages/QuickEntry";
 import Pending from "./pages/Pending";
 import ApprovePage from "./pages/ApprovePage";
@@ -46,8 +47,10 @@ function Shell() {
 
   if (!section && !isMQAARoute) return <SectionGate />;
 
-  // Chọn EntryPage theo section
-  const EntryComponent = section === "MOLDING" ? EntryPageMolding : EntryPage;
+  const EntryComponent =
+    section === "MOLDING" ? EntryPageMolding :
+    section === "LEANLINE_TRAINING" ? EntryPageLeanlineTraining :
+    EntryPage;
 
   return (
     <>

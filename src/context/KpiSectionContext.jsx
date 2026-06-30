@@ -8,6 +8,7 @@ export const SECTIONS = [
   { key: "PREFITTING", label: "Prefitting" },
   { key: "TÁCH", label: "Tách" },
   { key: "BÀO", label: "Bào" },
+  { key: "LEANLINE_TRAINING", label: "Leanline Training" },
 ];
 
 const Ctx = createContext(null);
