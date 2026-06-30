@@ -169,6 +169,12 @@ export default function EntryPageMolding() {
       return;
     }
 
+    const moldHoursNum = Number(moldHours || 0);
+    if (moldHoursNum < 86) {
+      alert("Số giờ khuôn chạy thực tế phải từ 86h trở lên.");
+      return;
+    }
+
     const payload = {
       // khóa định danh
       section,                             // "MOLDING"

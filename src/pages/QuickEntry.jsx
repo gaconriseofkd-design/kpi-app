@@ -880,6 +880,9 @@ function ApproverModeMolding({ section }) {
     if (tplDate > today) return alert("Không thể chọn ngày trong tương lai.");
     if (!selectedWorkers.length) return alert("Chưa chọn NV.");
     if (!tplCategory) return alert("Chưa chọn Loại hàng.");
+    if (Number(tplMoldHours || 0) < 86) {
+      return alert("Số giờ khuôn chạy thực tế phải từ 86h trở lên.");
+    }
 
     const rows = selectedWorkers.map((w) => {
       const result = calculateScoresMolding({
@@ -927,8 +930,15 @@ function ApproverModeMolding({ section }) {
   async function saveBatch() {
     const idxs = Array.from(selReview).sort((a, b) => a - b);
     if (!idxs.length) return alert("Chưa chọn dòng.");
-    setSaving(true);
+
     const list = idxs.map(i => reviewRows[i]);
+    for (const r of list) {
+      if (Number(r.stop_hours || 0) < 86) {
+        return alert(`Nhân viên ${r.hoten} (${r.msnv}) có số giờ khuôn chạy thực tế (${r.stop_hours}) nhỏ hơn 86h. Vui lòng kiểm tra lại.`);
+      }
+    }
+
+    setSaving(true);
     const now = new Date().toISOString();
 
     const payload = list.map(r => {

@@ -1796,6 +1796,10 @@ function AdjustEmployeeRecordsMolding() {
 
   async function saveRecord() {
     if (!editRecord || !liveScores) return;
+    if (Number(editRecord.mold_hours || 0) < 86) {
+      alert("Số giờ khuôn chạy thực tế phải từ 86h trở lên.");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
