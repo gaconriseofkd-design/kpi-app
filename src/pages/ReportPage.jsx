@@ -1753,6 +1753,13 @@ function AdjustEmployeeRecordsMolding() {
   const [records, setRecords] = useState([]);
   const [loadingRecords, setLoadingRecords] = useState(false);
 
+  // Pagination states
+  const [page, setPage] = useState(1);
+  const pageSize = 15;
+
+  const totalPages = useMemo(() => Math.max(1, Math.ceil(records.length / pageSize)), [records.length]);
+  const pageRecords = useMemo(() => records.slice((page - 1) * pageSize, page * pageSize), [records, page]);
+
   // Edit Record States
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [editRecord, setEditRecord] = useState(null); // local working copy
@@ -1822,6 +1829,7 @@ function AdjustEmployeeRecordsMolding() {
       const { data, error } = await query;
       if (error) throw error;
       setRecords(data || []);
+      setPage(1);
     } catch (err) {
       alert("Lỗi tải bản ghi: " + err.message);
     } finally {
@@ -2039,7 +2047,7 @@ function AdjustEmployeeRecordsMolding() {
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {records.map(r => {
+                  {pageRecords.map(r => {
                     const p = Number(r.p_score || 0);
                     const q = Number(r.q_score || 0);
                     const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
@@ -2082,7 +2090,7 @@ function AdjustEmployeeRecordsMolding() {
                       </tr>
                     );
                   })}
-                  {!records.length && !loadingRecords && (
+                  {!pageRecords.length && !loadingRecords && (
                     <tr>
                       <td colSpan={13} className="px-6 py-10 text-center text-gray-500 italic bg-gray-50">
                         Không tìm thấy bản ghi nào của Molding trong khoảng ngày và bộ lọc đã chọn.
@@ -2092,6 +2100,36 @@ function AdjustEmployeeRecordsMolding() {
                 </tbody>
               </table>
             </div>
+
+            {/* PHÂN TRANG */}
+            {records.length > 0 && (
+              <div className="bg-slate-50 px-6 py-3 border-t border-slate-200 flex items-center justify-between flex-wrap gap-2">
+                <div className="text-sm text-gray-600">
+                  Hiển thị từ <b>{records.length === 0 ? 0 : ((page - 1) * pageSize) + 1}</b> đến <b>{Math.min(page * pageSize, records.length)}</b> trong tổng số <b>{records.length}</b> bản ghi
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center gap-2">
+                    <button
+                      className="btn btn-sm btn-outline text-slate-700 hover:bg-slate-50 font-semibold"
+                      onClick={() => setPage(p => Math.max(1, p - 1))}
+                      disabled={page <= 1}
+                    >
+                      ‹ Trước
+                    </button>
+                    <span className="text-sm font-semibold text-slate-700 mx-2">
+                      Trang {page} / {totalPages}
+                    </span>
+                    <button
+                      className="btn btn-sm btn-outline text-slate-700 hover:bg-slate-50 font-semibold"
+                      onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                      disabled={page >= totalPages}
+                    >
+                      Sau ›
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
