@@ -1285,7 +1285,7 @@ function ReportContent() {
 
         <div className="overflow-auto">
           {isMolding && (
-            <table className="min-w-[1050px] text-sm">
+            <table className="min-w-[1200px] text-sm">
               <thead className="bg-gray-100 text-xs uppercase">
                 <tr>
                   <th className="p-2 text-center">Ngày</th>
@@ -2020,7 +2020,7 @@ function AdjustEmployeeRecordsMolding() {
               <h4 className="font-bold text-slate-700">Các bản ghi Molding đã nhập ({records.length})</h4>
             </div>
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-sm text-gray-700">
+              <table className="min-w-[1250px] divide-y divide-gray-200 text-sm text-gray-700">
                 <thead className="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
                   <tr>
                     <th className="px-4 py-3 text-center">Ngày</th>
