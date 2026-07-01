@@ -129,7 +129,7 @@ function ReportShell() {
   }, [section, tab]);
 
   return (
-    <div className="p-4 max-w-7xl mx-auto space-y-6">
+    <div className="p-4 max-w-[98%] mx-auto space-y-6">
       <div className="flex items-center justify-between border-b pb-4">
         <h2 className="text-2xl font-black text-slate-800 tracking-tight">Hệ thống Báo cáo</h2>
         <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
