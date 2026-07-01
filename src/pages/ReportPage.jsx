@@ -1297,26 +1297,39 @@ function ReportContent() {
                   <th className="p-2 text-center">P</th>
                   <th className="p-2 text-center">Q</th>
                   <th className="p-2 text-center">KPI</th>
+                  <th className="p-2 text-center">Điểm dư</th>
+                  <th className="p-2 text-center">Điểm tổng</th>
                   <th className="p-2 text-center">Duyệt</th>
                 </tr>
               </thead>
               <tbody>
-                {pageRows.map((r, i) => (
-                  <tr key={`${r.worker_id}-${r.date}-${i}`} className="border-b hover:bg-gray-50">
-                    <td className="p-2 text-center">{r.date}</td>
-                    <td className="p-2 text-center">{r.worker_id}</td>
-                    <td className="p-2 text-center">{r.worker_name}</td>
-                    <td className="p-2 text-center">{r.ca}</td>
-                    <td className="p-2 text-center">{r.category}</td>
-                    <td className="p-2 text-center">{fmt(r.output, 0)}</td>
-                    <td className="p-2 text-center">{fmt(r.p_score, 2)}</td>
-                    <td className="p-2 text-center">{fmt(r.q_score, 2)}</td>
-                    <td className="p-2 text-center font-semibold">{fmt(r.day_score, 2)}</td>
-                    <td className="p-2 text-center">{r.status}</td>
-                  </tr>
-                ))}
+                {pageRows.map((r, i) => {
+                  const p = Number(r.p_score || 0);
+                  const q = Number(r.q_score || 0);
+                  const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
+                  const total = Number(r.day_score || 0) + overflow;
+                  const displayOverflow = overflow % 1 === 0 ? overflow : overflow.toFixed(1);
+                  const displayTotal = total % 1 === 0 ? total : total.toFixed(1);
+
+                  return (
+                    <tr key={`${r.worker_id}-${r.date}-${i}`} className="border-b hover:bg-gray-50">
+                      <td className="p-2 text-center">{r.date}</td>
+                      <td className="p-2 text-center">{r.worker_id}</td>
+                      <td className="p-2 text-center">{r.worker_name}</td>
+                      <td className="p-2 text-center">{r.ca}</td>
+                      <td className="p-2 text-center">{r.category}</td>
+                      <td className="p-2 text-center">{fmt(r.output, 0)}</td>
+                      <td className="p-2 text-center">{fmt(r.p_score, 2)}</td>
+                      <td className="p-2 text-center">{fmt(r.q_score, 2)}</td>
+                      <td className="p-2 text-center font-semibold">{fmt(r.day_score, 2)}</td>
+                      <td className="p-2 text-center font-semibold text-sky-600">{displayOverflow}</td>
+                      <td className="p-2 text-center font-bold text-indigo-600">{displayTotal}</td>
+                      <td className="p-2 text-center">{r.status}</td>
+                    </tr>
+                  );
+                })}
                 {!pageRows.length && (
-                  <tr><td colSpan={10} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>
+                  <tr><td colSpan={12} className="p-4 text-center text-gray-500">Không có dữ liệu</td></tr>
                 )}
               </tbody>
             </table>
@@ -2018,47 +2031,60 @@ function AdjustEmployeeRecordsMolding() {
                     <th className="px-4 py-3 text-right">Sản lượng</th>
                     <th className="px-4 py-3 text-right">Phế</th>
                     <th className="px-4 py-3 text-center">KPI</th>
+                    <th className="px-4 py-3 text-center">Điểm dư</th>
+                    <th className="px-4 py-3 text-center">Điểm tổng</th>
                     <th className="px-4 py-3 text-left">Người duyệt</th>
                     <th className="px-4 py-3 text-center">Trạng thái</th>
                     <th className="px-4 py-3 text-center">Hành động</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
-                  {records.map(r => (
-                    <tr key={r.id} className="hover:bg-indigo-50/40 transition-colors">
-                      <td className="px-4 py-4 text-center font-medium text-slate-800 whitespace-nowrap">{fmtDate(r.date)}</td>
-                      <td className="px-4 py-4 font-semibold text-slate-700">{r.worker_id}</td>
-                      <td className="px-4 py-4 font-medium text-slate-900 whitespace-nowrap">{r.worker_name}</td>
-                      <td className="px-4 py-4 text-center">{r.ca}</td>
-                      <td className="px-4 py-4 text-center font-semibold text-indigo-600 whitespace-nowrap">{r.category || "N/A"}</td>
-                      <td className="px-4 py-4 text-right">{r.output?.toLocaleString()}</td>
-                      <td className="px-4 py-4 text-right">{r.defects}</td>
-                      <td className="px-4 py-4 text-center font-bold text-blue-600 text-base">{r.day_score}</td>
-                      <td className="px-4 py-4 text-left whitespace-nowrap">
-                        {r.approver_name ? `${r.approver_name} (${r.approver_msnv || ''})` : "N/A"}
-                      </td>
-                      <td className="px-4 py-4 text-center">
-                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                          r.status === 'approved' ? 'bg-green-100 text-green-700' :
-                          r.status === 'rejected' ? 'bg-red-100 text-red-700' :
-                          'bg-amber-100 text-amber-700'
-                        }`}>
-                          {r.status || 'pending'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-center whitespace-nowrap">
-                        <button
-                          className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs transition"
-                          onClick={() => startEdit(r)}
-                        >
-                          ✏️ Điều chỉnh
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                  {records.map(r => {
+                    const p = Number(r.p_score || 0);
+                    const q = Number(r.q_score || 0);
+                    const overflow = Number(r.overflow ?? Math.max(0, p + q - 15));
+                    const total = Number(r.day_score || 0) + overflow;
+                    const displayOverflow = overflow % 1 === 0 ? overflow : overflow.toFixed(1);
+                    const displayTotal = total % 1 === 0 ? total : total.toFixed(1);
+
+                    return (
+                      <tr key={r.id} className="hover:bg-indigo-50/40 transition-colors">
+                        <td className="px-4 py-4 text-center font-medium text-slate-800 whitespace-nowrap">{fmtDate(r.date)}</td>
+                        <td className="px-4 py-4 font-semibold text-slate-700">{r.worker_id}</td>
+                        <td className="px-4 py-4 font-medium text-slate-900 whitespace-nowrap">{r.worker_name}</td>
+                        <td className="px-4 py-4 text-center">{r.ca}</td>
+                        <td className="px-4 py-4 text-center font-semibold text-indigo-600 whitespace-nowrap">{r.category || "N/A"}</td>
+                        <td className="px-4 py-4 text-right">{r.output?.toLocaleString()}</td>
+                        <td className="px-4 py-4 text-right">{r.defects}</td>
+                        <td className="px-4 py-4 text-center font-bold text-blue-600 text-base">{r.day_score}</td>
+                        <td className="px-4 py-4 text-center font-semibold text-sky-600 text-base">{displayOverflow}</td>
+                        <td className="px-4 py-4 text-center font-extrabold text-indigo-600 text-base">{displayTotal}</td>
+                        <td className="px-4 py-4 text-left whitespace-nowrap">
+                          {r.approver_name ? `${r.approver_name} (${r.approver_msnv || ''})` : "N/A"}
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                            r.status === 'approved' ? 'bg-green-100 text-green-700' :
+                            r.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                            'bg-amber-100 text-amber-700'
+                          }`}>
+                            {r.status || 'pending'}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-center whitespace-nowrap">
+                          <button
+                            className="px-3 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-xs transition"
+                            onClick={() => startEdit(r)}
+                          >
+                            ✏️ Điều chỉnh
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                   {!records.length && !loadingRecords && (
                     <tr>
-                      <td colSpan={11} className="px-6 py-10 text-center text-gray-500 italic bg-gray-50">
+                      <td colSpan={13} className="px-6 py-10 text-center text-gray-500 italic bg-gray-50">
                         Không tìm thấy bản ghi nào của Molding trong khoảng ngày và bộ lọc đã chọn.
                       </td>
                     </tr>
