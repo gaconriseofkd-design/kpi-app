@@ -1114,7 +1114,7 @@ function ApproverModeMolding({ section }) {
             <table className="min-w-max text-xs">
               <thead className="bg-gray-100 sticky top-0"><tr>
                 <th className="p-1"><input type="checkbox" onChange={() => { if (selReview.size === reviewRows.length) setSelReview(new Set()); else setSelReview(new Set(reviewRows.map((_, i) => i))) }} checked={selReview.size === reviewRows.length && reviewRows.length > 0} /></th>
-                <th className="p-1">MSNV</th><th className="p-1">Tên</th><th className="p-1">Mã hàng</th><th className="p-1 w-12">S.Lg</th><th className="p-1 w-12">Giờ LV</th><th className="p-1 w-12">Giờ M</th><th className="p-1 w-12">Phế</th><th className="p-1">Lỗi C</th><th className="p-1">P</th><th className="p-1">Q</th><th className="p-1">C</th><th className="p-1 font-bold">KPI</th><th className="p-1">Ghi chú</th>
+                <th className="p-1">MSNV</th><th className="p-1">Tên</th><th className="p-1">Mã hàng</th><th className="p-1 w-12">S.Lg</th><th className="p-1 w-12">Giờ LV</th><th className="p-1 w-12">Phế</th><th className="p-1">Lỗi C</th><th className="p-1">P</th><th className="p-1">Q</th><th className="p-1">C</th><th className="p-1 font-bold">KPI</th><th className="p-1">Ghi chú</th>
               </tr></thead>
               <tbody>{pageRows.map((r, idx) => {
                 const i = globalIdx(idx);
@@ -1125,7 +1125,6 @@ function ApproverModeMolding({ section }) {
                     <td className="p-1"><select className="input w-36 h-7 py-0" value={r.category} onChange={e => updateRow(i, 'category', e.target.value)}>{categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}</select></td>
                     <td className="p-1"><input className="input w-12 h-7 py-0" type="number" value={r.output} onChange={e => updateRow(i, 'output', e.target.value)} /></td>
                     <td className="p-1"><input className="input w-12 h-7 py-0" type="number" value={r.work_hours} onChange={e => updateRow(i, 'work_hours', e.target.value)} /></td>
-                    <td className="p-1"><input className="input w-12 h-7 py-0" type="number" value={r.stop_hours} onChange={e => updateRow(i, 'stop_hours', e.target.value)} /></td>
                     <td className="p-1"><input className="input w-12 h-7 py-0" type="number" step="0.5" value={r.defects} onChange={e => updateRow(i, 'defects', e.target.value)} /></td>
                     <td className="p-1 text-center">
                       <div className="flex flex-col gap-1 items-center">
