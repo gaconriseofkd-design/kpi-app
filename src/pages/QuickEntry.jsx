@@ -106,12 +106,8 @@ function calcWorkingReal(shift, inputHours) {
 
 function calculateScoresMolding({ shift, working_input, mold_hours, output, defects, category, quality_code, compliance }, rules) {
   const workingReal = calcWorkingReal(shift, working_input);
-  let dt = (Number(workingReal) * 24 - Number(mold_hours || 0)) / 24;
-  // Cap lại logic
-  if (dt > 1) dt = 1;
-  if (dt < 0) dt = 0;
-
-  const workingExact = Math.max(0, Number(workingReal) - dt);
+  let dt = 0;
+  const workingExact = Math.max(0, Number(workingReal));
 
   // Quality Score
   // Nếu có quality_code (lỗi chất lượng cụ thể) thì có thể xử lý điểm ở đây.
@@ -939,13 +935,10 @@ function ApproverModeMolding({ section }) {
     if (tplDate > today) return alert("Không thể chọn ngày trong tương lai.");
     if (!selectedWorkers.length) return alert("Chưa chọn NV.");
     if (!tplCategory) return alert("Chưa chọn Loại hàng.");
-    if (Number(tplMoldHours || 0) < 86) {
-      return alert("Số giờ khuôn chạy thực tế phải từ 86h trở lên.");
-    }
 
     const rows = selectedWorkers.map((w) => {
       const result = calculateScoresMolding({
-        shift: tplShift, working_input: tplWorkingInput, mold_hours: tplMoldHours,
+        shift: tplShift, working_input: tplWorkingInput, mold_hours: 0,
         output: tplOutput, defects: tplDefects, category: tplCategory,
         quality_code: tplQualityCode, compliance: tplCompliance
       }, prodRules);
@@ -953,7 +946,7 @@ function ApproverModeMolding({ section }) {
       return {
         section, work_date: tplDate, shift: tplShift, msnv: w.msnv, hoten: w.full_name,
         approver_id: w.approver_msnv || approverIdInput, approver_name: w.approver_name,
-        line: w.line, work_hours: toNum(tplWorkingInput), stop_hours: toNum(tplMoldHours),
+        line: w.line, work_hours: toNum(tplWorkingInput), stop_hours: 0,
         output: toNum(tplOutput), defects: toNum(tplDefects), category: tplCategory,
         quality_code: tplQualityCode, compliance: tplCompliance,
         q_score: result.q_score, p_score: result.p_score, c_score: result.c_score,
@@ -976,7 +969,7 @@ function ApproverModeMolding({ section }) {
       else r[key] = toNum(val, 0);
 
       const result = calculateScoresMolding({
-        shift: r.shift, working_input: r.work_hours, mold_hours: r.stop_hours,
+        shift: r.shift, working_input: r.work_hours, mold_hours: 0,
         output: r.output, defects: r.defects, category: r.category,
         quality_code: r.quality_code, compliance: r.compliance
       }, prodRules);
@@ -991,18 +984,13 @@ function ApproverModeMolding({ section }) {
     if (!idxs.length) return alert("Chưa chọn dòng.");
 
     const list = idxs.map(i => reviewRows[i]);
-    for (const r of list) {
-      if (Number(r.stop_hours || 0) < 86) {
-        return alert(`Nhân viên ${r.hoten} (${r.msnv}) có số giờ khuôn chạy thực tế (${r.stop_hours}) nhỏ hơn 86h. Vui lòng kiểm tra lại.`);
-      }
-    }
 
     setSaving(true);
     const now = new Date().toISOString();
 
     const payload = list.map(r => {
       const result = calculateScoresMolding({
-        shift: r.shift, working_input: r.work_hours, mold_hours: r.stop_hours,
+        shift: r.shift, working_input: r.work_hours, mold_hours: 0,
         output: r.output, defects: r.defects, category: r.category,
         quality_code: r.quality_code, compliance: r.compliance
       }, prodRules);
@@ -1010,7 +998,7 @@ function ApproverModeMolding({ section }) {
       return {
         date: r.work_date, ca: r.shift, worker_id: r.msnv, worker_name: r.hoten,
         approver_id: r.approver_id, approver_name: r.approver_name, line: r.line,
-        work_hours: r.work_hours, stop_hours: r.stop_hours, output: r.output || null,
+        work_hours: r.work_hours, stop_hours: 0, output: r.output || null,
         defects: r.defects, category: r.category || null, quality_code: r.quality_code || null,
         compliance_code: r.compliance, section: "MOLDING", status: "approved",
         created_at: now, approved_at: now, approver_note: r.approver_note || null,
@@ -1078,7 +1066,6 @@ function ApproverModeMolding({ section }) {
               <label>Ngày: <input type="date" className="input" value={tplDate} onChange={e => setTplDate(e.target.value)} max={today} /></label>
               <label>Ca: <select className="input" value={tplShift} onChange={e => setTplShift(e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></label>
               <label>Giờ LV (input): <input type="number" className="input" value={tplWorkingInput} onChange={e => setTplWorkingInput(e.target.value)} /></label>
-              <label>Giờ dừng máy: <input type="number" className="input" value={tplMoldHours} onChange={e => setTplMoldHours(e.target.value)} /></label>
               <label>Loại hàng: <select className="input" value={tplCategory} onChange={e => setTplCategory(e.target.value)}><option value="">--Chọn--</option>{categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
               <label>Sản lượng đầu ra: <input type="number" className="input" value={tplOutput} onChange={e => setTplOutput(e.target.value)} /></label>
               <label>Số đôi phế: <input type="number" step="0.5" className="input" value={tplDefects} onChange={e => setTplDefects(e.target.value)} /></label>

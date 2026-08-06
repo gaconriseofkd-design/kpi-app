@@ -24,15 +24,21 @@ $runDaily = ($TargetReport -eq "daily_report") -or (-not $ManualTrigger -and $se
 $runHangBu = ($TargetReport -eq "hang_bu") -or (-not $ManualTrigger -and $settings -and $settings.is_hang_bu_enabled -eq $true -and (Get-Date).Hour -eq 16)
 $runDelay = ($TargetReport -eq "delay_xuat_gap") -or (-not $ManualTrigger -and $settings -and $settings.is_delay_enabled -eq $true -and ((Get-Date).Hour -eq 10 -or (Get-Date).Hour -eq 16))
 $runWip = ($TargetReport -eq "wip_report") -or (-not $ManualTrigger -and $settings -and $settings.is_wip_enabled -eq $true -and ((Get-Date).Hour -eq 8 -or (Get-Date).Hour -eq 16))
+$runEmployeesVoice = ($TargetReport -eq "employees_voice") -or (-not $ManualTrigger -and (Get-Date).Hour -eq 8)
 
-if (-not $runDaily -and -not $runHangBu -and -not $runDelay -and -not $runWip) {
+if (-not $runDaily -and -not $runHangBu -and -not $runDelay -and -not $runWip -and -not $runEmployeesVoice) {
     Write-Host "Khong co bao cao nao duoc kich hoat. Thoat." -ForegroundColor Yellow
     exit 0
 }
 
 $ORIGINAL_EXCEL_FILE_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\TRUONG OFFICE\PROJECT\Dashboard Progress tracking\data\Powerapp (V21.10.25).xlsx"
+if (-not (Test-Path $ORIGINAL_EXCEL_FILE_PATH)) {
+    $ORIGINAL_EXCEL_FILE_PATH = "$env:USERPROFILE\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\TRUONG OFFICE\PROJECT\Dashboard Progress tracking\data\Powerapp (V21.10.25).xlsx"
+}
 $EXCEL_FILE_PATH = "$env:TEMP\Powerapp_Temp_Report.xlsx"
-Copy-Item -Path $ORIGINAL_EXCEL_FILE_PATH -Destination $EXCEL_FILE_PATH -Force
+if (Test-Path $ORIGINAL_EXCEL_FILE_PATH) {
+    Copy-Item -Path $ORIGINAL_EXCEL_FILE_PATH -Destination $EXCEL_FILE_PATH -Force
+}
 $ZALO_TARGET_NAME = "Daily Report"
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -50,6 +56,7 @@ public class WinHelper {
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
     [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
     [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)] public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
 }
 "@
 Add-Type -TypeDefinition $win32Src -Language CSharp -ErrorAction SilentlyContinue
@@ -88,9 +95,15 @@ try {
     Write-Host "Dang tim Zalo PC..." -ForegroundColor Cyan
     $zaloProcess = Get-Process -Name Zalo -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle } | Select-Object -First 1
     if (-not $zaloProcess) {
+        $zaloProcess = Get-Process -Name Zalo -ErrorAction SilentlyContinue | Select-Object -First 1
+    }
+    if (-not $zaloProcess) {
         throw "Hay mo Zalo PC truoc khi chay script!"
     }
     $script:zaloHandle = $zaloProcess.MainWindowHandle
+    if ($script:zaloHandle -eq [IntPtr]::Zero) {
+        $script:zaloHandle = [WinHelper]::FindWindow($null, "Zalo")
+    }
 
     if ($runDaily) {
         Write-Host "Bat dau lay du lieu Excel cho Daily Report..." -ForegroundColor Cyan
@@ -150,6 +163,9 @@ try {
         
         $SUPP_EXCEL_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Hiền\Report Lỗi thao tác supp 2026.xlsx"
         if (-not (Test-Path $SUPP_EXCEL_PATH)) {
+            $SUPP_EXCEL_PATH = "$env:USERPROFILE\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Hiền\Report Lỗi thao tác supp 2026.xlsx"
+        }
+        if (-not (Test-Path $SUPP_EXCEL_PATH)) {
             Write-Host "Khong tim thay file Excel hang bu: $SUPP_EXCEL_PATH" -ForegroundColor Red
         } else {
             $excelSupp = New-Object -ComObject Excel.Application
@@ -166,8 +182,8 @@ try {
                     Write-Host "Khong tim thay sheet 2026 hoac DATA SUPPLEMENT!" -ForegroundColor Red
                 } else {
                     $startCol = 2
-                    $rowSuppPro = 51
-                    $rowSuppTotal = 52
+                    $rowSuppPro = 52
+                    $rowSuppTotal = 53
                     
                     $lastCol = $startCol
                     while ($true) {
@@ -319,15 +335,20 @@ try {
             $excelWIP.DisplayAlerts = $false
             try {
                 $wbWIP = $excelWIP.Workbooks.Open($WIP_EXCEL_PATH, 0, $true)
-                $shWIP = $wbWIP.Sheets.Item("Record Wip")
+                $shWIP = $null
+                try { $shWIP = $wbWIP.Sheets.Item("Record Wip (Old)") } catch {}
+                if (-not $shWIP) {
+                    try { $shWIP = $wbWIP.Sheets.Item("Record Wip") } catch {}
+                }
                 
-                $lastRow = $shWIP.Cells.Item($shWIP.Rows.Count, 1).End(-4162).Row; if ($lastRow -lt 1) { $lastRow = 1 }
+                # Luôn lấy data dòng thứ 2 (dữ liệu realtime hiện tại)
+                $wipRow = 2
                 
                 $colNames = @($shWIP.Cells.Item(1,2).Text.Trim(), $shWIP.Cells.Item(1,3).Text.Trim(), $shWIP.Cells.Item(1,4).Text.Trim(), $shWIP.Cells.Item(1,5).Text.Trim(), $shWIP.Cells.Item(1,6).Text.Trim(), $shWIP.Cells.Item(1,7).Text.Trim(), $shWIP.Cells.Item(1,8).Text.Trim())
                 
                 $wipValues = @()
                 for ($c = 2; $c -le 8; $c++) {
-                    $valText = $shWIP.Cells.Item($lastRow, $c).Text
+                    $valText = $shWIP.Cells.Item($wipRow, $c).Text
                     $valNum = 0
                     if (-not [string]::IsNullOrWhiteSpace($valText)) {
                         $valText = $valText -replace '[^\d\.-]', ''
@@ -403,6 +424,146 @@ try {
             } catch {
                 Write-Host "Loi khi tao bao cao WIP: $_" -ForegroundColor Red
                 if ($excelWIP) { try { $excelWIP.Quit(); [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelWIP) | Out-Null } catch {} }
+            }
+        }
+    }
+    if ($runEmployeesVoice) {
+        Write-Host "Bat dau doc va gui bao cao Employees Voice..." -ForegroundColor Cyan
+        
+        $VOICE_EXCEL_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\TRUONG OFFICE\Tiếng Nói Từ Hiện Trường Sản Xuất.xlsx"
+        if (-not (Test-Path $VOICE_EXCEL_PATH)) {
+            Write-Host "Khong tim thay file Excel: $VOICE_EXCEL_PATH" -ForegroundColor Red
+        } else {
+            $excelVoice = $null
+            $wbVoice = $null
+            $wasOpenedByUs = $false
+            $isExcelCreatedByUs = $false
+            
+            try {
+                $excelVoice = [System.Runtime.InteropServices.Marshal]::GetActiveObject("Excel.Application")
+                Write-Host "Da ket noi voi Excel dang chay." -ForegroundColor Cyan
+            } catch {
+                $excelVoice = New-Object -ComObject Excel.Application
+                $isExcelCreatedByUs = $true
+                Write-Host "Da mo Excel moi." -ForegroundColor Cyan
+            }
+            
+            try {
+                foreach ($wb in $excelVoice.Workbooks) {
+                    if ($wb.FullName -eq $VOICE_EXCEL_PATH) {
+                        $wbVoice = $wb
+                        break
+                    }
+                }
+                
+                if (-not $wbVoice) {
+                    $wbVoice = $excelVoice.Workbooks.Open($VOICE_EXCEL_PATH, 0, $true)
+                    $wasOpenedByUs = $true
+                }
+                
+                $shVoice = $wbVoice.Sheets.Item(1)
+                $lastRow = $shVoice.Cells.Item($shVoice.Rows.Count, 1).End(-4162).Row
+                if ($lastRow -lt 2) { $lastRow = 1 }
+                
+                $allRows = @()
+                for ($i = 2; $i -le $lastRow; $i++) {
+                    $timeStr = $shVoice.Cells.Item($i, 2).Text
+                    $section = $shVoice.Cells.Item($i, 6).Text
+                    $opinion = $shVoice.Cells.Item($i, 7).Text
+                    
+                    if (-not [string]::IsNullOrWhiteSpace($opinion)) {
+                        $parsedDate = Get-Date
+                        if ([DateTime]::TryParse($timeStr, [ref]$parsedDate)) {
+                            $allRows += [PSCustomObject]@{
+                                Date = $parsedDate.Date
+                                DateStr = $parsedDate.ToString("dd/MM")
+                                Section = $section.Trim()
+                                Opinion = $opinion.Trim()
+                            }
+                        }
+                    }
+                }
+                
+                if ($allRows.Count -gt 0) {
+                    $maxDate = ($allRows | Measure-Object -Property Date -Maximum).Maximum
+                    $currentDate = Get-Date
+                    $isFriday = ($currentDate.DayOfWeek -eq [System.DayOfWeek]::Friday)
+                    
+                    if ($isFriday) {
+                        $diff = (1 - [int]$maxDate.DayOfWeek)
+                        if ($diff -gt 0) { $diff -= 7 }
+                        $startDate = $maxDate.AddDays($diff)
+                        
+                        $filteredRows = $allRows | Where-Object { $_.Date -ge $startDate -and $_.Date -le $maxDate }
+                        $reportTitle = "[BÁO CÁO TUẦN] TIẾNG NÓI TỪ HIỆN TRƯỜNG SẢN XUẤT 🗣`n📅 Thời gian: $($startDate.ToString('dd/MM/yyyy')) - $($maxDate.ToString('dd/MM/yyyy'))"
+                    } else {
+                        $filteredRows = $allRows | Where-Object { $_.Date -eq $maxDate }
+                        $reportTitle = "[BÁO CÁO NGÀY] TIẾNG NÓI TỪ HIỆN TRƯỜNG SẢN XUẤT 🗣`n📅 Ngày ghi nhận: $($maxDate.ToString('dd/MM/yyyy'))"
+                    }
+                    
+                    if ($filteredRows.Count -gt 0) {
+                        $grouped = $filteredRows | Group-Object -Property Section
+                        $msg = $reportTitle + "`n`n"
+                        foreach ($group in $grouped) {
+                            $sectionName = $group.Name
+                            if ([string]::IsNullOrWhiteSpace($sectionName)) { $sectionName = "KHU VỰC KHÁC" }
+                            
+                            $msg += "🏢 $($sectionName):`n"
+                            $idx = 1
+                            foreach ($row in $group.Group) {
+                                if ($isFriday) {
+                                    $msg += "$idx. $($row.Opinion) ($($row.DateStr))`n"
+                                } else {
+                                    $msg += "$idx. $($row.Opinion)`n"
+                                }
+                                $idx++
+                            }
+                            $msg += "`n"
+                        }
+                        
+                        if ($isFriday) {
+                            $msg += "---------------------------------`nBan quản lý đã ghi nhận các ý kiến trong tuần. Cảm ơn sự đóng góp của các bạn!"
+                        } else {
+                            $msg += "---------------------------------`nMọi ý kiến đã được ghi nhận. Cảm ơn sự đóng góp của các bạn!"
+                        }
+                        
+                        Write-Host "Noi dung bao cao Employees Voice:"
+                        Write-Host $msg -ForegroundColor Green
+                        
+                        $TARGET_ZALO_GROUP = "Employees voice"
+                        Focus-Zalo
+                        Start-Sleep -Seconds 1
+                        
+                        [System.Windows.Forms.SendKeys]::SendWait("^f")
+                        Start-Sleep -Milliseconds 800
+                        [System.Windows.Forms.Clipboard]::SetText($TARGET_ZALO_GROUP, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+                        [System.Windows.Forms.SendKeys]::SendWait("^v")
+                        Start-Sleep -Seconds 2
+                        [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+                        Start-Sleep -Seconds 2
+                        
+                        [System.Windows.Forms.Clipboard]::SetText($msg, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+                        [System.Windows.Forms.SendKeys]::SendWait("^v")
+                        Start-Sleep -Milliseconds 600
+                        [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+                        Start-Sleep -Seconds 1
+                    } else {
+                        Write-Host "Khong co du lieu nao trong khoang thoi gian nay." -ForegroundColor Yellow
+                    }
+                } else {
+                    Write-Host "File Excel khong co du lieu hop le." -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Host "Loi khi doc hoac gui bao cao Employees Voice: $_" -ForegroundColor Red
+            } finally {
+                if ($wasOpenedByUs -and $wbVoice) {
+                    try { $wbVoice.Close($false) } catch {}
+                }
+                if ($isExcelCreatedByUs -and $excelVoice) {
+                    try { $excelVoice.Quit(); [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excelVoice) | Out-Null } catch {}
+                } elseif ($excelVoice) {
+                    try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excelVoice) | Out-Null } catch {}
+                }
             }
         }
     }

@@ -4,6 +4,7 @@ import PasswordModal from "../components/PasswordModal";
 import { supabase } from "../lib/supabaseClient";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
+import { saveExcelJS } from "../lib/fileExport";
 import {
     PieChart, Pie, Cell, Tooltip as RechartsTooltip, Legend, ResponsiveContainer,
     BarChart, Bar, Line, ComposedChart, XAxis, YAxis, CartesianGrid
@@ -239,7 +240,7 @@ export default function MQAADashboard() {
             // Xuất file
             const buf = await workbook.xlsx.writeBuffer();
             const fileName = `MQAA_Photos_${activeTab}_${filters.startDate}.xlsx`;
-            saveAs(new Blob([buf]), fileName);
+            saveExcelJS(buf, fileName);
         } catch (error) {
             console.error("Lỗi xuất Excel:", error);
             alert("Lỗi xuất file: " + error.message);

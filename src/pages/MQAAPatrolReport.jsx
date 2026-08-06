@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
+import { saveExcelJS } from "../lib/fileExport";
 import PasswordModal from "../components/PasswordModal";
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
@@ -213,7 +214,7 @@ function PatrolLogsTab({ navigate }) {
         worksheet.getColumn(6).width = 30;
 
         const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), `MQAA_Patrol_${record.section}_${record.date}.xlsx`);
+        saveExcelJS(buffer, `MQAA_Patrol_${record.section}_${record.date}.xlsx`);
     };
 
     return (
@@ -510,7 +511,7 @@ function PatrolSummaryTab() {
         });
 
         const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), `MQAA_Patrol_Summary_${monthFrom}_to_${monthTo}.xlsx`);
+        saveExcelJS(buffer, `MQAA_Patrol_Summary_${monthFrom}_to_${monthTo}.xlsx`);
     };
 
     return (

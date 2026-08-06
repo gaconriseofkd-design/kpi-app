@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
+import { saveExcelJS } from "../lib/fileExport";
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     BarChart, Bar, Cell
@@ -365,7 +366,7 @@ export default function MQAAPatrolDashboard() {
         }
 
         const buffer = await workbook.xlsx.writeBuffer();
-        saveAs(new Blob([buffer]), `MQAA_Summary_${selectedAuditorId || 'All'}_${selectedDates[0]}${selectedDates.length > 1 ? '_multi' : ''}.xlsx`);
+        saveExcelJS(buffer, `MQAA_Summary_${selectedAuditorId || 'All'}_${selectedDates[0]}${selectedDates.length > 1 ? '_multi' : ''}.xlsx`);
     };
 
     return (

@@ -3,18 +3,26 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
+  "bin": "server.cjs",
   "engines": {
     "node": ">=18"
   },
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "vite build && node scripts/post-build.js",
     "preview": "vite preview",
-    "vercel-dev": "vercel dev"
+    "vercel-dev": "vercel dev",
+    "package": "pkg server.cjs --config package.json --targets node18-win-x64 --output dist-exe/kpi-app.exe"
+  },
+  "pkg": {
+    "assets": [
+      "dist/**/*"
+    ]
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.47.10",
     "exceljs": "^4.4.0",
+    "express": "^5.2.1",
     "file-saver": "^2.0.5",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
@@ -25,6 +33,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.4.20",
+    "pkg": "^5.8.1",
     "postcss": "^8.4.44",
     "tailwindcss": "^3.4.14",
     "vite": "^5.0.0"

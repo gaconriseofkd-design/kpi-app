@@ -9,7 +9,8 @@ Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction Silent
 # Action: Run PowerShell script hidden
 $action = New-ScheduledTaskAction -Execute "powershell.exe" -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$scriptPath`""
 
-# Triggers: 10:00, 14:00, and 16:00 daily
+# Triggers: 08:10, 10:00, 14:00, and 16:00 daily
+$trigger810 = New-ScheduledTaskTrigger -Daily -At "08:10"
 $trigger10 = New-ScheduledTaskTrigger -Daily -At "10:00"
 $trigger14 = New-ScheduledTaskTrigger -Daily -At "14:00"
 $trigger16 = New-ScheduledTaskTrigger -Daily -At "16:00"
@@ -21,7 +22,7 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive
 
 # Register Task
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger @($trigger10, $trigger14, $trigger16) -Settings $settings -Principal $principal -Description "Tu dong gui bao cao nhap kho (Excel) qua Zalo vao 10h, 14h va 16h."
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger @($trigger810, $trigger10, $trigger14, $trigger16) -Settings $settings -Principal $principal -Description "Tu dong gui bao cao nhap kho & Employees Voice qua Zalo vao 8h10, 10h, 14h va 16h."
 
 Write-Host "Da dang ky Task Scheduler thanh cong: $taskName" -ForegroundColor Green
 Write-Host "Thoi gian chay: 10:00, 14:00, va 16:00 moi ngay." -ForegroundColor Cyan

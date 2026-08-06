@@ -4,6 +4,6 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
-  base: '/',   // 👈 thêm dòng này để load đúng asset
+  base: './',   // 👈 đường dẫn tương đối cho local file:// protocol
   server: { port: 5173 }
 })

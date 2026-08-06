@@ -15,6 +15,23 @@ $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $storeIntakeScript = Join-Path $scriptPath "StoreIntakeReport.ps1"
 $mqaaScript = Join-Path $scriptPath "MQAAAutomation.ps1"
 
+function Ensure-AllScriptsBom {
+    try {
+        $psFiles = Get-ChildItem -Path (Join-Path $scriptPath "*.ps1")
+        $utf8BOM = New-Object System.Text.UTF8Encoding $true
+        foreach ($file in $psFiles) {
+            $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
+            if ($bytes.Length -lt 3 -or $bytes[0] -ne 239 -or $bytes[1] -ne 187 -or $bytes[2] -ne 191) {
+                $text = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
+                [System.IO.File]::WriteAllText($file.FullName, $text, $utf8BOM)
+                Write-Host "Auto-fixed UTF-8 BOM: $($file.Name)" -ForegroundColor Cyan
+            }
+        }
+    } catch {}
+}
+
+Ensure-AllScriptsBom
+
 Write-Host ">>> BAT DAU LANG NGHE YEU CAU GUI BAO CAO TU SUPABASE <<<" -ForegroundColor Cyan
 
 while ($true) {
@@ -35,6 +52,7 @@ while ($true) {
                 
                 # 3. Kích hoạt báo cáo tương ứng
                 $reportType = $req.report_type
+                Ensure-AllScriptsBom
                 
                 if ($reportType -eq "mqaa_patrol") {
                     Write-Host "Dang thuc thi MQAAAutomation.ps1..."

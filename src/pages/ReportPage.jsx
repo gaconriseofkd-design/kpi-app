@@ -6,6 +6,7 @@ import * as XLSX from "xlsx";
 // --- THÊM MỚI: Import thư viện cho Form Ngang ---
 import ExcelJS from 'exceljs';
 import { saveAs } from 'file-saver';
+import { saveExcelXLSX, saveExcelJS } from "../lib/fileExport";
 // ------------------------------------------------
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend,
@@ -711,7 +712,7 @@ function ReportContent() {
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "KPI Report");
-    XLSX.writeFile(wb, `BaoCao_${section}_${dateFrom}_${dateTo}.xlsx`);
+    saveExcelXLSX(wb, `BaoCao_${section}_${dateFrom}_${dateTo}.xlsx`);
   }
   // ----- (MỚI) HÀM XUẤT FORM NGANG (HYBRID) -----
   const handleExportHorizontal = async () => {
@@ -822,8 +823,7 @@ function ReportContent() {
 
       // 7. Xuất file
       const buffer = await workbook.xlsx.writeBuffer();
-      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-      saveAs(blob, `Form_Ngang_${section}_${dateFrom}_${dateTo}.xlsx`);
+      saveExcelJS(buffer, `Form_Ngang_${section}_${dateFrom}_${dateTo}.xlsx`);
 
     } catch (e) {
       console.error(e);
@@ -856,7 +856,7 @@ function ReportContent() {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Missing_All_Details");
 
-    XLSX.writeFile(wb, `kpi_missing_details_all_${sectionName}_${approver}_${dateFrom}_to_${dateTo}.xlsx`);
+    saveExcelXLSX(wb, `kpi_missing_details_all_${sectionName}_${approver}_${dateFrom}_to_${dateTo}.xlsx`);
   }
 
   function exportMissingByDateXLSX(date, missingList) {
@@ -875,7 +875,7 @@ function ReportContent() {
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `Missing_${date}`);
-    XLSX.writeFile(wb, `kpi_missing_list_for_${sectionName}_${date}.xlsx`);
+    saveExcelXLSX(wb, `kpi_missing_list_for_${sectionName}_${date}.xlsx`);
   }
 
   function exportMissingSummaryByDay() {
@@ -895,7 +895,7 @@ function ReportContent() {
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, `Summary_Missing_by_Day`);
-    XLSX.writeFile(wb, `kpi_missing_summary_by_day_${sectionName}_${approver}_${dateFrom}_to_${dateTo}.xlsx`);
+    saveExcelXLSX(wb, `kpi_missing_summary_by_day_${sectionName}_${approver}_${dateFrom}_to_${dateTo}.xlsx`);
   }
 
 
@@ -1573,7 +1573,7 @@ function MonthlySectionSummary() {
     const ws = XLSX.utils.json_to_sheet(exportData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Summary");
-    XLSX.writeFile(wb, `TongHop_KPI_Section_${monthFrom}_to_${monthTo}.xlsx`);
+    saveExcelXLSX(wb, `TongHop_KPI_Section_${monthFrom}_to_${monthTo}.xlsx`);
   };
 
   return (
@@ -1697,11 +1697,8 @@ function calcWorkingRealLocal(shift, inputHours) {
 
 function calculateScoresMoldingLocal({ shift, working_input, mold_hours, output, defects, category, compliance }, rules) {
   const workingReal = calcWorkingRealLocal(shift, working_input);
-  let dt = (Number(workingReal) * 24 - Number(mold_hours || 0)) / 24;
-  if (dt > 1) dt = 1;
-  if (dt < 0) dt = 0;
-
-  const workingExact = Math.max(0, Number(workingReal) - dt);
+  let dt = 0;
+  const workingExact = Math.max(0, Number(workingReal));
   const q = scoreByQualityMolding(defects);
   const penalty = getMoldingCompliancePenalty(compliance);
   const c = scoreByCompliance(penalty);
@@ -1732,7 +1729,7 @@ function calculateScoresMoldingLocal({ shift, working_input, mold_hours, output,
     rawTotal: total,
     working_real: Number(workingReal.toFixed(2)),
     working_exact: Number(workingExact.toFixed(2)),
-    downtime: Number(dt.toFixed(2)),
+    downtime: 0,
     prodRate: prod
   };
 }
@@ -1893,10 +1890,6 @@ function AdjustEmployeeRecordsMolding() {
 
   async function saveRecord() {
     if (!editRecord || !liveScores) return;
-    if (Number(editRecord.mold_hours || 0) < 86) {
-      alert("Số giờ khuôn chạy thực tế phải từ 86h trở lên.");
-      return;
-    }
     setSaving(true);
     try {
       const payload = {
@@ -1911,8 +1904,8 @@ function AdjustEmployeeRecordsMolding() {
         working_input: Number(editRecord.working_input),
         working_real: liveScores.working_real,
         working_exact: liveScores.working_exact,
-        downtime: liveScores.downtime,
-        mold_hours: Number(editRecord.mold_hours),
+        downtime: 0,
+        mold_hours: 0,
         output: Number(editRecord.output),
         defects: Number(editRecord.defects),
         q_score: liveScores.q_score,
@@ -2195,17 +2188,6 @@ function AdjustEmployeeRecordsMolding() {
                     className="input w-full"
                     value={editRecord.working_input}
                     onChange={e => updateEditField("working_input", e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1">Số giờ khuôn chạy thực tế</label>
-                  <input
-                    type="number"
-                    step="0.1"
-                    className="input w-full"
-                    value={editRecord.mold_hours}
-                    onChange={e => updateEditField("mold_hours", e.target.value)}
                   />
                 </div>
 

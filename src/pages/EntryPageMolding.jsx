@@ -55,7 +55,6 @@ export default function EntryPageMolding() {
   // Molding-only
   const [category, setCategory] = useState("");
   const [categoryOptions, setCategoryOptions] = useState([]);
-  const [moldHours, setMoldHours] = useState(0);     // số giờ khuôn chạy thực tế
   const [defects, setDefects] = useState(0);
   const [output, setOutput] = useState(0);           // sản lượng/ca
   const [complianceCode, setComplianceCode] = useState("NONE"); // NONE/...
@@ -77,14 +76,8 @@ export default function EntryPageMolding() {
 
   // Kết quả tính
   const workingReal = useMemo(() => calcWorkingReal(shift, inputHours), [shift, inputHours]);
-  const downtime = useMemo(() => {
-    const dt = (Number(workingReal) * 24 - Number(moldHours || 0)) / 24;
-    if (dt > 1) return 1;
-    if (dt < 0) return 0;
-    return Number(dt.toFixed(2));
-  }, [workingReal, moldHours]);
-
-  const workingExact = useMemo(() => Number((Number(workingReal) - Number(downtime)).toFixed(2)), [workingReal, downtime]);
+  const downtime = 0;
+  const workingExact = useMemo(() => Number(workingReal), [workingReal]);
 
   // Load dropdown Loại hàng từ rule MOLDING
   useEffect(() => {
@@ -169,12 +162,6 @@ export default function EntryPageMolding() {
       return;
     }
 
-    const moldHoursNum = Number(moldHours || 0);
-    if (moldHoursNum < 86) {
-      alert("Số giờ khuôn chạy thực tế phải từ 86h trở lên.");
-      return;
-    }
-
     const payload = {
       // khóa định danh
       section,                             // "MOLDING"
@@ -193,8 +180,8 @@ export default function EntryPageMolding() {
       working_input: Number(inputHours || 0),
       working_real: Number(workingReal || 0),
       working_exact: Number(workingExact || 0),
-      downtime: Number(downtime || 0),
-      mold_hours: Number(moldHours || 0),
+      downtime: 0,
+      mold_hours: 0,
       output: Number(output || 0),         // sản lượng/ca
       defects: Number(defects || 0),       // Gửi số phế
 
@@ -223,8 +210,6 @@ export default function EntryPageMolding() {
       <h2 className="text-xl font-semibold">Nhập KPI - Molding</h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        // pages/EntryPageMolding.jsx
-
         <div>
           <label>MSNV người nhập</label>
           <input className="input" value={workerId} onChange={e => setWorkerId(e.target.value.trim())} />
@@ -268,10 +253,6 @@ export default function EntryPageMolding() {
           <label>Giờ làm việc (người nhập)</label>
           <input type="number" className="input" value={inputHours} onChange={e => setInputHours(e.target.value)} />
         </div>
-        <div>
-          <label>Số giờ khuôn chạy thực tế</label>
-          <input type="number" className="input" value={moldHours} onChange={e => setMoldHours(e.target.value)} />
-        </div>
 
         <div>
           <label>Loại hàng</label>
@@ -292,7 +273,7 @@ export default function EntryPageMolding() {
             className="input"
             value={defects}
             onChange={e => setDefects(e.target.value)}
-            step="0.5" // <-- THÊM BƯỚC NÀY
+            step="0.5"
           />
         </div>
         <div>
@@ -319,7 +300,6 @@ export default function EntryPageMolding() {
 
       <div className="p-4 rounded bg-gray-50 space-y-1 text-sm">
         <div>Giờ thực tế (quy đổi): <b>{workingReal}</b></div>
-        <div>Thời gian dừng /24 khuôn (h): <b>{downtime}</b></div>
         <div>Giờ làm việc chính xác: <b>{workingExact}</b></div>
         <div>Điểm chất lượng (Q): <b>{qScore}</b></div>
         <div>Điểm sản lượng (P): <b>{pScore}</b></div>

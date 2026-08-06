@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import * as XLSX from "xlsx";
 import { supabase } from "../lib/supabaseClient";
+import { saveExcelXLSX } from "../lib/fileExport";
 
 // VAI TRÒ HỢP LỆ (LOWERCASE)
 const ALLOWED_ROLES = ["worker", "approver", "admin"];
@@ -429,7 +430,7 @@ function UserManager() {
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "DanhSachUsers");
 
-        XLSX.writeFile(wb, "DanhSachNhanVien_KPI_Admin.xlsx");
+        saveExcelXLSX(wb, "DanhSachNhanVien_KPI_Admin.xlsx");
         alert(`Đã tải về ${users.length} User.`);
 
     } catch (err) {
@@ -569,7 +570,7 @@ function UserManager() {
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "XoaNhanVien");
-    XLSX.writeFile(wb, "Form_Xoa_Nhan_Vien.xlsx");
+    saveExcelXLSX(wb, "Form_Xoa_Nhan_Vien.xlsx");
   };
 
   const downloadUpsertTemplate = () => {
@@ -585,7 +586,7 @@ function UserManager() {
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "DanhSachNhanVien");
-    XLSX.writeFile(wb, "Form_Import_Nhan_Vien.xlsx");
+    saveExcelXLSX(wb, "Form_Import_Nhan_Vien.xlsx");
   };
 
   // --- LOGIC LẤY DANH SÁCH SECTION ĐỘNG ---

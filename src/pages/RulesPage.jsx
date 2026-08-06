@@ -4,6 +4,7 @@ import { supabase } from "../lib/supabaseClient";
 import { scoreByProductivity } from "../lib/scoring";
 import { useKpiSection } from "../context/KpiSectionContext";
 import * as XLSX from "xlsx";
+import { saveExcelXLSX } from "../lib/fileExport";
 
 /* =============== Helper: Chuẩn hóa Section và Nhận diện Loại Rule =============== */
 const HYBRID_SECTIONS = ["LAMINATION", "PREFITTING", "BÀO", "TÁCH"];
@@ -291,7 +292,7 @@ function RulesContent() {
     XLSX.utils.book_append_sheet(workbook, worksheet, "KPI_Rules");
 
     // Tải file về
-    XLSX.writeFile(workbook, `MQAA_KPI_Rules_All_${new Date().toISOString().split('T')[0]}.xlsx`);
+    saveExcelXLSX(workbook, `MQAA_KPI_Rules_All_${new Date().toISOString().split('T')[0]}.xlsx`);
   }
 
   // 📥 Xuất Excel Q&C
@@ -327,7 +328,7 @@ function RulesContent() {
     XLSX.utils.book_append_sheet(workbook, worksheet, "QC_Rules");
 
     // Tải file về
-    XLSX.writeFile(workbook, fileName);
+    saveExcelXLSX(workbook, fileName);
   }
 
   // 🔄 Đồng bộ dữ liệu gốc lên database
@@ -442,7 +443,7 @@ function RulesContent() {
     XLSX.utils.book_append_sheet(workbook, worksheet, "Template_KPI_Rules");
 
     // Tải file về
-    XLSX.writeFile(workbook, `KPI_Rules_Template_${currentSection}.xlsx`);
+    saveExcelXLSX(workbook, `KPI_Rules_Template_${currentSection}.xlsx`);
   }
 
   // 💾 Lưu tất cả rule hiện tại..

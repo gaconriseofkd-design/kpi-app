@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { saveCSV } from "../lib/fileExport";
 
 export default function Summarypage() {
   const [from, setFrom] = useState("");
@@ -7,7 +8,8 @@ export default function Summarypage() {
   const [rows, setRows] = useState([]);
 
   async function load() {
-    const url = new URL("/api/kpi/report", window.location.origin);
+    const origin = (window.location.origin && window.location.origin !== "null") ? window.location.origin : "http://localhost:3000";
+    const url = new URL("/api/kpi/report", origin);
     if (from) url.searchParams.set("from", from);
     if (to)   url.searchParams.set("to", to);
     const res = await fetch(url);
@@ -51,10 +53,7 @@ export default function Summarypage() {
         g.period, g.line, g.worker_id, quote(g.worker_name),
         g.work_hours, g.stop_hours, g.day_score_sum, g.count, g.violations
       ].join(","))).join("\n");
-    const blob = new Blob([csv], {type:"text/csv;charset=utf-8"});
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a"); a.href = url; a.download = `kpi_summary_${groupBy}_${from||"all"}_${to||"all"}.csv`; a.click();
-    setTimeout(()=>URL.revokeObjectURL(url), 1000);
+    saveCSV(csv, `kpi_summary_${groupBy}_${from||"all"}_${to||"all"}.csv`);
   }
 
   return (

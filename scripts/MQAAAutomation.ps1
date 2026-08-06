@@ -178,10 +178,12 @@ try {
             $yesterdayDate = (Get-Date).AddDays(-1).Date
             $yesterdayStr  = $yesterdayDate.ToString("yyyy-MM-dd")
             $lastSentDate  = $settings[0].last_patrol_report_monday
-            Write-Log "Kiem tra Patrol: HomQua=$yesterdayStr | DaGui=$lastSentDate"
-
-            if ($lastSentDate -ne $yesterdayStr) {
-                Write-Log ">>> Bat dau gui bao cao Patrol ngay $yesterdayStr..."
+            if ($ManualTrigger -or $lastSentDate -ne $yesterdayStr) {
+                if ($ManualTrigger -and $lastSentDate -eq $yesterdayStr) {
+                    Write-Log "Kich hoat thu cong: Cho phep gui lai bao cao Patrol ngay $yesterdayStr (du da gui truoc do)..."
+                } else {
+                    Write-Log ">>> Bat dau gui bao cao Patrol ngay $yesterdayStr..."
+                }
                 $patrolUrl  = "$SUPABASE_URL/rest/v1/mqaa_patrol_logs?date=eq.$yesterdayStr&select=auditor_name,auditor_id,date,section,overall_performance,evaluation_data"
                 $patrolData = Invoke-RestMethod -Uri $patrolUrl -Headers $headers -Method Get
 
@@ -312,15 +314,20 @@ try {
             $excelWIP.DisplayAlerts = $false
             try {
                 $wbWIP = $excelWIP.Workbooks.Open($WIP_EXCEL_PATH, 0, $true)
-                $shWIP = $wbWIP.Sheets.Item("Record Wip")
+                $shWIP = $null
+                try { $shWIP = $wbWIP.Sheets.Item("Record Wip (Old)") } catch {}
+                if (-not $shWIP) {
+                    try { $shWIP = $wbWIP.Sheets.Item("Record Wip") } catch {}
+                }
                 
-                $lastRow = $shWIP.Cells.Item($shWIP.Rows.Count, 1).End(-4162).Row; if ($lastRow -lt 1) { $lastRow = 1 }
+                # Luôn lấy data dòng thứ 2 (dữ liệu realtime hiện tại)
+                $wipRow = 2
                 
                 $colNames = @($shWIP.Cells.Item(1,2).Text.Trim(), $shWIP.Cells.Item(1,3).Text.Trim(), $shWIP.Cells.Item(1,4).Text.Trim(), $shWIP.Cells.Item(1,5).Text.Trim(), $shWIP.Cells.Item(1,6).Text.Trim(), $shWIP.Cells.Item(1,7).Text.Trim(), $shWIP.Cells.Item(1,8).Text.Trim())
                 
                 $wipValues = @()
                 for ($c = 2; $c -le 8; $c++) {
-                    $valText = $shWIP.Cells.Item($lastRow, $c).Text
+                    $valText = $shWIP.Cells.Item($wipRow, $c).Text
                     $valNum = 0
                     if (-not [string]::IsNullOrWhiteSpace($valText)) {
                         $valText = $valText -replace '[^\d\.-]', ''

@@ -1,5 +1,5 @@
 // src/App.jsx
-import { BrowserRouter, Routes, Route, Link, NavLink, useLocation } from "react-router-dom";
+import { HashRouter, Routes, Route, Link, NavLink, useLocation } from "react-router-dom";
 import { KpiSectionProvider, useKpiSection } from "./context/KpiSectionContext";
 import SectionGate from "./pages/SectionGate";
 
@@ -120,10 +120,10 @@ function Shell() {
 
 export default function App() {
   return (
-    <BrowserRouter>
+    <HashRouter>
       <KpiSectionProvider>
         <Shell />
       </KpiSectionProvider>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
