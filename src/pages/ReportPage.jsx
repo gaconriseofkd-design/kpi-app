@@ -561,8 +561,6 @@ function ReportContent() {
           "Điểm dư": overflow,
           "Điểm tổng": total,
           "Loại hàng": r.category || "",
-          "Số giờ khuôn chạy thực tế": Number(r.mold_hours ?? 0),
-          "Thời gian dừng /24 khuôn (h)": Number(r.downtime ?? 0),
           "MSNV người duyệt": r.approver_msnv || "",
           "Người duyệt": r.approver_name || "",
           "Ghi chú duyệt": r.approver_note || "",
@@ -2314,10 +2312,6 @@ function AdjustEmployeeRecordsMolding() {
                 <div className="flex justify-between">
                   <span>Giờ thực tế (quy đổi):</span>
                   <span className="font-semibold text-white">{liveScores.working_real}h</span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Downtime /24 khuôn:</span>
-                  <span className="font-semibold text-white">{liveScores.downtime}h</span>
                 </div>
                 <div className="flex justify-between">
                   <span>Giờ làm việc chính xác:</span>
