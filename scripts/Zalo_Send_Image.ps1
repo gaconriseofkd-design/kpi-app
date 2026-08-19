@@ -93,6 +93,17 @@ Start-Sleep -Milliseconds 500
 [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
 Start-Sleep -Seconds 2
 
+# Gui dong text truoc
+Write-Log "Gui dong text tieu de..."
+$msgText = "Báo cáo OT% các section:"
+[System.Windows.Forms.Clipboard]::SetText($msgText, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+Start-Sleep -Milliseconds 500
+Focus-Zalo
+[System.Windows.Forms.SendKeys]::SendWait("^v")
+Start-Sleep -Milliseconds 500
+[System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+Start-Sleep -Seconds 1
+
 # Dat anh vao clipboard va dan vao Zalo
 Write-Log "Dan anh vao Zalo..."
 try {
