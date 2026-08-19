@@ -93,17 +93,6 @@ Start-Sleep -Milliseconds 500
 [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
 Start-Sleep -Seconds 2
 
-# Gui dong text truoc
-Write-Log "Gui dong text tieu de..."
-$msgText = "Báo cáo OT% các section:"
-[System.Windows.Forms.Clipboard]::SetText($msgText, [System.Windows.Forms.TextDataFormat]::UnicodeText)
-Start-Sleep -Milliseconds 500
-Focus-Zalo
-[System.Windows.Forms.SendKeys]::SendWait("^v")
-Start-Sleep -Milliseconds 500
-[System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-Start-Sleep -Seconds 1
-
 # Dat anh vao clipboard va dan vao Zalo
 Write-Log "Dan anh vao Zalo..."
 try {
@@ -123,8 +112,16 @@ Focus-Zalo
 Write-Log "Da nhan Ctrl+V - cho Zalo hien modal xem truoc anh (4 giay)..."
 Start-Sleep -Seconds 4
 
+# Nhap caption cho anh tren modal preview
+Write-Log "Nhap caption cho anh..."
+$msgText = "Báo cáo OT% các section:"
+[System.Windows.Forms.Clipboard]::SetText($msgText, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+Start-Sleep -Milliseconds 500
+[System.Windows.Forms.SendKeys]::SendWait("^v")
+Start-Sleep -Seconds 1
+
 [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-Write-Log "Da nhan Enter de gui anh!"
+Write-Log "Da nhan Enter de gui anh kem caption!"
 Start-Sleep -Seconds 2
 
 Write-Log "=== HOAN THANH! Da gui anh OT vao nhom Daily Report. ==="
