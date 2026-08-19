@@ -1,5 +1,5 @@
 // src/pages/ReportPage.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { useKpiSection } from "../context/KpiSectionContext";
 import * as XLSX from "xlsx";
@@ -121,7 +121,7 @@ export default function ReportPage() {
 
 function ReportShell() {
   const { section } = useKpiSection();
-  const [tab, setTab] = useState("detail"); // "detail" | "summary" | "adjust"
+  const [tab, setTab] = useState("detail"); // "detail" | "summary" | "adjust" | "send_ot"
 
   useEffect(() => {
     if (section !== "MOLDING" && tab === "adjust") {
@@ -131,9 +131,9 @@ function ReportShell() {
 
   return (
     <div className="p-4 max-w-[98%] mx-auto space-y-6">
-      <div className="flex items-center justify-between border-b pb-4">
+      <div className="flex items-center justify-between border-b pb-4 flex-wrap gap-2">
         <h2 className="text-2xl font-black text-slate-800 tracking-tight">Hệ thống Báo cáo</h2>
-        <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
+        <div className="flex flex-wrap bg-gray-100 p-1 rounded-lg border border-gray-200 gap-1">
           <button 
              className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${tab === 'detail' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
              onClick={() => setTab('detail')}
@@ -154,6 +154,12 @@ function ReportShell() {
           >
              📈 Tổng hợp Section theo tháng
           </button>
+          <button 
+             className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${tab === 'send_ot' ? 'bg-white text-orange-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+             onClick={() => setTab('send_ot')}
+          >
+             📤 Gửi báo cáo OT
+          </button>
         </div>
       </div>
 
@@ -162,6 +168,8 @@ function ReportShell() {
           <ReportContent />
         ) : tab === "adjust" ? (
           <AdjustEmployeeRecordsMolding />
+        ) : tab === "send_ot" ? (
+          <SendOTReport />
         ) : (
           <MonthlySectionSummary />
         )}
@@ -2330,4 +2338,196 @@ function AdjustEmployeeRecordsMolding() {
   );
 }
 
+/* =============== GỬI BÁO CÁO % OT QUA ZALO =============== */
+function SendOTReport() {
+  const [status, setStatus] = useState("idle"); // "idle" | "running" | "done" | "error"
+  const [logs, setLogs] = useState([]);
+  const [startedAt, setStartedAt] = useState(null);
+  const [finishedAt, setFinishedAt] = useState(null);
+  const [exitCode, setExitCode] = useState(null);
+  const [polling, setPolling] = useState(false);
+  const logRef = useRef(null);
+
+  // Auto-scroll log to bottom
+  useEffect(() => {
+    if (logRef.current) {
+      logRef.current.scrollTop = logRef.current.scrollHeight;
+    }
+  }, [logs]);
+
+  // Poll status khi đang running
+  useEffect(() => {
+    if (!polling) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch("/api/run-ot-report/status");
+        const json = await res.json();
+        if (json.ok) {
+          setLogs(json.logs || []);
+          if (json.status === "done") {
+            setStatus(json.exitCode === 0 ? "done" : "error");
+            setFinishedAt(json.finishedAt);
+            setExitCode(json.exitCode);
+            setPolling(false);
+          }
+        }
+      } catch (e) {
+        console.error("Poll error:", e);
+      }
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [polling]);
+
+  async function handleRun() {
+    if (!window.confirm("Bạn có chắc muốn chạy script gửi báo cáo % OT qua Zalo?\n\nScript sẽ:\n1. Đóng toàn bộ Excel đang mở\n2. Mở và refresh file % OT.xlsx\n3. Chụp ảnh PivotTable\n4. Gửi ảnh vào Zalo group Daily Report")) {
+      return;
+    }
+    setStatus("running");
+    setLogs([]);
+    setStartedAt(null);
+    setFinishedAt(null);
+    setExitCode(null);
+    try {
+      const res = await fetch("/api/run-ot-report", { method: "POST" });
+      const json = await res.json();
+      if (!json.ok) {
+        setStatus("error");
+        setLogs([{ time: new Date().toISOString(), text: "❌ Lỗi: " + json.error }]);
+        return;
+      }
+      setStartedAt(json.startedAt);
+      setPolling(true);
+    } catch (e) {
+      setStatus("error");
+      setLogs([{ time: new Date().toISOString(), text: "❌ Không thể kết nối server: " + e.message }]);
+    }
+  }
+
+  async function handleReset() {
+    await fetch("/api/run-ot-report/reset", { method: "POST" });
+    setStatus("idle");
+    setLogs([]);
+    setStartedAt(null);
+    setFinishedAt(null);
+    setExitCode(null);
+  }
+
+  const fmtTime = (iso) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    return d.toLocaleTimeString("vi-VN", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  };
+
+  const statusBadge = {
+    idle: { text: "Sẵn sàng", cls: "bg-gray-100 text-gray-600" },
+    running: { text: "Đang chạy...", cls: "bg-yellow-100 text-yellow-700 animate-pulse" },
+    done: { text: "✅ Thành công", cls: "bg-green-100 text-green-700" },
+    error: { text: "❌ Lỗi", cls: "bg-red-100 text-red-700" },
+  }[status];
+
+  return (
+    <div className="space-y-6 max-w-3xl">
+      {/* Header card */}
+      <div className="bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-200 rounded-xl p-6 shadow-sm">
+        <div className="flex items-start gap-4">
+          <div className="text-4xl">📤</div>
+          <div className="flex-1">
+            <h3 className="text-xl font-bold text-orange-800">Gửi báo cáo % OT qua Zalo</h3>
+            <p className="text-sm text-orange-600 mt-1">
+              Tự động refresh dữ liệu từ file <code className="bg-orange-100 px-1 rounded">% OT.xlsx</code>, chụp ảnh PivotTable và gửi vào Zalo group <b>Daily Report</b>.
+            </p>
+            <div className="mt-3 flex flex-wrap items-center gap-3">
+              <span className={`px-3 py-1 rounded-full text-xs font-bold ${statusBadge.cls}`}>
+                {statusBadge.text}
+              </span>
+              {startedAt && (
+                <span className="text-xs text-gray-500">
+                  Bắt đầu: {fmtTime(startedAt)}
+                  {finishedAt && <> &nbsp;→&nbsp; Kết thúc: {fmtTime(finishedAt)}</>}
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-wrap gap-3">
+          <button
+            className={`px-6 py-2.5 rounded-lg font-bold text-white transition-all shadow ${
+              status === "running"
+                ? "bg-gray-400 cursor-not-allowed"
+                : "bg-orange-500 hover:bg-orange-600 active:scale-95"
+            }`}
+            onClick={handleRun}
+            disabled={status === "running"}
+          >
+            {status === "running" ? "⏳ Đang xử lý..." : "🚀 Chạy gửi báo cáo OT"}
+          </button>
+
+          {(status === "done" || status === "error") && (
+            <button
+              className="px-5 py-2.5 rounded-lg font-bold border border-gray-300 text-gray-600 hover:bg-gray-100 transition-all"
+              onClick={handleReset}
+            >
+              🔄 Reset
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Hướng dẫn */}
+      <div className="bg-white border border-gray-200 rounded-xl p-5 shadow-sm">
+        <h4 className="font-bold text-gray-700 mb-3">📋 Các bước script thực hiện</h4>
+        <ol className="space-y-2 text-sm text-gray-600">
+          <li className="flex gap-3"><span className="font-bold text-orange-500 min-w-[20px]">1.</span>Đóng toàn bộ tiến trình Excel đang mở</li>
+          <li className="flex gap-3"><span className="font-bold text-orange-500 min-w-[20px]">2.</span>Mở file <code className="bg-gray-100 px-1 rounded text-xs">% OT.xlsx</code> và refresh dữ liệu từ ControlManhour5</li>
+          <li className="flex gap-3"><span className="font-bold text-orange-500 min-w-[20px]">3.</span>Cập nhật PivotTable1 trong Sheet2</li>
+          <li className="flex gap-3"><span className="font-bold text-orange-500 min-w-[20px]">4.</span>Chụp ảnh PivotTable và lưu vào <code className="bg-gray-100 px-1 rounded text-xs">scratch/ot_pivot_report.png</code></li>
+          <li className="flex gap-3"><span className="font-bold text-orange-500 min-w-[20px]">5.</span>Gửi ảnh vào Zalo group qua <code className="bg-gray-100 px-1 rounded text-xs">Zalo_Send_Image.bat</code></li>
+        </ol>
+        <p className="mt-3 text-xs text-amber-600 bg-amber-50 border border-amber-200 rounded-lg p-2">
+          ⚠️ Lưu ý: Script sẽ <b>đóng toàn bộ Excel</b> đang mở. Hãy lưu công việc trước khi chạy.
+        </p>
+      </div>
+
+      {/* Log panel */}
+      {logs.length > 0 && (
+        <div className="bg-gray-900 rounded-xl shadow-lg overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-2 bg-gray-800">
+            <span className="text-xs font-mono font-bold text-gray-300">📄 Log thực thi script</span>
+            {exitCode !== null && (
+              <span className={`text-xs font-bold px-2 py-0.5 rounded ${
+                exitCode === 0 ? "bg-green-700 text-green-200" : "bg-red-700 text-red-200"
+              }`}>
+                Exit code: {exitCode}
+              </span>
+            )}
+          </div>
+          <div
+            ref={logRef}
+            className="p-4 max-h-80 overflow-y-auto font-mono text-xs space-y-1"
+          >
+            {logs.map((log, i) => (
+              <div key={i} className="flex gap-3">
+                <span className="text-gray-500 shrink-0">{fmtTime(log.time)}</span>
+                <span className={`${
+                  log.text.startsWith("[ERR]") ? "text-red-400" :
+                  log.text.startsWith("✅") ? "text-green-400" :
+                  log.text.startsWith("⚠️") ? "text-yellow-400" :
+                  log.text.startsWith("❌") ? "text-red-400" :
+                  "text-gray-300"
+                }`}>{log.text}</span>
+              </div>
+            ))}
+            {status === "running" && (
+              <div className="flex gap-3 animate-pulse">
+                <span className="text-gray-500">…</span>
+                <span className="text-yellow-400">Đang chờ kết quả...</span>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
 

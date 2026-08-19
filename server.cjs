@@ -290,6 +290,100 @@ app.get('/api/kpi/report', async (req, res) => {
 });
 
 // ==========================================
+// 3B. API: CHẠY SCRIPT GỬI BÁO CÁO % OT QUA ZALO
+// ==========================================
+
+let otReportJob = null; // Lưu trạng thái job đang chạy
+
+app.post('/api/run-ot-report', (req, res) => {
+  if (otReportJob && otReportJob.running) {
+    return res.status(409).json({ ok: false, error: 'Script đang chạy, vui lòng chờ...' });
+  }
+
+  const scriptPath = path.join(__dirname, 'scripts', 'Send_OT_Pivot_Report.ps1');
+  if (!fs.existsSync(scriptPath)) {
+    return res.status(404).json({ ok: false, error: `Không tìm thấy script: ${scriptPath}` });
+  }
+
+  const logs = [];
+  const startedAt = new Date().toISOString();
+
+  otReportJob = {
+    running: true,
+    startedAt,
+    logs,
+    exitCode: null,
+    finishedAt: null
+  };
+
+  console.log(`[OT Report] Khởi chạy script: ${scriptPath}`);
+
+  const proc = require('child_process').spawn(
+    'powershell.exe',
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', scriptPath],
+    { cwd: __dirname, windowsHide: true }
+  );
+
+  proc.stdout.on('data', (chunk) => {
+    const line = chunk.toString().trim();
+    if (line) {
+      logs.push({ time: new Date().toISOString(), text: line });
+      console.log(`[OT Script STDOUT] ${line}`);
+    }
+  });
+
+  proc.stderr.on('data', (chunk) => {
+    const line = chunk.toString().trim();
+    if (line) {
+      logs.push({ time: new Date().toISOString(), text: `[ERR] ${line}` });
+      console.error(`[OT Script STDERR] ${line}`);
+    }
+  });
+
+  proc.on('close', (code) => {
+    otReportJob.running = false;
+    otReportJob.exitCode = code;
+    otReportJob.finishedAt = new Date().toISOString();
+    const msg = code === 0 ? '✅ Script hoàn thành thành công!' : `⚠️ Script kết thúc với mã lỗi: ${code}`;
+    logs.push({ time: new Date().toISOString(), text: msg });
+    console.log(`[OT Report] ${msg}`);
+  });
+
+  proc.on('error', (err) => {
+    otReportJob.running = false;
+    otReportJob.exitCode = -1;
+    otReportJob.finishedAt = new Date().toISOString();
+    const errMsg = `❌ Lỗi khởi chạy script: ${err.message}`;
+    logs.push({ time: new Date().toISOString(), text: errMsg });
+    console.error(`[OT Report] ${errMsg}`);
+  });
+
+  res.json({ ok: true, message: 'Script đã được khởi chạy.', startedAt });
+});
+
+app.get('/api/run-ot-report/status', (req, res) => {
+  if (!otReportJob) {
+    return res.json({ ok: true, status: 'idle', logs: [] });
+  }
+  res.json({
+    ok: true,
+    status: otReportJob.running ? 'running' : 'done',
+    startedAt: otReportJob.startedAt,
+    finishedAt: otReportJob.finishedAt,
+    exitCode: otReportJob.exitCode,
+    logs: otReportJob.logs
+  });
+});
+
+app.post('/api/run-ot-report/reset', (req, res) => {
+  if (otReportJob && otReportJob.running) {
+    return res.status(409).json({ ok: false, error: 'Script đang chạy, không thể reset.' });
+  }
+  otReportJob = null;
+  res.json({ ok: true });
+});
+
+// ==========================================
 // 4. PHỤC VỤ TRANG WEB TĨNH (VỚI INJECT CONFIG)
 // ==========================================
 

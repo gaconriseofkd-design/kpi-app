@@ -336,6 +336,69 @@ try {
                     $wipValues += $valNum
                 }
                 
+                # Đọc dữ liệu từ sheet RECORD WIP cho báo cáo WIP NEW TARGET
+                $shRecordWip = $null
+                try { $shRecordWip = $wbWIP.Sheets.Item("RECORD WIP") } catch {}
+                if (-not $shRecordWip) {
+                    try { $shRecordWip = $wbWIP.Sheets.Item("Record Wip") } catch {}
+                }
+                
+                $laminationNew = 0
+                $leanDcNew = 0
+                $prefittingNew = 0
+                $moldingNew = 0
+                $leanMoldedNew = 0
+
+                if ($shRecordWip) {
+                    # Format mới (ngang: Row 1 Header, Row 4 Ghi chú, Row 2 Giá trị các cột)
+                    for ($c = 1; $c -le 10; $c++) {
+                        $secName = ($shRecordWip.Cells.Item(1, $c).Text + " " + $shRecordWip.Cells.Item(4, $c).Text).Trim()
+                        $valText = $shRecordWip.Cells.Item(2, $c).Text
+                        $valNum = 0
+                        if (-not [string]::IsNullOrWhiteSpace($valText)) {
+                            $valText = $valText -replace '[^\d\.-]', ''
+                            if ($valText) { [double]::TryParse($valText, [ref]$valNum) | Out-Null }
+                        }
+                        
+                        if ($secName -like "*1.MATERIAL*" -or $secName -like "*LAMINATION*") {
+                            $laminationNew = $valNum
+                        } elseif ($secName -like "*2.WIP*" -or $secName -like "*DIE CUT*" -or $secName -like "*Leanline DC*") {
+                            $leanDcNew = $valNum
+                        } elseif ($secName -like "*3.WIP*" -or $secName -like "*PREFITTING*" -or $secName -like "*Prefitting*") {
+                            $prefittingNew = $valNum
+                        } elseif ($secName -like "*4.WIP*" -or ($secName -like "*MOLDING*" -and $secName -notlike "*LEAN*")) {
+                            $moldingNew = $valNum
+                        } elseif ($secName -like "*5.WIP*" -or $secName -like "*LEAN LINE MOLDED*" -or $secName -like "*Leanline Molded*") {
+                            $leanMoldedNew = $valNum
+                        }
+                    }
+
+                    # Fallback nếu format cũ (dọc: Row 2->10, Col 1 = Name, Col 2 = Value)
+                    if ($laminationNew -eq 0 -and $leanDcNew -eq 0 -and $prefittingNew -eq 0 -and $moldingNew -eq 0 -and $leanMoldedNew -eq 0) {
+                        for ($r = 2; $r -le 10; $r++) {
+                            $secName = $shRecordWip.Cells.Item($r, 1).Text
+                            $valText = $shRecordWip.Cells.Item($r, 2).Text
+                            $valNum = 0
+                            if (-not [string]::IsNullOrWhiteSpace($valText)) {
+                                $valText = $valText -replace '[^\d\.-]', ''
+                                if ($valText) { [double]::TryParse($valText, [ref]$valNum) | Out-Null }
+                            }
+                            
+                            if ($secName -like "*1.MATERIAL*" -or $secName -like "*LAMINATION*") {
+                                $laminationNew = $valNum
+                            } elseif ($secName -like "*2.WIP*" -or $secName -like "*DIE CUT*") {
+                                $leanDcNew = $valNum
+                            } elseif ($secName -like "*3.WIP*" -or $secName -like "*PREFITTING*") {
+                                $prefittingNew = $valNum
+                            } elseif ($secName -like "*4.WIP*" -or ($secName -like "*MOLDING*" -and $secName -notlike "*LEAN LINE*")) {
+                                $moldingNew = $valNum
+                            } elseif ($secName -like "*5.WIP*" -or $secName -like "*LEAN LINE MOLDED*") {
+                                $leanMoldedNew = $valNum
+                            }
+                        }
+                    }
+                }
+                
                 $wbWIP.Close($false)
                 $excelWIP.Quit()
                 [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelWIP) | Out-Null
@@ -379,8 +442,31 @@ try {
                 } else {
                     $wipMsg += "Nhận xét: Tổng WIP (1->5) hiện tại ĐẠT ĐÚNG target 1,900,000 Pairs."
                 }
+
+                # Tạo tin nhắn báo cáo WIP NEW TARGET
+                $wipNewMsg = "Báo cáo tình hình WIP NEW TARGET đến thời điểm ${currentTimeStr}:`n"
+                $wipNewMsg += Get-WipSectionTextMQAA "1. Lamination" $laminationNew 450000
+                $wipNewMsg += Get-WipSectionTextMQAA "2. Prefitting" $prefittingNew 200000
+                $wipNewMsg += Get-WipSectionTextMQAA "3. Molding" $moldingNew 400000
+                $wipNewMsg += Get-WipSectionTextMQAA "4. Leanline DC" $leanDcNew 300000
+                $wipNewMsg += Get-WipSectionTextMQAA "5. Leanline Molded" $leanMoldedNew 550000
                 
-                Write-Log "Da tao xong bao cao WIP."
+                $totalActualNew = $laminationNew + $prefittingNew + $moldingNew + $leanDcNew + $leanMoldedNew
+                $totalActualNewF = "{0:N0}" -f $totalActualNew
+                $wipNewMsg += "Total WIP (1->5): $totalActualNewF Pairs`n"
+                
+                $targetTotalNew = 1900000
+                if ($totalActualNew -gt $targetTotalNew) {
+                    $diffNew = "{0:N0}" -f ($totalActualNew - $targetTotalNew)
+                    $wipNewMsg += "Nhận xét: Tổng WIP (1->5) hiện tại đang VƯỢT target $diffNew Pairs. Cần chú ý giảm WIP!"
+                } elseif ($totalActualNew -lt $targetTotalNew) {
+                    $diffNew = "{0:N0}" -f ($targetTotalNew - $totalActualNew)
+                    $wipNewMsg += "Nhận xét: Tổng WIP (1->5) hiện tại đang THẤP HƠN target $diffNew Pairs. Đang kiểm soát tốt!"
+                } else {
+                    $wipNewMsg += "Nhận xét: Tổng WIP (1->5) hiện tại ĐẠT ĐÚNG target 1,900,000 Pairs."
+                }
+                
+                Write-Log "Da tao xong bao cao WIP & WIP NEW TARGET."
                 
                 $WIP_TARGET = "Daily Report"
                 # Chuyển Zalo Target
@@ -393,10 +479,14 @@ try {
                 [System.Windows.Forms.SendKeys]::SendWait("{DOWN}")
                 Start-Sleep -Milliseconds 500
                 [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-    Start-Sleep -Seconds 3
+                Start-Sleep -Seconds 3
                 
                 Send-ZaloMessage -text $wipMsg
                 Write-Log "Da gui bao cao WIP vao $WIP_TARGET."
+
+                Start-Sleep -Seconds 2
+                Send-ZaloMessage -text $wipNewMsg
+                Write-Log "Da gui bao cao WIP NEW TARGET vao $WIP_TARGET."
                 
             } catch {
                 Write-Log "Loi tao bao cao WIP: $_" "ERROR"

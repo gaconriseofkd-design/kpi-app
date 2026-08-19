@@ -161,11 +161,31 @@ try {
     if ($runHangBu) {
         Write-Host "Bat dau doc va gui bao cao Hang Bu..." -ForegroundColor Cyan
         
-        $SUPP_EXCEL_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Hiền\Report Lỗi thao tác supp 2026.xlsx"
-        if (-not (Test-Path $SUPP_EXCEL_PATH)) {
-            $SUPP_EXCEL_PATH = "$env:USERPROFILE\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Hiền\Report Lỗi thao tác supp 2026.xlsx"
+        $prodDir = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION"
+        if (-not (Test-Path $prodDir)) {
+            $prodDir = "$env:USERPROFILE\Ortholite Vietnam\OVN Production - Documents\PRODUCTION"
         }
-        if (-not (Test-Path $SUPP_EXCEL_PATH)) {
+        $SUPP_EXCEL_PATH = $null
+        if (Test-Path $prodDir) {
+            $hienFolder = Get-ChildItem -Path $prodDir -Directory -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*Hi*" } | Select-Object -First 1
+            if ($hienFolder) {
+                $foundFile = Get-ChildItem -Path $hienFolder.FullName -Filter "*.xlsx" -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*Report*supp*2026*" } | Select-Object -First 1
+                if ($foundFile) {
+                    $SUPP_EXCEL_PATH = $foundFile.FullName
+                }
+            }
+        }
+        if (-not $SUPP_EXCEL_PATH) {
+            $SUPP_EXCEL_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Hiền\Report Lỗi thao tác supp 2026.xlsx"
+        }
+
+        $SUPP_TEMP_PATH = "$env:TEMP\Supp_Temp_Report.xlsx"
+        if (Test-Path $SUPP_EXCEL_PATH) {
+            try { Copy-Item -Path $SUPP_EXCEL_PATH -Destination $SUPP_TEMP_PATH -Force } catch {}
+        }
+        $targetOpenPath = if (Test-Path $SUPP_TEMP_PATH) { $SUPP_TEMP_PATH } else { $SUPP_EXCEL_PATH }
+
+        if (-not (Test-Path $targetOpenPath)) {
             Write-Host "Khong tim thay file Excel hang bu: $SUPP_EXCEL_PATH" -ForegroundColor Red
         } else {
             $excelSupp = New-Object -ComObject Excel.Application
@@ -173,7 +193,7 @@ try {
             $excelSupp.DisplayAlerts = $false
             
             try {
-                $wbSupp = $excelSupp.Workbooks.Open($SUPP_EXCEL_PATH, 0, $true)
+                $wbSupp = $excelSupp.Workbooks.Open($targetOpenPath, 0, $true)
                 $shSupp = $null
                 try { $shSupp = $wbSupp.Sheets.Item("2026") } catch {}
                 if (-not $shSupp) { try { $shSupp = $wbSupp.Sheets.Item("DATA SUPPLEMENT") } catch {} }
@@ -195,13 +215,68 @@ try {
                     $suppProValue = $shSupp.Cells.Item($rowSuppPro, $lastCol).Text
                     $suppTotalValue = $shSupp.Cells.Item($rowSuppTotal, $lastCol).Text
                     
+                    # Doc sheet top mold cho top 3 khuon bu nhieu nhat
+                    $topMoldText = ""
+                    $shTop = $null
+                    try { $shTop = $wbSupp.Sheets.Item("top mold") } catch {}
+                    if ($shTop) {
+                        $headerRow = 5
+                        $col = 2
+                        $lastDateCol = $col
+                        while ($true) {
+                            $hText = $shTop.Cells.Item($headerRow, $col).Text.Trim()
+                            if ($hText -eq "Grand Total" -or [string]::IsNullOrWhiteSpace($hText)) {
+                                $lastDateCol = [Math]::Max(2, $col - 1)
+                                break
+                            }
+                            $col++
+                        }
+                        
+                        $molds = @()
+                        $r = 6
+                        while ($true) {
+                            $moldName = $shTop.Cells.Item($r, 1).Text.Trim()
+                            if ($moldName -eq "Grand Total" -or [string]::IsNullOrWhiteSpace($moldName)) {
+                                break
+                            }
+                            $qtyText = $shTop.Cells.Item($r, $lastDateCol).Text.Trim()
+                            if (-not [string]::IsNullOrWhiteSpace($qtyText)) {
+                                $cleanQty = $qtyText -replace '[^\d]', ''
+                                $qty = 0
+                                if ([double]::TryParse($cleanQty, [ref]$qty) -and $qty -gt 0) {
+                                    $molds += [PSCustomObject]@{
+                                        Mold = $moldName
+                                        Qty = $qty
+                                    }
+                                }
+                            }
+                            $r++
+                        }
+                        
+                        $top3 = $molds | Sort-Object Qty -Descending | Select-Object -First 3
+                        $top3Array = @($top3)
+                        if ($top3Array.Count -gt 0) {
+                            $topMoldLines = @()
+                            $rank = 1
+                            foreach ($m in $top3Array) {
+                                $formattedQty = "{0:N0}" -f $m.Qty
+                                $topMoldLines += "$rank. $($m.Mold): $formattedQty đôi"
+                                $rank++
+                            }
+                            $headerTitle = if ($top3Array.Count -ge 3) { "Top 3 khuôn bù nhiều nhất:" } else { "Top khuôn bù nhiều nhất ($($top3Array.Count) khuôn):" }
+                            $topMoldText = "`n$headerTitle`n" + ($topMoldLines -join "`n")
+                        } else {
+                            $topMoldText = "`nTop khuôn bù nhiều nhất: Không có phát sinh"
+                        }
+                    }
+                    
                     $wbSupp.Close($false)
                     $excelSupp.Quit()
                     [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelSupp) | Out-Null
                     $excelSupp = $null
                     
                     $yesterday = (Get-Date).AddDays(-1).ToString("dd/MM/yy")
-                    $suppMessage = "Thông tin hàng bù đến ngày hôm qua $yesterday.`n% hàng bù thao tác sản xuất: $suppProValue;`nTổng % hàng bù: $suppTotalValue"
+                    $suppMessage = "Thông tin hàng bù đến ngày hôm qua $yesterday.`n% hàng bù thao tác sản xuất: $suppProValue;`nTổng % hàng bù: $suppTotalValue$topMoldText"
                     
                     Write-Host "Noi dung bao cao hang bu:"
                     Write-Host $suppMessage -ForegroundColor Green
@@ -357,6 +432,69 @@ try {
                     $wipValues += $valNum
                 }
                 
+                # Đọc dữ liệu từ sheet RECORD WIP cho báo cáo WIP NEW TARGET
+                $shRecordWip = $null
+                try { $shRecordWip = $wbWIP.Sheets.Item("RECORD WIP") } catch {}
+                if (-not $shRecordWip) {
+                    try { $shRecordWip = $wbWIP.Sheets.Item("Record Wip") } catch {}
+                }
+                
+                $laminationNew = 0
+                $leanDcNew = 0
+                $prefittingNew = 0
+                $moldingNew = 0
+                $leanMoldedNew = 0
+
+                if ($shRecordWip) {
+                    # Format mới (ngang: Row 1 Header, Row 4 Ghi chú, Row 2 Giá trị các cột)
+                    for ($c = 1; $c -le 10; $c++) {
+                        $secName = ($shRecordWip.Cells.Item(1, $c).Text + " " + $shRecordWip.Cells.Item(4, $c).Text).Trim()
+                        $valText = $shRecordWip.Cells.Item(2, $c).Text
+                        $valNum = 0
+                        if (-not [string]::IsNullOrWhiteSpace($valText)) {
+                            $valText = $valText -replace '[^\d\.-]', ''
+                            if ($valText) { [double]::TryParse($valText, [ref]$valNum) | Out-Null }
+                        }
+                        
+                        if ($secName -like "*1.MATERIAL*" -or $secName -like "*LAMINATION*") {
+                            $laminationNew = $valNum
+                        } elseif ($secName -like "*2.WIP*" -or $secName -like "*DIE CUT*" -or $secName -like "*Leanline DC*") {
+                            $leanDcNew = $valNum
+                        } elseif ($secName -like "*3.WIP*" -or $secName -like "*PREFITTING*" -or $secName -like "*Prefitting*") {
+                            $prefittingNew = $valNum
+                        } elseif ($secName -like "*4.WIP*" -or ($secName -like "*MOLDING*" -and $secName -notlike "*LEAN*")) {
+                            $moldingNew = $valNum
+                        } elseif ($secName -like "*5.WIP*" -or $secName -like "*LEAN LINE MOLDED*" -or $secName -like "*Leanline Molded*") {
+                            $leanMoldedNew = $valNum
+                        }
+                    }
+
+                    # Fallback nếu format cũ (dọc: Row 2->10, Col 1 = Name, Col 2 = Value)
+                    if ($laminationNew -eq 0 -and $leanDcNew -eq 0 -and $prefittingNew -eq 0 -and $moldingNew -eq 0 -and $leanMoldedNew -eq 0) {
+                        for ($r = 2; $r -le 10; $r++) {
+                            $secName = $shRecordWip.Cells.Item($r, 1).Text
+                            $valText = $shRecordWip.Cells.Item($r, 2).Text
+                            $valNum = 0
+                            if (-not [string]::IsNullOrWhiteSpace($valText)) {
+                                $valText = $valText -replace '[^\d\.-]', ''
+                                if ($valText) { [double]::TryParse($valText, [ref]$valNum) | Out-Null }
+                            }
+                            
+                            if ($secName -like "*1.MATERIAL*" -or $secName -like "*LAMINATION*") {
+                                $laminationNew = $valNum
+                            } elseif ($secName -like "*2.WIP*" -or $secName -like "*DIE CUT*") {
+                                $leanDcNew = $valNum
+                            } elseif ($secName -like "*3.WIP*" -or $secName -like "*PREFITTING*") {
+                                $prefittingNew = $valNum
+                            } elseif ($secName -like "*4.WIP*" -or ($secName -like "*MOLDING*" -and $secName -notlike "*LEAN LINE*")) {
+                                $moldingNew = $valNum
+                            } elseif ($secName -like "*5.WIP*" -or $secName -like "*LEAN LINE MOLDED*") {
+                                $leanMoldedNew = $valNum
+                            }
+                        }
+                    }
+                }
+
                 $wbWIP.Close($false)
                 $excelWIP.Quit()
                 [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelWIP) | Out-Null
@@ -401,8 +539,33 @@ try {
                     $wipMsg += "Nhận xét: Tổng WIP (1->5) hiện tại ĐẠT ĐÚNG target 1,900,000 Pairs."
                 }
                 
+                # Tạo tin nhắn báo cáo WIP NEW TARGET
+                $wipNewMsg = "Báo cáo tình hình WIP NEW TARGET đến thời điểm ${currentTimeStr}:`n"
+                $wipNewMsg += Get-WipSectionText "1. Lamination" $laminationNew 450000
+                $wipNewMsg += Get-WipSectionText "2. Prefitting" $prefittingNew 200000
+                $wipNewMsg += Get-WipSectionText "3. Molding" $moldingNew 400000
+                $wipNewMsg += Get-WipSectionText "4. Leanline DC" $leanDcNew 300000
+                $wipNewMsg += Get-WipSectionText "5. Leanline Molded" $leanMoldedNew 550000
+                
+                $totalActualNew = $laminationNew + $prefittingNew + $moldingNew + $leanDcNew + $leanMoldedNew
+                $totalActualNewF = "{0:N0}" -f $totalActualNew
+                $wipNewMsg += "Total WIP (1->5): $totalActualNewF Pairs`n"
+                
+                $targetTotalNew = 1900000
+                if ($totalActualNew -gt $targetTotalNew) {
+                    $diffNew = "{0:N0}" -f ($totalActualNew - $targetTotalNew)
+                    $wipNewMsg += "Nhận xét: Tổng WIP (1->5) hiện tại đang VƯỢT target $diffNew Pairs. Cần chú ý giảm WIP!"
+                } elseif ($totalActualNew -lt $targetTotalNew) {
+                    $diffNew = "{0:N0}" -f ($targetTotalNew - $totalActualNew)
+                    $wipNewMsg += "Nhận xét: Tổng WIP (1->5) hiện tại đang THẤP HƠN target $diffNew Pairs. Đang kiểm soát tốt!"
+                } else {
+                    $wipNewMsg += "Nhận xét: Tổng WIP (1->5) hiện tại ĐẠT ĐÚNG target 1,900,000 Pairs."
+                }
+
                 Write-Host "Noi dung bao cao WIP:"
                 Write-Host $wipMsg -ForegroundColor Green
+                Write-Host "Noi dung bao cao WIP NEW TARGET:"
+                Write-Host $wipNewMsg -ForegroundColor Cyan
                 
                 Focus-Zalo
                 Start-Sleep -Seconds 1
@@ -416,6 +579,12 @@ try {
                 Start-Sleep -Seconds 2
 
                 [System.Windows.Forms.Clipboard]::SetText($wipMsg, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+                [System.Windows.Forms.SendKeys]::SendWait("^v")
+                Start-Sleep -Milliseconds 600
+                [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+                Start-Sleep -Seconds 2
+
+                [System.Windows.Forms.Clipboard]::SetText($wipNewMsg, [System.Windows.Forms.TextDataFormat]::UnicodeText)
                 [System.Windows.Forms.SendKeys]::SendWait("^v")
                 Start-Sleep -Milliseconds 600
                 [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
