@@ -1,4 +1,4 @@
-﻿# scripts/Zalo_Send_Image.ps1
+# scripts/Zalo_Send_Image.ps1
 # Script nay PHAI chay trong cua so co the nhin thay (WindowStyle Normal)
 # Duong dan anh OT co dinh - khong truyen param de tranh loi path-with-spaces
 
@@ -24,40 +24,73 @@ if (-not (Test-Path $ImagePath)) {
 Write-Log "Da tim thay file anh OK!"
 Write-Log "Chuan bi gui vao nhom Zalo Daily Report..."
 
-$wshell = New-Object -ComObject WScript.Shell
+# === Khởi tạo thư viện Win32 API ===
+$win32Src = @"
+using System;
+using System.Runtime.InteropServices;
+public class WinHelperZalo {
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
+    [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmd);
+    [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
+    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+}
+"@
+Add-Type -TypeDefinition $win32Src -Language CSharp -ErrorAction SilentlyContinue
 
-# Thu kich hoat Zalo nhieu lan
-$attempts = 0
-$activated = $false
-while (-not $activated -and $attempts -lt 10) {
-    $activated = $wshell.AppActivate("Zalo - Auto Report")
-    if (-not $activated) { $activated = $wshell.AppActivate("Zalo") }
-    if (-not $activated) {
-        foreach ($p in (Get-Process Zalo -ErrorAction SilentlyContinue)) {
-            try {
-                $r = $wshell.AppActivate($p.Id)
-                if ($r) { $activated = $true; break }
-            } catch {}
-        }
+$script:myHandle = (Get-Process -Id $PID).MainWindowHandle
+
+Write-Log "Dang kiem tra Zalo PC..."
+$zaloProcess = Get-Process -Name Zalo -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle } | Select-Object -First 1
+if (-not $zaloProcess) {
+    Write-Log "LOI: Zalo PC chua mo."
+    Start-Sleep -Seconds 5
+    exit 1
+}
+Write-Log "Zalo dang mo: PID=$($zaloProcess.Id) | Title='$($zaloProcess.MainWindowTitle)'"
+$script:zaloHandle = $zaloProcess.MainWindowHandle
+
+function Focus-Zalo {
+    if ($script:myHandle -ne [IntPtr]::Zero) {
+        [WinHelperZalo]::ShowWindow($script:myHandle, 6) | Out-Null   # Minimize terminal
     }
-    if (-not $activated) {
-        $attempts++
-        Write-Log "Thu ${attempts}: Chua focus duoc Zalo, doi 1s..."
-        Start-Sleep -Seconds 1
+    
+    $zaloThread = [WinHelperZalo]::GetWindowThreadProcessId($script:zaloHandle, [ref]0)
+    $myThread = [WinHelperZalo]::GetCurrentThreadId()
+    $fgWindow = [WinHelperZalo]::GetForegroundWindow()
+    $fgThread = [WinHelperZalo]::GetWindowThreadProcessId($fgWindow, [ref]0)
+    
+    if ($fgThread -ne $zaloThread) {
+        [WinHelperZalo]::AttachThreadInput($myThread, $zaloThread, $true) | Out-Null
+        [WinHelperZalo]::AttachThreadInput($fgThread, $zaloThread, $true) | Out-Null
     }
+    
+    [WinHelperZalo]::ShowWindow($script:zaloHandle, 9) | Out-Null   # Restore
+    Start-Sleep -Milliseconds 300
+    [WinHelperZalo]::SetForegroundWindow($script:zaloHandle) | Out-Null
+    
+    if ($fgThread -ne $zaloThread) {
+        [WinHelperZalo]::AttachThreadInput($myThread, $zaloThread, $false) | Out-Null
+        [WinHelperZalo]::AttachThreadInput($fgThread, $zaloThread, $false) | Out-Null
+    }
+    Start-Sleep -Milliseconds 500
 }
 
-Write-Log "Ket qua focus Zalo: $activated (sau $attempts lan thu)"
-Start-Sleep -Milliseconds 1000
+Write-Log "Minimize terminal, focus Zalo..."
+Focus-Zalo
+Start-Sleep -Seconds 1
 
 # Tim nhom Daily Report bang Ctrl+F
 Write-Log "Tim nhom Daily Report..."
-$wshell.SendKeys("^f")
-Start-Sleep -Milliseconds 1000
+[System.Windows.Forms.SendKeys]::SendWait("^f")
+Start-Sleep -Milliseconds 800
 [System.Windows.Forms.Clipboard]::SetText("Daily Report", [System.Windows.Forms.TextDataFormat]::UnicodeText)
-$wshell.SendKeys("^v")
+[System.Windows.Forms.SendKeys]::SendWait("^v")
 Start-Sleep -Seconds 2
-$wshell.SendKeys("~")
+[System.Windows.Forms.SendKeys]::SendWait("{DOWN}")
+Start-Sleep -Milliseconds 500
+[System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
 Start-Sleep -Seconds 2
 
 # Dat anh vao clipboard va dan vao Zalo
@@ -74,11 +107,12 @@ try {
 }
 
 Start-Sleep -Milliseconds 500
-$wshell.SendKeys("^v")
+Focus-Zalo
+[System.Windows.Forms.SendKeys]::SendWait("^v")
 Write-Log "Da nhan Ctrl+V - cho Zalo hien modal xem truoc anh (4 giay)..."
 Start-Sleep -Seconds 4
 
-$wshell.SendKeys("~")
+[System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
 Write-Log "Da nhan Enter de gui anh!"
 Start-Sleep -Seconds 2
 

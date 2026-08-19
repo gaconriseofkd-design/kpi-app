@@ -1,4 +1,4 @@
-# scripts/Send_OT_Pivot_Report.ps1
+﻿# scripts/Send_OT_Pivot_Report.ps1
 # Tự động refresh % OT.xlsx, lấy ảnh PivotTable1 ở Sheet2 và gửi vào Zalo group Daily Report
 
 Add-Type -AssemblyName System.Windows.Forms
