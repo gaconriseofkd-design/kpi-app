@@ -1,4 +1,4 @@
-﻿# scripts/ReportWatcher.ps1
+# scripts/ReportWatcher.ps1
 # Script này chạy ẩn qua 1 file bat duy nhất (Report Watcher Auto-Start) để quản lý & tự động gửi tất cả các báo cáo Zalo.
 
 $SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
@@ -36,6 +36,8 @@ Ensure-AllScriptsBom
 Write-Host "==========================================================" -ForegroundColor Cyan
 Write-Host ">>> REPORT WATCHER AUTO-START DANG CHAY CHUNG DUY NHAT <<<" -ForegroundColor Green
 Write-Host "==========================================================" -ForegroundColor Cyan
+
+$script:lastAutoOTReport = ""
 
 while ($true) {
     try {
@@ -79,6 +81,37 @@ while ($true) {
     }
     catch {
         Write-Host "Loi khi kiem tra Supabase: $_" -ForegroundColor Red
+    }
+    
+    # 5. Kiem tra gui bao cao OT luc 14:00
+    try {
+        $currentHour = (Get-Date).Hour
+        $currentMinute = (Get-Date).Minute
+        $currentDate = (Get-Date).ToString("yyyy-MM-dd")
+        
+        if ($currentHour -eq 14 -and $currentMinute -lt 5) {
+            if ($script:lastAutoOTReport -ne $currentDate) {
+                # Kiem tra xem nguoi dung co bat tu dong khong
+                $sysData = Invoke-RestMethod -Uri "$SUPABASE_URL/rest/v1/system_settings?id=eq.1" -Headers $headers -Method Get
+                $isOtEnabled = $true
+                if ($sysData -and $sysData.Count -gt 0) {
+                    if ($sysData[0].is_ot_report_enabled -eq $false) {
+                        $isOtEnabled = $false
+                    }
+                }
+                
+                if ($isOtEnabled) {
+                    Write-Host ">>> Kich hoat bao cao OT tu dong (14:00) <<<" -ForegroundColor Green
+                    & powershell.exe -File $otScript
+                } else {
+                    Write-Host ">>> Bao cao OT tu dong (14:00) dang bi TAT tren he thong <<<" -ForegroundColor Yellow
+                }
+                # Danh dau la da kiem tra/chay trong ngay hom nay
+                $script:lastAutoOTReport = $currentDate
+            }
+        }
+    } catch {
+        Write-Host "Loi khi chay OT tu dong: $_" -ForegroundColor Red
     }
     
     # Nghỉ 15 giây trước khi lặp lại

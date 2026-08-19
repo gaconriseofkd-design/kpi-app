@@ -7,7 +7,7 @@ const REPORTS = [
     { id: "delay_xuat_gap", name: "Báo Cáo Delay - Xuất Gấp", dbKey: "is_delay_enabled", time: "10:00 & 16:00" },
     { id: "wip_report", name: "Báo Cáo WIP", dbKey: "is_wip_enabled", time: "08:00 & 16:00" },
     { id: "mqaa_patrol", name: "Báo Cáo MQAA Patrol", dbKey: "is_mqaa_patrol_enabled", time: "08:00" },
-    { id: "ot_report", name: "Báo Cáo % OT", dbKey: "is_ot_report_enabled", time: "20:00" },
+    { id: "ot_report", name: "Báo Cáo % OT", dbKey: "is_ot_report_enabled", time: "14:00" },
 ];
 
 export default function ReportAdmin() {

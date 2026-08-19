@@ -1,4 +1,4 @@
-# scripts/Zalo_Send_Image.ps1
+﻿# scripts/Zalo_Send_Image.ps1
 # Script nay PHAI chay trong cua so co the nhin thay (WindowStyle Normal)
 # Duong dan anh OT co dinh - khong truyen param de tranh loi path-with-spaces
 
