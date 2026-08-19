@@ -2357,54 +2357,74 @@ function SendOTReport() {
 
   // Poll status khi đang running
   useEffect(() => {
-    if (!polling) return;
+    if (!polling || !startedAt) return; // startedAt ở đây sẽ lưu request ID
     const interval = setInterval(async () => {
       try {
-        const res = await fetch("/api/run-ot-report/status");
-        const json = await res.json();
-        if (json.ok) {
-          setLogs(json.logs || []);
-          if (json.status === "done") {
-            setStatus(json.exitCode === 0 ? "done" : "error");
-            setFinishedAt(json.finishedAt);
-            setExitCode(json.exitCode);
-            setPolling(false);
+        const { data, error } = await supabase
+          .from("report_requests")
+          .select("status")
+          .eq("id", startedAt)
+          .single();
+          
+        if (error) throw error;
+        
+        if (data) {
+          if (data.status === "processing") {
+             if (logs.length === 0 || logs[logs.length-1].text !== "⏳ Hệ thống đang xử lý báo cáo...") {
+                setLogs(prev => [...prev, { time: new Date().toISOString(), text: "⏳ Hệ thống đang xử lý báo cáo..." }]);
+             }
+          } else if (data.status === "completed") {
+             setStatus("done");
+             setFinishedAt(new Date().toISOString());
+             setLogs(prev => [...prev, { time: new Date().toISOString(), text: "✅ Đã gửi báo cáo OT thành công!" }]);
+             setPolling(false);
+          } else if (data.status === "error" || data.status === "failed") {
+             setStatus("error");
+             setFinishedAt(new Date().toISOString());
+             setLogs(prev => [...prev, { time: new Date().toISOString(), text: "❌ Đã có lỗi xảy ra khi gửi báo cáo." }]);
+             setPolling(false);
           }
         }
       } catch (e) {
         console.error("Poll error:", e);
       }
-    }, 1500);
+    }, 2000);
     return () => clearInterval(interval);
-  }, [polling]);
+  }, [polling, startedAt, logs]);
 
   async function handleRun() {
     if (!window.confirm("Bạn có chắc muốn chạy script gửi báo cáo % OT qua Zalo?\n\nScript sẽ:\n1. Đóng toàn bộ Excel đang mở\n2. Mở và refresh file % OT.xlsx\n3. Chụp ảnh PivotTable\n4. Gửi ảnh vào Zalo group Daily Report")) {
       return;
     }
     setStatus("running");
-    setLogs([]);
+    setLogs([{ time: new Date().toISOString(), text: "🔄 Đã gửi yêu cầu. Đang chờ Report Watcher nhận lệnh..." }]);
     setStartedAt(null);
     setFinishedAt(null);
     setExitCode(null);
+    
     try {
-      const res = await fetch("/api/run-ot-report", { method: "POST" });
-      const json = await res.json();
-      if (!json.ok) {
+      // Đẩy yêu cầu lên Supabase (giống cơ chế ReportAdmin)
+      const { data, error } = await supabase
+        .from("report_requests")
+        .insert([{ report_type: "ot_report", status: "pending" }])
+        .select();
+
+      if (error) {
         setStatus("error");
-        setLogs([{ time: new Date().toISOString(), text: "❌ Lỗi: " + json.error }]);
+        setLogs(prev => [...prev, { time: new Date().toISOString(), text: "❌ Lỗi khi gửi yêu cầu: " + error.message }]);
         return;
       }
-      setStartedAt(json.startedAt);
+      
+      const reqId = data[0].id;
+      setStartedAt(reqId);
       setPolling(true);
     } catch (e) {
       setStatus("error");
-      setLogs([{ time: new Date().toISOString(), text: "❌ Không thể kết nối server: " + e.message }]);
+      setLogs([{ time: new Date().toISOString(), text: "❌ Không thể kết nối Supabase: " + e.message }]);
     }
   }
 
   async function handleReset() {
-    await fetch("/api/run-ot-report/reset", { method: "POST" });
     setStatus("idle");
     setLogs([]);
     setStartedAt(null);
