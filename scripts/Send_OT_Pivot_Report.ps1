@@ -1,4 +1,4 @@
-﻿# scripts/Send_OT_Pivot_Report.ps1
+# scripts/Send_OT_Pivot_Report.ps1
 # Tự động refresh % OT.xlsx, lấy ảnh PivotTable1 ở Sheet2 và gửi vào Zalo group Daily Report
 
 Add-Type -AssemblyName System.Windows.Forms
@@ -25,12 +25,6 @@ function Write-LogOT([string]$msg, [string]$level = "INFO") {
     Write-Host $logMsg
 }
 
-# 1. Kill TOAN BO Excel truoc khi bat dau (tranh RPC_E_CALL_REJECTED)
-Write-LogOT "Dong toan bo process Excel cu..."
-Get-Process Excel -ErrorAction SilentlyContinue | ForEach-Object {
-    try { Stop-Process -Id $_.Id -Force } catch {}
-}
-Start-Sleep -Seconds 3  # Doi Excel giai phong COM
 
 $excelPath = "c:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\TRUONG OFFICE\PROJECT\KPI APP\APP KPI\% OT.xlsx"
 $imgPath = "c:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\TRUONG OFFICE\PROJECT\KPI APP\APP KPI\scratch\ot_pivot_report.png"
@@ -41,6 +35,10 @@ if (-not (Test-Path $excelPath)) {
 }
 
 $excel = New-Object -ComObject Excel.Application
+[int]$excelPid = 0
+[WinHelperOT]::GetWindowThreadProcessId($excel.Hwnd, [ref]$excelPid) | Out-Null
+Write-LogOT "Khoi tao Excel Process ID: $excelPid"
+
 $excel.Visible = $false
 $excel.DisplayAlerts = $false
 Start-Sleep -Seconds 2  # Doi Excel.Application khoi dong on dinh
@@ -91,12 +89,18 @@ try {
     $wb.Close($false)
 } catch {
     Write-LogOT "Loi cap nhat Excel/PivotTable: $_" "ERROR"
-    if ($excel) { try { $excel.Quit(); [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null } catch {} }
+    if ($excel) { 
+        try { $excel.Quit(); [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null } catch {} 
+        if ($excelPid -gt 0) { try { Stop-Process -Id $excelPid -Force -ErrorAction SilentlyContinue } catch {} }
+    }
     exit 1
 } finally {
     if ($excel) {
-        $excel.Quit()
-        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
+        try { $excel.Quit() } catch {}
+        try { [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null } catch {}
+        if ($excelPid -gt 0) {
+            try { Stop-Process -Id $excelPid -Force -ErrorAction SilentlyContinue } catch {}
+        }
     }
 }
 
