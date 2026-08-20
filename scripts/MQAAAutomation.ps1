@@ -1,4 +1,4 @@
-﻿# scripts/MQAAAutomation.ps1
+# scripts/MQAAAutomation.ps1
 # Script tự động gửi báo cáo MQAA vào Zalo mỗi sáng 08:00
 # Logic: Báo cáo hàng ngày cho ngày hôm trước + Tổng kết tuần vào Thứ 7
 
@@ -169,7 +169,7 @@ try {
         $isWipEnabled = $sysSettings.is_wip_enabled -ne $false
 
         $runPatrol = ($TargetReport -eq "mqaa_patrol") -or (-not $ManualTrigger -and $isMqaaEnabled -and $currentTime -ge $PATROL_REPORT_TIME)
-        $runWip = ($TargetReport -eq "wip_report") -or (-not $ManualTrigger -and $isWipEnabled -and (Get-Date).Hour -eq 8)
+        $runWip = $false # ($TargetReport -eq "wip_report") -or (-not $ManualTrigger -and $isWipEnabled -and (Get-Date).Hour -eq 8)
 
         # ============================================
         # PHẦN B: BÁO CÁO PATROL MQAA
