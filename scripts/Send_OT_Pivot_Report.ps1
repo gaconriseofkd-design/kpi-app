@@ -38,9 +38,8 @@ try {
     $excel = [System.Runtime.InteropServices.Marshal]::GetActiveObject("Excel.Application")
     Write-LogOT "Da ket noi thanh cong voi Excel dang chay (GetActiveObject)."
 } catch {
-    Write-LogOT "Khong tim thay tien trinh Excel nao dang mo. Se khoi tao tien trinh moi..."
-    $excel = New-Object -ComObject Excel.Application
-    $excel.Visible = $true
+    Write-LogOT "Khong tim thay tien trinh Excel nao dang mo. Bo qua gui bao cao OT." "WARN"
+    exit 0
 }
 
 try {
@@ -54,13 +53,9 @@ try {
 } catch {}
 
 if (-not $wb) {
-    Write-LogOT "Chua mo file % OT.xlsx. Dang tien hanh mo file..."
-    if (Test-Path $excelPath) {
-        $wb = $excel.Workbooks.Open($excelPath)
-    } else {
-        Write-LogOT "Khong tim thay duong dan file: $excelPath" "ERROR"
-        exit 1
-    }
+    Write-LogOT "Nguoi dung chua mo san file % OT.xlsx. Bo qua gui bao cao theo yeu cau." "WARN"
+    try { [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null } catch {}
+    exit 0
 }
 
 try {
