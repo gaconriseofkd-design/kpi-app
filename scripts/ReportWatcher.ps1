@@ -1,4 +1,4 @@
-# scripts/ReportWatcher.ps1
+﻿# scripts/ReportWatcher.ps1
 # Script này chạy ẩn qua 1 file bat duy nhất (Report Watcher Auto-Start) để quản lý & tự động gửi tất cả các báo cáo Zalo.
 
 $SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"

@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$GroupName = "Daily Report",
     [string]$Message = ""
 )
