@@ -1,4 +1,4 @@
-﻿# scripts/ReportWatcher.ps1
+# scripts/ReportWatcher.ps1
 # Script này chạy ẩn qua 1 file bat duy nhất (Report Watcher Auto-Start) để quản lý & tự động gửi tất cả các báo cáo Zalo.
 
 $SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
@@ -38,6 +38,7 @@ Write-Host ">>> REPORT WATCHER AUTO-START DANG CHAY CHUNG DUY NHAT <<<" -Foregro
 Write-Host "==========================================================" -ForegroundColor Cyan
 
 $script:lastAutoOTReport = ""
+$script:lastAutoOTRefresh = ""
 
 while ($true) {
     try {
@@ -83,12 +84,22 @@ while ($true) {
         Write-Host "Loi khi kiem tra Supabase: $_" -ForegroundColor Red
     }
     
-    # 5. Kiem tra gui bao cao OT luc 14:00
+    # 5. Kiem tra gui bao cao OT luc 14:00 (va Refresh luc 13:40)
     try {
         $currentHour = (Get-Date).Hour
         $currentMinute = (Get-Date).Minute
         $currentDate = (Get-Date).ToString("yyyy-MM-dd")
         
+        # 5.1 Refresh truoc 20 phut (13:40)
+        if ($currentHour -eq 13 -and $currentMinute -ge 40) {
+            if ($script:lastAutoOTRefresh -ne $currentDate) {
+                Write-Host ">>> Kich hoat REFRESH bao cao OT tu dong (13:40) <<<" -ForegroundColor Green
+                & powershell.exe -File $otScript -Action "Refresh"
+                $script:lastAutoOTRefresh = $currentDate
+            }
+        }
+        
+        # 5.2 Gui bao cao luc 14:00
         if ($currentHour -eq 14 -and $currentMinute -lt 5) {
             if ($script:lastAutoOTReport -ne $currentDate) {
                 # Kiem tra xem nguoi dung co bat tu dong khong
@@ -101,8 +112,8 @@ while ($true) {
                 }
                 
                 if ($isOtEnabled) {
-                    Write-Host ">>> Kich hoat bao cao OT tu dong (14:00) <<<" -ForegroundColor Green
-                    & powershell.exe -File $otScript
+                    Write-Host ">>> Kich hoat SEND bao cao OT tu dong (14:00) <<<" -ForegroundColor Green
+                    & powershell.exe -File $otScript -Action "Send"
                 } else {
                     Write-Host ">>> Bao cao OT tu dong (14:00) dang bi TAT tren he thong <<<" -ForegroundColor Yellow
                 }
