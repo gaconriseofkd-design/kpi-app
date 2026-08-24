@@ -80,6 +80,9 @@ try {
         Write-LogOT "Dang cap nhat PivotTable1 tai Sheet2 va chup anh..."
         $shSheet2 = $wb.Sheets.Item("Sheet2")
         $pt1 = $shSheet2.PivotTables("PivotTable1")
+        
+        # Ép PivotTable tải lại dữ liệu mới nhất từ nguồn (cache)
+        try { $pt1.RefreshTable() } catch { Write-LogOT "Loi khi RefreshTable: $_" "WARN" }
         $pt1.Update()
         
         $ptRange = $pt1.TableRange2
