@@ -78,15 +78,34 @@ try {
 
     if ($Action -eq "Send" -or $Action -eq "Full") {
         Write-LogOT "Dang cap nhat PivotTable1 tai Sheet2 va chup anh..."
-        $shSheet2 = $wb.Sheets.Item("Sheet2")
-        $pt1 = $shSheet2.PivotTables("PivotTable1")
         
-        # Ép PivotTable tải lại dữ liệu mới nhất từ nguồn (cache)
-        try { $pt1.RefreshTable() } catch { Write-LogOT "Loi khi RefreshTable: $_" "WARN" }
-        $pt1.Update()
+        $retryCount = 0
+        $success = $false
+        $ptRange = $null
         
-        $ptRange = $pt1.TableRange2
-        if (-not $ptRange) { $ptRange = $pt1.TableRange1 }
+        while ($retryCount -lt 15 -and -not $success) {
+            try {
+                $shSheet2 = $wb.Sheets.Item("Sheet2")
+                $pt1 = $shSheet2.PivotTables("PivotTable1")
+                
+                # Ép PivotTable tải lại dữ liệu mới nhất từ nguồn (cache)
+                try { $pt1.RefreshTable() } catch { Write-LogOT "Loi khi RefreshTable: $_" "WARN" }
+                $pt1.Update()
+                
+                $ptRange = $pt1.TableRange2
+                if (-not $ptRange) { $ptRange = $pt1.TableRange1 }
+                $success = $true
+            } catch {
+                $retryCount++
+                Write-LogOT "Excel dang ban (thu lan $retryCount/15). Cho 5 giay... Loi: $_" "WARN"
+                Start-Sleep -Seconds 5
+            }
+        }
+        
+        if (-not $success) {
+            Write-LogOT "Khong the cap nhat PivotTable sau nhieu lan thu. Vui long kiem tra xem Excel co dang hien thong bao nao khong." "ERROR"
+            exit 1
+        }
         
         Write-LogOT "Copy bang PivotTable1 duoi dang hinh anh..."
         $ptRange.CopyPicture(1, 2) # xlScreen = 1, xlBitmap = 2
