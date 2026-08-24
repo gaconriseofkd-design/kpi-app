@@ -38,7 +38,9 @@ try {
     $excel = [System.Runtime.InteropServices.Marshal]::GetActiveObject("Excel.Application")
     Write-LogOT "Da ket noi thanh cong voi Excel dang chay (GetActiveObject)."
 } catch {
-    Write-LogOT "Khong tim thay tien trinh Excel nao dang mo. Bo qua gui bao cao OT." "WARN"
+    Write-LogOT "Khong tim thay tien trinh Excel nao dang mo. Bo qua gui bao cao OT va nhac nho Zalo." "WARN"
+    $msg = "Anh Trường mở file OT% giúp để AI gửi báo cáo ạ."
+    & powershell.exe -File (Join-Path $PSScriptRoot "Zalo_Send_Text.ps1") -GroupName "Daily Report" -Message $msg
     exit 0
 }
 
@@ -53,7 +55,9 @@ try {
 } catch {}
 
 if (-not $wb) {
-    Write-LogOT "Nguoi dung chua mo san file % OT.xlsx. Bo qua gui bao cao theo yeu cau." "WARN"
+    Write-LogOT "Nguoi dung chua mo san file % OT.xlsx. Bo qua gui bao cao theo yeu cau va nhac nho Zalo." "WARN"
+    $msg = "Anh Trường mở file OT% giúp để AI gửi báo cáo ạ."
+    & powershell.exe -File (Join-Path $PSScriptRoot "Zalo_Send_Text.ps1") -GroupName "Daily Report" -Message $msg
     try { [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null } catch {}
     exit 0
 }
