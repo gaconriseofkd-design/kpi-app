@@ -57,12 +57,21 @@ if (-not $wb) {
     Write-LogOT "Chua mo san file % OT.xlsx. He thong dang tu dong load file..." "WARN"
     $excel.DisplayAlerts = $false
     if (Test-Path $excelPath) {
-        # Mo file, neu user da mo thi no tu vao Read-Only
-        $wb = $excel.Workbooks.Open($excelPath)
+        # Mo file, truyen $true de mo o che do ReadOnly tranh xung dot lock
+        try {
+            $wb = $excel.Workbooks.Open($excelPath, [System.Type]::Missing, $true)
+        } catch {
+            Write-LogOT "Loi khi Open file bang Excel COM: $_" "ERROR"
+        }
     } else {
         Write-LogOT "Khong tim thay file $excelPath" "ERROR"
         exit 1
     }
+}
+
+if (-not $wb) {
+    Write-LogOT "Khong the nap file Excel vao bo nho, dung qua trinh gui bao cao." "ERROR"
+    exit 1
 }
 
 try {
