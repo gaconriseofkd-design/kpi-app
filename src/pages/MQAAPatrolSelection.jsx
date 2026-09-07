@@ -80,16 +80,14 @@ export default function MQAAPatrolSelection() {
 
         if (data) {
             // Filter out system config rows like '_CONFIG_TARGET_' and legacy duplicate raw names
-            const valid = data.filter((s) => !s.id.startsWith("_"));
+            // Update: Only keep the 9 new official sections
+            const valid = data.filter((s) => OFFICIAL_SECTION_ORDER.includes(s.id));
             
-            // Sort according to official order first
+            // Sort according to official order
             valid.sort((a, b) => {
                 const idxA = OFFICIAL_SECTION_ORDER.indexOf(a.id);
                 const idxB = OFFICIAL_SECTION_ORDER.indexOf(b.id);
-                if (idxA !== -1 && idxB !== -1) return idxA - idxB;
-                if (idxA !== -1) return -1;
-                if (idxB !== -1) return 1;
-                return (a.sort_order || 0) - (b.sort_order || 0);
+                return idxA - idxB;
             });
 
             setSections(valid);
