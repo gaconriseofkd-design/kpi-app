@@ -111,8 +111,6 @@ export default function MQAAPatrolNewTest() {
         } else {
             let num = Number(value);
             if (isNaN(num)) return;
-            if (num < 0) num = 0;
-            if (num > Number(row.maxScore)) num = Number(row.maxScore);
             row.auditScore = num;
         }
 
