@@ -453,7 +453,7 @@ function PatrolSummaryTab() {
 
         worksheet.columns = columns;
 
-        SECTIONS.forEach(sec => {
+        OFFICIAL_SECTIONS.forEach(sec => {
             if (sec === "All") return;
             const displayName = sec.replace(/_/g, " ");
             const rowData = { section: displayName };
@@ -622,7 +622,7 @@ function PatrolSummaryTab() {
                                     activeDot={{ r: 7 }} 
                                     connectNulls 
                                 />
-                                {SECTIONS.filter(s => s !== "All").map((s, idx) => {
+                                {OFFICIAL_SECTIONS.filter(s => s !== "All").map((s, idx) => {
                                     const sectionColors = {
                                         "Raw_Material_Warehouse": "#10b981",
                                         "Lamination": "#8b5cf6",
