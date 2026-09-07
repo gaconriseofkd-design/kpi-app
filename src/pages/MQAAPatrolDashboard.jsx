@@ -4,13 +4,32 @@ import { supabase } from "../lib/supabaseClient";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import { saveExcelJS } from "../lib/fileExport";
+import { usePatrolTarget } from "../utils/mqaaSettings";
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
     BarChart, Bar, Cell
 } from "recharts";
 
+// Helper to normalize legacy section names to official names
+function normalizeSectionKey(sec) {
+    if (!sec) return "Unknown";
+    const s = sec.trim();
+    if (s === "Raw_Material_Warehouse" || s === "Finished_Goods_Warehouse" || s === "Raw Material & FGs Warehouse") {
+        return "Raw Material & FGs Warehouse";
+    }
+    if (s === "Prefitting" || s === "Saw Cutting (Pre-fitting)") return "Saw Cutting (Pre-fitting)";
+    if (s === "Molding" || s === "Moulding (Hot-Press)") return "Moulding (Hot-Press)";
+    if (s === "Leanline_DC" || s === "Lean line DC") return "Lean line DC";
+    if (s === "Leanline_Molded" || s === "Lean line Molded") return "Lean line Molded";
+    if (s === "Cutting_Die_Warehouse" || s === "Cutting Die and Board Managemen") return "Cutting Die and Board Managemen";
+    if (s === "Logo_Warehouse" || s === "Logo WIP Inventory Management") return "Logo WIP Inventory Management";
+    if (s === "Laboratory") return "Laboratory";
+    return s;
+}
+
 export default function MQAAPatrolDashboard() {
     const navigate = useNavigate();
+    const { targetScore } = usePatrolTarget();
     const [selectedDates, setSelectedDates] = useState([new Date().toISOString().split("T")[0]]);
     const [selectedAuditorId, setSelectedAuditorId] = useState("");
     const [availableAuditors, setAvailableAuditors] = useState([]);
@@ -23,7 +42,7 @@ export default function MQAAPatrolDashboard() {
     const [sections, setSections] = useState([]);
     const SECTION_MAP = useMemo(() => {
         const map = {};
-        sections.forEach(s => map[s.id] = s.name);
+        sections.forEach(s => map[s.id] = s.name || s.id);
         return map;
     }, [sections]);
     const SECTION_IDS = useMemo(() => sections.map(s => s.id), [sections]);
@@ -52,7 +71,10 @@ export default function MQAAPatrolDashboard() {
 
     const fetchSections = async () => {
         const { data } = await supabase.from("mqaa_patrol_sections").select("*").order("sort_order", { ascending: true });
-        if (data) setSections(data);
+        if (data) {
+            const valid = data.filter(s => !s.id.startsWith("_"));
+            setSections(valid);
+        }
     };
 
     const fetchData = async () => {
@@ -77,11 +99,12 @@ export default function MQAAPatrolDashboard() {
 
             const grouped = {};
             dayData.forEach(row => {
-                const hasDetails = row.evaluation_data && Array.isArray(row.evaluation_data) && row.evaluation_data.filter(item => !item.is_header && !item.isHeader).length > 0;
+                const hasDetails = row.evaluation_data && Array.isArray(row.evaluation_data) && row.evaluation_data.length > 0;
                 if (!hasDetails) return;
 
-                if (!grouped[row.section]) grouped[row.section] = [];
-                grouped[row.section].push(row);
+                const normalizedSec = normalizeSectionKey(row.section);
+                if (!grouped[normalizedSec]) grouped[normalizedSec] = [];
+                grouped[normalizedSec].push(row);
             });
 
             const summary = {};
@@ -475,21 +498,32 @@ export default function MQAAPatrolDashboard() {
                                         <td className="border border-slate-200 p-3 text-center">Section Performance</td>
                                     </tr>
 
-                                    {sections.map((s) => (
-                                        <tr key={s.id} className="border border-slate-200 hover:bg-slate-50 transition-colors">
-                                            <td className="p-4 text-slate-700 font-bold">{s.name}</td>
-                                            <td className="p-4 text-center font-black text-red-600 border border-slate-200">{summaryData[s.id]?.total_score || 0}</td>
-                                            <td className="p-4 text-center font-black text-red-600 border border-slate-200">{summaryData[s.id]?.total_level || 0}</td>
-                                            <td className="p-4 text-center font-black text-red-600 border border-slate-200">{summaryData[s.id] ? `${summaryData[s.id].overall_performance}%` : "0%"}</td>
-                                        </tr>
-                                    ))}
+                                    {sections.map((s) => {
+                                        const perf = summaryData[s.id]?.overall_performance;
+                                        const isPass = perf !== undefined && Number(perf) >= Number(targetScore);
+                                        return (
+                                            <tr key={s.id} className="border border-slate-200 hover:bg-slate-50 transition-colors">
+                                                <td className="p-4 text-slate-700 font-bold">{s.name}</td>
+                                                <td className="p-4 text-center font-bold text-slate-800 border border-slate-200">{summaryData[s.id]?.total_score || 0}</td>
+                                                <td className="p-4 text-center font-bold text-slate-800 border border-slate-200">{summaryData[s.id]?.total_level || 0}</td>
+                                                <td className={`p-4 text-center font-black border border-slate-200 ${summaryData[s.id] ? (isPass ? 'text-emerald-700 bg-emerald-50/50' : 'text-rose-600 bg-rose-50/50') : 'text-slate-400'}`}>
+                                                    {summaryData[s.id] ? `${summaryData[s.id].overall_performance}%` : "0%"}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
 
-                                    <tr className="bg-amber-400 border border-slate-300">
-                                        <td className="p-4 font-black text-amber-900 text-lg">Overall Insole Performance:</td>
-                                        <td className="p-4 text-center text-amber-900 font-black text-xl border border-slate-300">{overallTotals.score}</td>
-                                        <td className="p-4 text-center text-amber-900 font-black text-xl border border-slate-300">{overallTotals.level}</td>
-                                        <td className="p-4 text-center text-amber-900 font-black text-xl border border-slate-300">{overallTotals.performance}%</td>
-                                    </tr>
+                                    {(() => {
+                                        const isOverallPass = Number(overallTotals.performance) >= Number(targetScore);
+                                        return (
+                                            <tr className={`${isOverallPass ? 'bg-emerald-600' : 'bg-rose-600'} text-white border border-slate-300 transition-colors`}>
+                                                <td className="p-4 font-black text-lg">Overall Insole Performance:</td>
+                                                <td className="p-4 text-center font-black text-xl border border-white/20">{overallTotals.score}</td>
+                                                <td className="p-4 text-center font-black text-xl border border-white/20">{overallTotals.level}</td>
+                                                <td className="p-4 text-center font-black text-2xl border border-white/20">{overallTotals.performance}%</td>
+                                            </tr>
+                                        );
+                                    })()}
                                 </tbody>
                             </table>
                         </div>

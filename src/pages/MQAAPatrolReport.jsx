@@ -5,11 +5,40 @@ import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import { saveExcelJS } from "../lib/fileExport";
 import PasswordModal from "../components/PasswordModal";
+import { usePatrolTarget } from "../utils/mqaaSettings";
 import {
     LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from "recharts";
 
-const SECTIONS = ["All", "Raw_Material_Warehouse", "Lamination", "Prefitting", "Molding", "Leanline_DC", "Leanline_Molded", "Cutting_Die_Warehouse", "Logo_Warehouse", "Finished_Goods_Warehouse"];
+const OFFICIAL_SECTIONS = [
+    "All",
+    "Raw Material & FGs Warehouse",
+    "Lamination",
+    "Saw Cutting (Pre-fitting)",
+    "Moulding (Hot-Press)",
+    "Lean line DC",
+    "Lean line Molded",
+    "Logo WIP Inventory Management",
+    "Cutting Die and Board Managemen",
+    "Laboratory"
+];
+
+// Helper to normalize legacy section names to official names
+function normalizeSectionKey(sec) {
+    if (!sec) return "Unknown";
+    const s = sec.trim();
+    if (s === "Raw_Material_Warehouse" || s === "Finished_Goods_Warehouse" || s === "Raw Material & FGs Warehouse") {
+        return "Raw Material & FGs Warehouse";
+    }
+    if (s === "Prefitting" || s === "Saw Cutting (Pre-fitting)") return "Saw Cutting (Pre-fitting)";
+    if (s === "Molding" || s === "Moulding (Hot-Press)") return "Moulding (Hot-Press)";
+    if (s === "Leanline_DC" || s === "Lean line DC") return "Lean line DC";
+    if (s === "Leanline_Molded" || s === "Lean line Molded") return "Lean line Molded";
+    if (s === "Cutting_Die_Warehouse" || s === "Cutting Die and Board Managemen") return "Cutting Die and Board Managemen";
+    if (s === "Logo_Warehouse" || s === "Logo WIP Inventory Management") return "Logo WIP Inventory Management";
+    if (s === "Laboratory") return "Laboratory";
+    return s.replace(/_/g, " ");
+}
 
 export default function MQAAPatrolReport() {
     const navigate = useNavigate();
@@ -58,6 +87,7 @@ export default function MQAAPatrolReport() {
    TAB 1: PATROL LOGS (EXISTING LOGIC)
    ====================================================================== */
 function PatrolLogsTab({ navigate }) {
+    const { targetScore } = usePatrolTarget();
     const [filters, setFilters] = useState({
         section: "All",
         auditor: "All",
@@ -83,6 +113,7 @@ function PatrolLogsTab({ navigate }) {
             }
         };
         fetchAuditors();
+        handleSearch();
     }, []);
 
     const handleSearch = async () => {
@@ -96,7 +127,23 @@ function PatrolLogsTab({ navigate }) {
                 .order("date", { ascending: false });
 
             if (filters.section && filters.section !== "All") {
-                query = query.eq("section", filters.section);
+                if (filters.section === "Raw Material & FGs Warehouse") {
+                    query = query.in("section", ["Raw Material & FGs Warehouse", "Raw_Material_Warehouse", "Finished_Goods_Warehouse"]);
+                } else if (filters.section === "Saw Cutting (Pre-fitting)") {
+                    query = query.in("section", ["Saw Cutting (Pre-fitting)", "Prefitting"]);
+                } else if (filters.section === "Moulding (Hot-Press)") {
+                    query = query.in("section", ["Moulding (Hot-Press)", "Molding"]);
+                } else if (filters.section === "Lean line DC") {
+                    query = query.in("section", ["Lean line DC", "Leanline_DC"]);
+                } else if (filters.section === "Lean line Molded") {
+                    query = query.in("section", ["Lean line Molded", "Leanline_Molded"]);
+                } else if (filters.section === "Cutting Die and Board Managemen") {
+                    query = query.in("section", ["Cutting Die and Board Managemen", "Cutting_Die_Warehouse"]);
+                } else if (filters.section === "Logo WIP Inventory Management") {
+                    query = query.in("section", ["Logo WIP Inventory Management", "Logo_Warehouse"]);
+                } else {
+                    query = query.eq("section", filters.section);
+                }
             }
 
             if (filters.auditor && filters.auditor !== "All") {
@@ -115,103 +162,64 @@ function PatrolLogsTab({ navigate }) {
 
     const confirmDeleteRecord = async () => {
         if (!selectedRecord) return;
+        setLoading(true);
         try {
             const { error } = await supabase
                 .from("mqaa_patrol_logs")
                 .delete()
                 .eq("id", selectedRecord.id);
+
             if (error) throw error;
-            setResults(prev => prev.filter(r => r.id !== selectedRecord.id));
-            alert("Đã xóa bản lưu thành công.");
+            alert("Đã xóa phiếu đánh giá!");
+            handleSearch();
         } catch (error) {
             alert("Lỗi khi xóa: " + error.message);
         } finally {
+            setLoading(false);
             setSelectedRecord(null);
+            setShowPasswordModal(false);
         }
     };
 
     const exportToExcel = async (record) => {
         const workbook = new ExcelJS.Workbook();
-        const worksheet = workbook.addWorksheet("MQAA Patrol Report");
+        const worksheet = workbook.addWorksheet("MQAA Patrol Details");
 
-        // Title
+        // Headers
         worksheet.mergeCells("A1:F1");
-        const titleCell = worksheet.getCell("A1");
-        titleCell.value = `PHIẾU ĐÁNH GIÁ MQAA - SECTION ${record.section.toUpperCase()}`;
-        titleCell.font = { bold: true, size: 16, color: { argb: "FFFFFFFF" } };
-        titleCell.alignment = { vertical: "middle", horizontal: "center" };
-        titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } };
+        worksheet.getCell("A1").value = `MQAA PATROL EVALUATION - SECTION: ${record.section.toUpperCase()}`;
+        worksheet.getCell("A1").font = { bold: true, size: 14, color: { argb: "FFFFFFFF" } };
+        worksheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } };
+        worksheet.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
+        worksheet.getRow(1).height = 30;
 
-        // Header Info
-        worksheet.getCell("A3").value = "Auditor:";
-        worksheet.getCell("C3").value = record.auditor_name;
-        worksheet.getCell("A4").value = "ID:";
-        worksheet.getCell("C4").value = record.auditor_id;
-        worksheet.getCell("A5").value = "Date of Audit:";
-        worksheet.getCell("C5").value = record.date;
-        worksheet.getCell("A6").value = "Section:";
-        worksheet.getCell("C6").value = record.section;
-        worksheet.getCell("A7").value = "Overall Performance:";
-        const perfCell = worksheet.getCell("C7");
-        perfCell.value = Number(record.overall_performance) / 100;
-        perfCell.font = { bold: true, color: { argb: "FFEF4444" } };
-        perfCell.numFmt = '0%';
+        worksheet.addRow([]);
+        worksheet.addRow(["Auditor Name:", record.auditor_name, "", "Date:", record.date]);
+        worksheet.addRow(["Auditor ID:", record.auditor_id, "", "Overall Performance:", `${record.overall_performance}%`]);
+        worksheet.addRow(["Total Score:", record.total_score, "", "Total Level:", record.total_level]);
+        worksheet.addRow([]);
 
-        // Fetch subLabel
-        const { data: dbCriteria } = await supabase.from("mqaa_patrol_criteria").select("no, sub_label").eq("section_id", record.section);
-        const criteriaMap = {};
-        (dbCriteria || []).forEach(c => criteriaMap[c.no] = c.sub_label);
-
-        // Table Header
-        const headerRow = worksheet.getRow(9);
-        headerRow.values = ["No.", "Criteria", "Score", "Level", "Image Link", "Description"];
+        // Criteria Table
+        const headerRow = worksheet.addRow(["No.", "Criteria", "Score", "Level", "Images", "Description"]);
         headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
-        headerRow.eachCell((cell) => {
-            cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } };
-            cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
-        });
+        headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } };
+        headerRow.height = 20;
 
-        // Data Rows
-        record.evaluation_data.forEach((item) => {
-            const isHeader = item.is_header || item.isHeader;
-            const scoreVal = (!isHeader && item.score !== null && item.score !== undefined && item.score !== "") ? Number(item.score) : "";
-            const levelVal = (!isHeader && item.level !== null && item.level !== undefined && item.level !== "") ? Number(item.level) : "";
-            const englishText = item.sub_label || item.subLabel || criteriaMap[item.no] || "";
-
+        record.evaluation_data?.forEach((item) => {
             const row = worksheet.addRow([
                 item.no,
-                englishText ? {
-                    richText: [
-                        { text: item.label, font: { bold: !!isHeader, size: 10, color: { argb: 'FF000000' } } },
-                        { text: "\n" + englishText, font: { italic: true, size: 9, color: { argb: 'FF2563EB' } } }
-                    ]
-                } : item.label,
-                scoreVal,
-                levelVal,
-                item.image_url ? { text: "Link hình ảnh", hyperlink: item.image_url } : "",
+                item.titleVn || item.label || "",
+                item.max_score || item.score || 0,
+                item.audit_score !== undefined ? item.audit_score : (item.level || 0),
+                Array.isArray(item.image_urls) ? item.image_urls.join("\n") : (item.image_url || "None"),
                 item.description || ""
             ]);
-
-            if (isHeader) {
-                row.eachCell((cell, colNumber) => {
-                    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFFDBA74" } };
-                    if (colNumber !== 2) cell.font = { bold: true };
-                });
-            }
 
             row.eachCell((cell) => {
                 cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
                 cell.alignment = { wrapText: true, vertical: "middle" };
             });
         });
-
-        // Column Widths
-        worksheet.getColumn(1).width = 10;
-        worksheet.getColumn(2).width = 60;
-        worksheet.getColumn(3).width = 10;
-        worksheet.getColumn(4).width = 10;
-        worksheet.getColumn(5).width = 20;
-        worksheet.getColumn(6).width = 30;
 
         const buffer = await workbook.xlsx.writeBuffer();
         saveExcelJS(buffer, `MQAA_Patrol_${record.section}_${record.date}.xlsx`);
@@ -224,7 +232,7 @@ function PatrolLogsTab({ navigate }) {
                 onClose={() => setShowPasswordModal(false)}
                 onSuccess={() => {
                     if (modalMode === "edit" && selectedRecord) {
-                        navigate(`/mqaa-patrol/entry/${selectedRecord.section}/${selectedRecord.id}`);
+                        navigate(`/mqaa-patrol/entry/${encodeURIComponent(selectedRecord.section)}/${selectedRecord.id}`);
                     } else if (modalMode === "delete") {
                         confirmDeleteRecord();
                     }
@@ -240,7 +248,7 @@ function PatrolLogsTab({ navigate }) {
                         value={filters.section}
                         onChange={(e) => setFilters({ ...filters, section: e.target.value })}
                     >
-                        {SECTIONS.map((s) => (
+                        {OFFICIAL_SECTIONS.map((s) => (
                             <option key={s} value={s}>{s}</option>
                         ))}
                     </select>
@@ -290,32 +298,35 @@ function PatrolLogsTab({ navigate }) {
                         {results.length === 0 ? (
                             <tr><td colSpan="7" className="p-10 text-center text-gray-500 italic">Không tìm thấy dữ liệu</td></tr>
                         ) : (
-                            results.map((res, idx) => (
-                                <tr key={res.id} className="hover:bg-gray-50 transition-colors">
-                                    <td className="p-4 font-bold text-gray-700">{idx + 1}</td>
-                                    <td className="p-4 text-gray-600">{res.date}</td>
-                                    <td className="p-4">
-                                        <div className="font-bold text-indigo-900">{res.auditor_name}</div>
-                                        <div className="text-xs text-gray-400">ID: {res.auditor_id}</div>
-                                    </td>
-                                    <td className="p-4 text-center">
-                                        <span className="text-xs font-bold bg-slate-100 px-2 py-1 rounded text-slate-600 border border-slate-200">
-                                            {res.section?.replace(/_/g, " ")}
-                                        </span>
-                                    </td>
-                                    <td className="p-4 text-center font-black text-red-600">{res.total_score}</td>
-                                    <td className="p-4 text-center">
-                                        <span className={`px-3 py-1 rounded-full text-xs font-black ${Number(res.overall_performance) >= 90 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                                            {res.overall_performance}%
-                                        </span>
-                                    </td>
-                                    <td className="p-4 text-right flex justify-end gap-2">
-                                        <button onClick={() => { setSelectedRecord(res); setModalMode("edit"); setShowPasswordModal(true); }} className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-4 py-1.5 rounded-lg text-sm font-bold transition-all border border-indigo-200">Sửa</button>
-                                        <button onClick={() => { setSelectedRecord(res); setModalMode("delete"); setShowPasswordModal(true); }} className="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-1.5 rounded-lg text-sm font-bold transition-all border border-red-100">Xóa</button>
-                                        <button onClick={() => exportToExcel(res)} className="bg-green-100 hover:bg-green-200 text-green-700 px-4 py-1.5 rounded-lg text-sm font-bold transition-all border border-green-200">Tải (.xlsx)</button>
-                                    </td>
-                                </tr>
-                            ))
+                            results.map((res, idx) => {
+                                const isPass = Number(res.overall_performance) >= Number(targetScore);
+                                return (
+                                    <tr key={res.id} className="hover:bg-gray-50 transition-colors">
+                                        <td className="p-4 font-bold text-gray-700">{idx + 1}</td>
+                                        <td className="p-4 text-gray-600">{res.date}</td>
+                                        <td className="p-4">
+                                            <div className="font-bold text-indigo-900">{res.auditor_name}</div>
+                                            <div className="text-xs text-gray-400">ID: {res.auditor_id}</div>
+                                        </td>
+                                        <td className="p-4 text-center">
+                                            <span className="text-xs font-bold bg-slate-100 px-2.5 py-1 rounded text-slate-700 border border-slate-200">
+                                                {normalizeSectionKey(res.section)}
+                                            </span>
+                                        </td>
+                                        <td className="p-4 text-center font-black text-indigo-900">{res.total_score}</td>
+                                        <td className="p-4 text-center">
+                                            <span className={`px-3 py-1 rounded-full text-xs font-black ${isPass ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
+                                                {res.overall_performance}%
+                                            </span>
+                                        </td>
+                                        <td className="p-4 text-right flex justify-end gap-2">
+                                            <button onClick={() => { setSelectedRecord(res); setModalMode("edit"); setShowPasswordModal(true); }} className="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-4 py-1.5 rounded-lg text-sm font-bold transition-all border border-indigo-200">Sửa</button>
+                                            <button onClick={() => { setSelectedRecord(res); setModalMode("delete"); setShowPasswordModal(true); }} className="bg-red-50 hover:bg-red-100 text-red-600 px-4 py-1.5 rounded-lg text-sm font-bold transition-all border border-red-100">Xóa</button>
+                                            <button onClick={() => exportToExcel(res)} className="bg-green-100 hover:bg-green-200 text-green-700 px-4 py-1.5 rounded-lg text-sm font-bold transition-all border border-green-200">Tải (.xlsx)</button>
+                                        </td>
+                                    </tr>
+                                );
+                            })
                         )}
                     </tbody>
                 </table>
@@ -328,6 +339,7 @@ function PatrolLogsTab({ navigate }) {
    TAB 2: PATROL SUMMARY (MONTHLY)
    ====================================================================== */
 function PatrolSummaryTab() {
+    const { targetScore } = usePatrolTarget();
     const [monthFrom, setMonthFrom] = useState(new Date().toISOString().slice(0, 7));
     const [monthTo, setMonthTo] = useState(new Date().toISOString().slice(0, 7));
     const [data, setData] = useState([]);
@@ -351,10 +363,10 @@ function PatrolSummaryTab() {
 
             const stats = {};
             logs.forEach(l => {
-                const hasDetails = l.evaluation_data && Array.isArray(l.evaluation_data) && l.evaluation_data.filter(item => !item.is_header && !item.isHeader).length > 0;
+                const hasDetails = l.evaluation_data && Array.isArray(l.evaluation_data) && l.evaluation_data.length > 0;
                 if (!hasDetails) return;
 
-                const s = l.section || "Unknown";
+                const s = normalizeSectionKey(l.section);
                 if (!stats[s]) stats[s] = { count: 0, sum: 0 };
                 stats[s].count++;
                 stats[s].sum += Number(l.overall_performance || 0);
@@ -362,7 +374,7 @@ function PatrolSummaryTab() {
 
             const result = Object.entries(stats).map(([sec, val]) => ({
                 key: sec,
-                sectionName: sec.replace(/_/g, " "),
+                sectionName: sec,
                 count: val.count,
                 avgPerformance: val.count ? (val.sum / val.count) : 0
             })).sort((a, b) => b.avgPerformance - a.avgPerformance);
@@ -386,7 +398,7 @@ function PatrolSummaryTab() {
                 };
 
                 const monthLogs = logs.filter(l => {
-                    const hasDetails = l.evaluation_data && Array.isArray(l.evaluation_data) && l.evaluation_data.filter(item => !item.is_header && !item.isHeader).length > 0;
+                    const hasDetails = l.evaluation_data && Array.isArray(l.evaluation_data) && l.evaluation_data.length > 0;
                     return l.date && l.date.startsWith(m) && hasDetails;
                 });
 
@@ -399,15 +411,14 @@ function PatrolSummaryTab() {
                 }
 
                 // Section averages
-                SECTIONS.forEach(sec => {
+                OFFICIAL_SECTIONS.forEach(sec => {
                     if (sec === "All") return;
-                    const secLogs = monthLogs.filter(l => l.section === sec);
-                    const displayName = sec.replace(/_/g, " ");
+                    const secLogs = monthLogs.filter(l => normalizeSectionKey(l.section) === sec);
                     if (secLogs.length > 0) {
                         const sum = secLogs.reduce((acc, l) => acc + Number(l.overall_performance || 0), 0);
-                        dataPoint[displayName] = parseFloat((sum / secLogs.length).toFixed(1));
+                        dataPoint[sec] = parseFloat((sum / secLogs.length).toFixed(1));
                     } else {
-                        dataPoint[displayName] = null;
+                        dataPoint[sec] = null;
                     }
                 });
 
@@ -552,7 +563,7 @@ function PatrolSummaryTab() {
                                     <td className="p-3 font-bold text-slate-800">{d.sectionName}</td>
                                     <td className="p-3 text-center text-slate-600">{d.count}</td>
                                     <td className="p-3 text-center">
-                                        <span className={`px-3 py-1 rounded-full text-xs font-black ${d.avgPerformance >= 90 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                        <span className={`px-3 py-1 rounded-full text-xs font-black ${d.avgPerformance >= Number(targetScore) ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
                                             {d.avgPerformance.toFixed(1)}%
                                         </span>
                                     </td>

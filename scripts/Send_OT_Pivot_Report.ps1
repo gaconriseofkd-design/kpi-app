@@ -1,4 +1,4 @@
-# scripts/Send_OT_Pivot_Report.ps1
+﻿# scripts/Send_OT_Pivot_Report.ps1
 param(
     [string]$Action = "Full" # Co the truyen "Refresh", "Send", hoac "Full"
 )
@@ -77,15 +77,32 @@ if (-not $wb) {
 try {
     if ($Action -eq "Refresh" -or $Action -eq "Full") {
         Write-LogOT "Dang thuc hien lenh REFRESH du lieu..."
-        try {
-            $shControl = $wb.Sheets.Item("ControlManhour5")
-            foreach ($lo in $shControl.ListObjects) {
-                try { $lo.QueryTable.Refresh($false) } catch {}
-            }
-        } catch {}
         
-        $wb.RefreshAll()
-        Write-LogOT "Da goi lenh RefreshAll()."
+        $retryRefresh = 0
+        $successRefresh = $false
+        
+        while ($retryRefresh -lt 15 -and -not $successRefresh) {
+            try {
+                # Refresh bang cach co the thu
+                $shControl = $wb.Sheets.Item("ControlManhour5")
+                foreach ($lo in $shControl.ListObjects) {
+                    try { $lo.QueryTable.Refresh($false) } catch {}
+                }
+                
+                $wb.RefreshAll()
+                Write-LogOT "Da goi lenh RefreshAll()."
+                $successRefresh = $true
+            } catch {
+                $retryRefresh++
+                Write-LogOT "Excel dang ban khi thuc hien Refresh (thu lan $retryRefresh/15). Cho 5 giay... Loi: $_" "WARN"
+                Start-Sleep -Seconds 5
+            }
+        }
+        
+        if (-not $successRefresh) {
+            Write-LogOT "Khong the RefreshAll sau nhieu lan thu. Vui long kiem tra Excel." "ERROR"
+            throw "RefreshAll() failed: Excel is busy."
+        }
     }
 
     if ($Action -eq "Send" -or $Action -eq "Full") {

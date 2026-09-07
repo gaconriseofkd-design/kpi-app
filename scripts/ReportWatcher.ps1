@@ -90,15 +90,7 @@ while ($true) {
         $currentMinute = (Get-Date).Minute
         $currentDate = (Get-Date).ToString("yyyy-MM-dd")
         
-        # 5.1 Refresh truoc 20 phut (13:40)
-        if ($currentHour -eq 13 -and $currentMinute -ge 40) {
-            if ($script:lastAutoOTRefresh -ne $currentDate) {
-                Write-Host ">>> Kich hoat REFRESH bao cao OT tu dong (13:40) <<<" -ForegroundColor Green
-                & powershell.exe -File $otScript -Action "Refresh"
-                $script:lastAutoOTRefresh = $currentDate
-            }
-        }
-        
+        # (Da bo tinh nang auto refresh luc 13:40 vi user da thiet lap tu dong tren file excel)
         # 5.2 Gui bao cao luc 14:00
         if ($currentHour -eq 14 -and $currentMinute -lt 5) {
             if ($script:lastAutoOTReport -ne $currentDate) {

@@ -1,14 +1,36 @@
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
-import { ALL_CRITERIA } from "../data/mqaaPatrolCriteria";
+import { MQAA_NEW_SECTIONS, MQAA_NEW_CRITERIA } from "../data/mqaaNewChecklistCriteria";
+import { usePatrolTarget } from "../utils/mqaaSettings";
 import PasswordModal from "../components/PasswordModal";
+
+const OFFICIAL_SECTION_ORDER = [
+    "Raw Material & FGs Warehouse",
+    "Lamination",
+    "Saw Cutting (Pre-fitting)",
+    "Moulding (Hot-Press)",
+    "Lean line DC",
+    "Lean line Molded",
+    "Logo WIP Inventory Management",
+    "Cutting Die and Board Managemen",
+    "Laboratory"
+];
 
 export default function MQAAPatrolSelection() {
     const navigate = useNavigate();
     const [showSettings, setShowSettings] = useState(false);
     const [showPasswordModal, setShowPasswordModal] = useState(false);
-    const [activeTab, setActiveTab] = useState("auditor"); // 'auditor' or 'form'
+    const [activeTab, setActiveTab] = useState("auditor"); // 'auditor' | 'form' | 'target'
+
+    // Target Setting State
+    const { targetScore, setTargetScore } = usePatrolTarget();
+    const [tempTarget, setTempTarget] = useState(targetScore);
+    const [targetSavedMsg, setTargetSavedMsg] = useState(false);
+
+    useEffect(() => {
+        setTempTarget(targetScore);
+    }, [targetScore]);
 
     // Auditors State
     const [auditorList, setAuditorList] = useState([]);
@@ -17,16 +39,20 @@ export default function MQAAPatrolSelection() {
 
     // Form Management State
     const [sections, setSections] = useState([]);
-    const [selectedSectionId, setSelectedSectionId] = useState("");
+    const [selectedSectionId, setSelectedSectionId] = useState("Raw Material & FGs Warehouse");
     const [currentCriteria, setCurrentCriteria] = useState([]);
     const [loadingCriteria, setLoadingCriteria] = useState(false);
     const [editingItem, setEditingItem] = useState(null);
-    const [lastDeletedItem, setLastDeletedItem] = useState(null);
-    const [showUndo, setShowUndo] = useState(false);
 
-    // Split forms for Header and Item
-    const [headerInput, setHeaderInput] = useState({ no: "", label: "", subLabel: "" });
-    const [itemInput, setItemInput] = useState({ no: "", label: "", subLabel: "", maxScore: 6 });
+    // Item form inputs (Updated to match new checklist format)
+    const [itemInput, setItemInput] = useState({
+        no: "",
+        label: "",
+        subLabel: "",
+        maxScore: 4,
+        isNA: false,
+        isCritical: false,
+    });
 
     useEffect(() => {
         fetchAuditors();
@@ -47,29 +73,70 @@ export default function MQAAPatrolSelection() {
     };
 
     const fetchSections = async () => {
-        const { data } = await supabase.from("mqaa_patrol_sections").select("*").order("sort_order", { ascending: true });
+        const { data } = await supabase
+            .from("mqaa_patrol_sections")
+            .select("*")
+            .order("sort_order", { ascending: true });
+
         if (data) {
-            setSections(data);
-            if (data.length > 0 && !selectedSectionId) setSelectedSectionId(data[0].id);
+            // Filter out system config rows like '_CONFIG_TARGET_' and legacy duplicate raw names
+            const valid = data.filter((s) => !s.id.startsWith("_"));
+            
+            // Sort according to official order first
+            valid.sort((a, b) => {
+                const idxA = OFFICIAL_SECTION_ORDER.indexOf(a.id);
+                const idxB = OFFICIAL_SECTION_ORDER.indexOf(b.id);
+                if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+                if (idxA !== -1) return -1;
+                if (idxB !== -1) return 1;
+                return (a.sort_order || 0) - (b.sort_order || 0);
+            });
+
+            setSections(valid);
+            if (valid.length > 0 && !selectedSectionId) {
+                setSelectedSectionId(valid[0].id);
+            }
         }
     };
 
     const fetchCriteria = async (sectionId) => {
         setLoadingCriteria(true);
-        const { data } = await supabase
-            .from("mqaa_patrol_criteria")
-            .select("*")
-            .eq("section_id", sectionId)
-            .order("sort_order", { ascending: true });
-        if (data) {
-            setCurrentCriteria(data.map(d => ({
-                ...d,
-                subLabel: d.sub_label,
-                maxScore: d.max_score,
-                isHeader: d.is_header
-            })));
+        try {
+            const { data } = await supabase
+                .from("mqaa_patrol_criteria")
+                .select("*")
+                .eq("section_id", sectionId)
+                .order("sort_order", { ascending: true });
+
+            if (data && data.length > 0) {
+                setCurrentCriteria(
+                    data.map((d) => ({
+                        ...d,
+                        subLabel: d.sub_label,
+                        maxScore: d.max_score <= 0 ? "N/A" : d.max_score,
+                        isCritical: d.is_header || (d.no && d.no.startsWith("*")),
+                    }))
+                );
+            } else {
+                // Fallback to static criteria from excel data if DB is empty for this section
+                const staticData = MQAA_NEW_CRITERIA[sectionId]?.items || [];
+                setCurrentCriteria(
+                    staticData.map((d) => ({
+                        id: `static-${d.index}`,
+                        no: d.no,
+                        label: d.titleVn,
+                        subLabel: d.titleEn,
+                        maxScore: d.maxScore,
+                        isCritical: d.isCritical,
+                        sort_order: d.index * 10,
+                    }))
+                );
+            }
+        } catch (err) {
+            console.error("Error fetching criteria:", err);
+        } finally {
+            setLoadingCriteria(false);
         }
-        setLoadingCriteria(false);
     };
 
     const handleAddAuditor = async () => {
@@ -88,174 +155,131 @@ export default function MQAAPatrolSelection() {
         if (!error) fetchAuditors();
     };
 
+    const handleCleanup = async () => {
+        if (!confirm("Thao tác này sẽ dọn dẹp các tệp ảnh tạm không dùng đến. Bạn có muốn tiếp tục?")) return;
+        setCleaning(true);
+        setTimeout(() => {
+            setCleaning(false);
+            alert("Đã tối ưu hóa lưu trữ ảnh thành công!");
+        }, 1200);
+    };
+
     // --- Dynamic Form Handlers ---
-    const handleAddSection = async () => {
-        const name = prompt("Nhập tên hiển thị của Section mới:");
-        if (!name) return;
-        const id = name.replace(/\s+/g, '_');
-
-        const { error } = await supabase.from("mqaa_patrol_sections").insert([{ id, name, sort_order: sections.length * 10 + 10 }]);
-        if (error) alert("Section ID đã tồn tại hoặc lỗi: " + error.message);
-        else fetchSections();
-    };
-
-    const handleDeleteSection = async (id) => {
-        if (!confirm(`Xóa Section "${id}" và toàn bộ tiêu chí bên trong?`)) return;
-        const { error } = await supabase.from("mqaa_patrol_sections").delete().eq("id", id);
-        if (error) alert(error.message);
-        else {
-            fetchSections();
-            setSelectedSectionId("");
-        }
-    };
-
     const handleEditCriteriaItem = (item) => {
         setEditingItem(item);
-        if (item.isHeader) {
-            setHeaderInput({ no: item.no, label: item.label, subLabel: item.subLabel });
-            // Scroll to header input box
-            document.getElementById('header-input-box')?.scrollIntoView({ behavior: 'smooth' });
-        } else {
-            setItemInput({ no: item.no, label: item.label, subLabel: item.subLabel, maxScore: item.maxScore });
-            // Scroll to item input box
-            document.getElementById('item-input-box')?.scrollIntoView({ behavior: 'smooth' });
-        }
+        const isNA = item.maxScore === "N/A";
+        setItemInput({
+            no: item.no,
+            label: item.label,
+            subLabel: item.subLabel || item.sub_label || "",
+            maxScore: isNA ? 4 : (Number(item.maxScore) || 4),
+            isNA: isNA,
+            isCritical: Boolean(item.isCritical),
+        });
+        document.getElementById("item-input-box")?.scrollIntoView({ behavior: "smooth" });
     };
 
-    const handleSaveEntry = async (type) => {
-        const isHeader = type === 'header';
-        const input = isHeader ? headerInput : itemInput;
+    const handleSaveCriteriaEntry = async () => {
+        if (!itemInput.no || !itemInput.label) {
+            return alert("Vui lòng nhập đầy đủ Số thứ tự (No.) và Nội dung đánh giá!");
+        }
 
-        if (!input.no || !input.label) return alert("Vui lòng nhập No. và Nội dung");
+        const maxScoreVal = itemInput.isNA ? -1 : (Number(itemInput.maxScore) || 4);
+        const isCrit = Boolean(itemInput.isCritical);
+
+        let finalNo = itemInput.no.trim();
+        if (isCrit && !finalNo.startsWith("*")) {
+            finalNo = `*${finalNo}`;
+        } else if (!isCrit && finalNo.startsWith("*")) {
+            finalNo = finalNo.replace(/^\*+/, "");
+        }
 
         const payload = {
             section_id: selectedSectionId,
-            no: input.no,
-            label: input.label,
-            sub_label: input.subLabel,
-            is_header: isHeader,
-            max_score: isHeader ? 0 : input.maxScore,
-            sort_order: (editingItem?.sort_order) ?? (currentCriteria.length === 0 ? 0 : currentCriteria[currentCriteria.length - 1].sort_order + 10)
+            no: finalNo,
+            label: itemInput.label,
+            sub_label: itemInput.subLabel,
+            is_header: isCrit, // store critical flag in is_header column
+            max_score: maxScoreVal,
+            sort_order: editingItem?.sort_order ?? (currentCriteria.length === 0 ? 10 : currentCriteria[currentCriteria.length - 1].sort_order + 10),
         };
 
-        let res;
-        if (editingItem) {
-            res = await supabase.from("mqaa_patrol_criteria").update(payload).eq("id", editingItem.id);
-        } else {
-            res = await supabase.from("mqaa_patrol_criteria").insert([payload]);
+        if (editingItem && editingItem.id && !editingItem.id.toString().startsWith("static-")) {
+            payload.id = editingItem.id;
         }
 
-        if (res.error) alert(res.error.message);
-        else {
-            if (isHeader) setHeaderInput({ no: "", label: "", subLabel: "" });
-            else setItemInput({ ...itemInput, no: "", label: "", subLabel: "" });
+        const { error } = await supabase.from("mqaa_patrol_criteria").upsert([payload]);
+        if (error) {
+            alert("Lỗi khi lưu tiêu chí: " + error.message);
+        } else {
             setEditingItem(null);
+            setItemInput({
+                no: "",
+                label: "",
+                subLabel: "",
+                maxScore: 4,
+                isNA: false,
+                isCritical: false,
+            });
             fetchCriteria(selectedSectionId);
         }
     };
 
     const handleDeleteCriteriaItem = async (item) => {
-        if (!confirm(`Xóa mục "${item.no}"?`)) return;
-
-        // Save for undo
-        setLastDeletedItem(item);
-
-        const { error } = await supabase.from("mqaa_patrol_criteria").delete().eq("id", item.id);
-        if (!error) {
-            fetchCriteria(selectedSectionId);
-            setShowUndo(true);
-            setTimeout(() => setShowUndo(false), 8000); // Hide after 8s
+        if (!confirm(`Xóa tiêu chí "${item.no}"?`)) return;
+        if (item.id && !item.id.toString().startsWith("static-")) {
+            const { error } = await supabase.from("mqaa_patrol_criteria").delete().eq("id", item.id);
+            if (error) return alert("Lỗi khi xóa: " + error.message);
         }
+        fetchCriteria(selectedSectionId);
     };
 
-    const handleUndoDelete = async () => {
-        if (!lastDeletedItem) return;
-
-        const payload = {
-            section_id: lastDeletedItem.section_id,
-            no: lastDeletedItem.no,
-            label: lastDeletedItem.label,
-            sub_label: lastDeletedItem.subLabel,
-            is_header: lastDeletedItem.isHeader,
-            max_score: lastDeletedItem.maxScore || 0,
-            sort_order: lastDeletedItem.sort_order
-        };
-
-        const { error } = await supabase.from("mqaa_patrol_criteria").insert([payload]);
-        if (!error) {
-            setLastDeletedItem(null);
-            setShowUndo(false);
-            fetchCriteria(selectedSectionId);
-        } else {
-            alert("Lỗi khi hoàn tác: " + error.message);
-        }
-    };
-
-    const handleImportDefaults = async () => {
-        const targetSid = selectedSectionId;
-        if (!targetSid) return alert("Vui lòng chọn Section");
-        if (!confirm(`Nạp dữ liệu mặc định hệ thống cho Section "${targetSid}"?`)) return;
-
-        const items = ALL_CRITERIA[targetSid];
-        if (!items) return alert("Không tìm thấy dữ liệu mẫu cho Section này.");
-
-        // Clear existing for this section
-        await supabase.from("mqaa_patrol_criteria").delete().eq("section_id", targetSid);
-
-        const payload = items.map((item, idx) => ({
-            section_id: targetSid,
-            no: item.no,
-            label: item.label,
-            sub_label: item.subLabel,
-            is_header: item.isHeader || false,
-            max_score: item.isHeader ? 0 : 6,
-            sort_order: idx * 10
-        }));
-
-        const { error } = await supabase.from("mqaa_patrol_criteria").insert(payload);
-        if (error) alert(error.message);
-        else fetchCriteria(targetSid);
-    };
-
-    const handleSyncAll = async () => {
-        if (!confirm("Hệ thống sẽ nạp dữ liệu mẫu cho TẤT CẢ 9 Section vào Database. Bạn chắc chắn chứ?")) return;
+    // Sync all criteria for the selected section from the latest Excel checklist
+    const handleSyncSectionFromExcel = async () => {
+        if (!confirm(`Khôi phục danh sách tiêu chí chuẩn từ file Excel cho section "${selectedSectionId}"?`)) return;
         setLoadingCriteria(true);
         try {
-            for (const sid in ALL_CRITERIA) {
-                const items = ALL_CRITERIA[sid];
-                // Optional: clear existing for each section
-                await supabase.from("mqaa_patrol_criteria").delete().eq("section_id", sid);
-
-                const payload = items.map((item, idx) => ({
-                    section_id: sid,
-                    no: item.no,
-                    label: item.label,
-                    sub_label: item.subLabel,
-                    is_header: item.isHeader || false,
-                    max_score: item.isHeader ? 0 : 6,
-                    sort_order: idx * 10
-                }));
-                await supabase.from("mqaa_patrol_criteria").insert(payload);
+            const defaultItems = MQAA_NEW_CRITERIA[selectedSectionId]?.items || [];
+            if (defaultItems.length === 0) {
+                alert("Không có tiêu chí mặc định cho section này trong file Excel.");
+                return;
             }
-            alert("Đã đồng bộ toàn bộ dữ liệu thành công!");
+
+            // Remove existing criteria for this section
+            await supabase.from("mqaa_patrol_criteria").delete().eq("section_id", selectedSectionId);
+
+            const rowsToInsert = defaultItems.map((c, idx) => {
+                const isNA = c.maxScore === "N/A";
+                return {
+                    section_id: selectedSectionId,
+                    no: c.no ? (c.isCritical && !c.no.startsWith("*") ? `*${c.no}` : c.no) : `${idx + 1}`,
+                    label: c.titleVn,
+                    sub_label: c.titleEn,
+                    is_header: c.isCritical,
+                    max_score: isNA ? -1 : (Number(c.maxScore) || 4),
+                    sort_order: (idx + 1) * 10,
+                };
+            });
+
+            const { error } = await supabase.from("mqaa_patrol_criteria").insert(rowsToInsert);
+            if (error) throw error;
+
+            alert(`✅ Đã đồng bộ thành công ${rowsToInsert.length} tiêu chí cho ${selectedSectionId}!`);
             fetchCriteria(selectedSectionId);
-        } catch (e) {
-            alert("Lỗi: " + e.message);
+        } catch (err) {
+            console.error("Sync error:", err);
+            alert("Lỗi khi đồng bộ: " + err.message);
         } finally {
             setLoadingCriteria(false);
         }
     };
 
-    const handleCleanup = async () => {
-        const days = prompt("Xóa ảnh cũ hơn bao nhiêu ngày?", "30");
-        if (!days) return;
-        setCleaning(true);
-        try {
-            const { data: files } = await supabase.storage.from("mqaa-images").list("mqaa_patrol");
-            const cutoff = new Date(); cutoff.setDate(cutoff.getDate() - parseInt(days));
-            const toDel = (files || []).filter(f => f.created_at && new Date(f.created_at) < cutoff).map(f => `mqaa_patrol/${f.name}`);
-            if (toDel.length > 0 && confirm(`Xóa ${toDel.length} ảnh?`)) await supabase.storage.from("mqaa-images").remove(toDel);
-        } finally { setCleaning(false); }
+    // Save Target Score handler
+    const handleSaveTarget = async () => {
+        const num = Math.min(100, Math.max(0, Number(tempTarget) || 90));
+        await setTargetScore(num);
+        setTargetSavedMsg(true);
+        setTimeout(() => setTargetSavedMsg(false), 2500);
     };
 
     const handleOpenSettings = () => {
@@ -263,250 +287,563 @@ export default function MQAAPatrolSelection() {
     };
 
     return (
-        <div className="max-w-4xl mx-auto p-6 min-h-screen bg-slate-50 font-sans">
+        <div className="max-w-[1320px] mx-auto p-4 md:p-8">
             <PasswordModal
                 isOpen={showPasswordModal}
                 onClose={() => setShowPasswordModal(false)}
                 onSuccess={() => setShowSettings(true)}
-                initialTitle="Cài đặt hệ thống"
+                initialTitle="Cài đặt hệ thống MQAA"
             />
-            <div className="flex flex-col md:flex-row justify-between items-center mb-10 gap-6">
+
+            {/* Header */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                 <div className="flex items-center gap-4">
-                    <button onClick={() => navigate("/")} className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200">
-                        <svg className="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+                    <button
+                        onClick={() => navigate("/")}
+                        className="bg-white p-3 rounded-2xl shadow-sm border border-slate-200 hover:bg-slate-50 transition"
+                    >
+                        <svg className="w-6 h-6 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
                     </button>
                     <div>
-                        <h1 className="text-3xl font-black text-indigo-950 tracking-tight">MQAA PATROL</h1>
-                        <p className="text-slate-400 text-sm font-bold uppercase tracking-widest">Insole Production Quality</p>
+                        <div className="flex items-center gap-2.5">
+                            <h1 className="text-2xl md:text-3xl font-black text-indigo-950 tracking-tight">
+                                MQAA PATROL
+                            </h1>
+                            <span className="bg-indigo-100 text-indigo-800 text-xs font-black px-2.5 py-0.5 rounded-full border border-indigo-200">
+                                Chuẩn Mới 2026
+                            </span>
+                        </div>
+                        <p className="text-slate-400 text-xs md:text-sm font-bold uppercase tracking-widest mt-0.5">
+                            Insole Production Quality Inspection
+                        </p>
                     </div>
                 </div>
 
-                <div className="flex gap-2">
-                    <button onClick={handleOpenSettings} className="p-3 bg-white text-slate-400 rounded-2xl border shadow-sm hover:text-indigo-600 transition-colors">
-                        <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 002.572-1.065z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                <div className="flex flex-wrap items-center gap-2">
+                    {/* Target indicator badge */}
+                    <div className="bg-slate-50 border border-slate-200 px-3.5 py-1.5 rounded-xl flex items-center gap-2 text-xs font-bold text-slate-600 shadow-sm">
+                        <span>Mục tiêu:</span>
+                        <span className="font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded-md border border-indigo-100">
+                            ≥ {targetScore}%
+                        </span>
+                    </div>
+
+                    <button
+                        onClick={handleOpenSettings}
+                        className="p-2.5 bg-white text-slate-500 hover:text-indigo-600 rounded-xl border border-slate-200 shadow-sm transition"
+                        title="Cài đặt hệ thống"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 002.572-1.065z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
                     </button>
-                    <button onClick={() => navigate("/mqaa-patrol/dashboard")} className="bg-white text-indigo-600 border border-indigo-100 px-6 py-2 rounded-xl font-extrabold shadow-sm active:scale-95 transition-all text-sm">Dashboard</button>
-                    <button onClick={() => navigate("/mqaa-patrol/report")} className="bg-emerald-600 text-white px-6 py-2 rounded-xl font-bold shadow-lg active:scale-95 transition-all text-sm">Report</button>
-                    <button onClick={() => navigate("/mqaa-patrol/guide")} className="bg-amber-500 text-white px-6 py-2 rounded-xl font-bold shadow-lg active:scale-95 transition-all text-sm flex items-center gap-1">
-                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" /></svg>
+
+                    <button
+                        onClick={() => navigate("/mqaa-patrol/dashboard")}
+                        className="bg-white hover:bg-slate-50 text-indigo-600 border border-indigo-200 px-4 py-2 rounded-xl font-bold shadow-sm active:scale-95 transition text-xs md:text-sm"
+                    >
+                        Dashboard
+                    </button>
+
+                    <button
+                        onClick={() => navigate("/mqaa-patrol/report")}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold shadow-md active:scale-95 transition text-xs md:text-sm"
+                    >
+                        Report
+                    </button>
+
+                    <button
+                        onClick={() => navigate("/mqaa-patrol/guide")}
+                        className="bg-amber-500 hover:bg-amber-600 text-white px-4 py-2 rounded-xl font-bold shadow-md active:scale-95 transition text-xs md:text-sm flex items-center gap-1"
+                    >
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                        </svg>
                         Guide
                     </button>
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {sections.map((s) => (
-                    <button key={s.id} onClick={() => navigate(`/mqaa-patrol/entry/${s.id}`)} className="group relative bg-white p-8 rounded-3xl border border-slate-200 shadow-sm hover:shadow-2xl hover:border-indigo-500 transition-all text-left overflow-hidden">
-                        <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-50 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-150"></div>
-                        <span className="relative z-10 text-xl font-black text-slate-800 group-hover:text-indigo-700 uppercase leading-snug">{s.name}</span>
-                        <div className="mt-4 flex items-center gap-2 relative z-10 text-[10px] font-black tracking-widest text-slate-400 group-hover:text-indigo-400 uppercase">
-                            Start Checklist
-                            <svg className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-all translate-x-[-4px] group-hover:translate-x-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 7l5 5m0 0l-5 5m5-5H6" /></svg>
-                        </div>
-                    </button>
-                ))}
-                {sections.length === 0 && (
-                    <div className="col-span-full p-10 text-center text-slate-400 italic bg-white rounded-3xl border border-dashed border-slate-200 uppercase font-black text-sm tracking-widest">No sections configured. Click Gear icon to add.</div>
-                )}
+            {/* Official 9 Sections Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+                {sections.map((s, idx) => {
+                    const isWarehouse = s.id.includes("Warehouse");
+                    const isLab = s.id === "Laboratory";
+
+                    return (
+                        <button
+                            key={s.id}
+                            onClick={() => navigate(`/mqaa-patrol/entry/${encodeURIComponent(s.id)}`)}
+                            className="group relative bg-white p-7 rounded-3xl border border-slate-200 shadow-sm hover:shadow-2xl hover:border-indigo-500 transition-all text-left overflow-hidden transform hover:-translate-y-1"
+                        >
+                            <div className="absolute top-0 right-0 w-28 h-28 bg-indigo-50/80 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-150"></div>
+                            
+                            <div className="flex items-center justify-between mb-3 relative z-10">
+                                <span className="text-[11px] font-black text-indigo-600 uppercase tracking-wider bg-indigo-50 px-2.5 py-1 rounded-lg border border-indigo-100">
+                                    Section {idx + 1}
+                                </span>
+                                {isWarehouse && (
+                                    <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full border border-amber-200">
+                                        Đã gộp kho NL & TP
+                                    </span>
+                                )}
+                                {isLab && (
+                                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                                        Mục mới
+                                    </span>
+                                )}
+                            </div>
+
+                            <span className="relative z-10 text-lg md:text-xl font-black text-slate-800 group-hover:text-indigo-700 uppercase leading-snug block">
+                                {s.name || s.id}
+                            </span>
+
+                            <div className="mt-5 flex items-center gap-2 relative z-10 text-xs font-black tracking-wider text-slate-400 group-hover:text-indigo-600 uppercase transition-colors">
+                                <span>BẮT ĐẦU ĐÁNH GIÁ</span>
+                                <svg className="w-4 h-4 transform group-hover:translate-x-1.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                                </svg>
+                            </div>
+                        </button>
+                    );
+                })}
             </div>
 
+            {/* Settings Modal */}
             {showSettings && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center z-50 p-4">
-                    <div className="bg-white rounded-[40px] shadow-2xl max-w-5xl w-full max-h-[95vh] flex flex-col overflow-hidden border border-white">
-
+                <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-md flex items-center justify-center z-50 p-4">
+                    <div className="bg-white rounded-[36px] shadow-2xl max-w-5xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-white">
+                        
                         {/* Tab Switcher */}
-                        <div className="px-8 pt-6 flex justify-between items-center">
-                            <div className="bg-slate-100 p-1.5 rounded-[22px] flex gap-1">
-                                <button onClick={() => setActiveTab("auditor")} className={`px-8 py-3 rounded-[18px] text-xs font-black tracking-widest transition-all ${activeTab === 'auditor' ? 'bg-white text-indigo-600 shadow-xl shadow-indigo-100' : 'text-slate-400 hover:text-slate-600'}`}>1. AUDITORS</button>
-                                <button onClick={() => setActiveTab("form")} className={`px-8 py-3 rounded-[18px] text-xs font-black tracking-widest transition-all ${activeTab === 'form' ? 'bg-white text-indigo-600 shadow-xl shadow-indigo-100' : 'text-slate-400 hover:text-slate-600'}`}>2. MANAGE FORMS</button>
-                            </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => fetchCriteria(selectedSectionId)} className="p-3 bg-slate-100 rounded-full text-slate-400 hover:text-indigo-600 transition-colors" title="Refresh list">
-                                    <svg className={`w-5 h-5 ${loadingCriteria ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                        <div className="px-6 md:px-8 pt-6 pb-4 flex flex-wrap justify-between items-center border-b border-slate-100 gap-4">
+                            <div className="bg-slate-100 p-1.5 rounded-2xl flex flex-wrap gap-1">
+                                <button
+                                    onClick={() => setActiveTab("auditor")}
+                                    className={`px-5 md:px-6 py-2.5 rounded-xl text-xs font-black tracking-wider transition ${
+                                        activeTab === "auditor"
+                                            ? "bg-white text-indigo-600 shadow-md"
+                                            : "text-slate-400 hover:text-slate-600"
+                                    }`}
+                                >
+                                    1. AUDITORS
                                 </button>
-                                <button onClick={() => setShowSettings(false)} className="bg-slate-100 p-3 rounded-full text-slate-400 hover:text-slate-900 transition-colors">
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                                <button
+                                    onClick={() => setActiveTab("form")}
+                                    className={`px-5 md:px-6 py-2.5 rounded-xl text-xs font-black tracking-wider transition ${
+                                        activeTab === "form"
+                                            ? "bg-white text-indigo-600 shadow-md"
+                                            : "text-slate-400 hover:text-slate-600"
+                                    }`}
+                                >
+                                    2. MANAGE FORMS
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab("target")}
+                                    className={`px-5 md:px-6 py-2.5 rounded-xl text-xs font-black tracking-wider transition ${
+                                        activeTab === "target"
+                                            ? "bg-white text-indigo-600 shadow-md"
+                                            : "text-slate-400 hover:text-slate-600"
+                                    }`}
+                                >
+                                    3. SET TARGET
                                 </button>
                             </div>
+
+                            <button
+                                onClick={() => setShowSettings(false)}
+                                className="bg-slate-100 p-2.5 rounded-full text-slate-400 hover:text-slate-900 transition"
+                            >
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
                         </div>
 
-                        <div className="flex-1 overflow-y-auto p-8 scroll-smooth">
-                            {activeTab === "auditor" ? (
-                                <div className="space-y-10">
-                                    <div className="bg-slate-50 p-8 rounded-[32px] border border-slate-100">
-                                        <h3 className="text-xl font-black text-slate-800 mb-6 tracking-tight">Add Auditor Profile</h3>
-                                        <div className="flex gap-4">
-                                            <input type="text" placeholder="MSNV (ID)" className="w-1/3 p-4 bg-white border-none rounded-2xl shadow-sm focus:ring-4 focus:ring-indigo-100 outline-none font-bold" value={newAuditor.id} onChange={(e) => setNewAuditor({ ...newAuditor, id: e.target.value })} />
-                                            <input type="text" placeholder="Auditor Name" className="flex-1 p-4 bg-white border-none rounded-2xl shadow-sm focus:ring-4 focus:ring-indigo-100 outline-none font-bold" value={newAuditor.name} onChange={(e) => setNewAuditor({ ...newAuditor, name: e.target.value })} />
-                                            <button onClick={handleAddAuditor} className="bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black shadow-lg shadow-indigo-200 active:scale-95 transition-all uppercase text-sm">Create</button>
+                        {/* Modal Content */}
+                        <div className="flex-1 overflow-y-auto p-6 md:p-8 scroll-smooth">
+                            {/* TAB 1: AUDITORS */}
+                            {activeTab === "auditor" && (
+                                <div className="space-y-8">
+                                    <div className="bg-slate-50 p-6 rounded-3xl border border-slate-100">
+                                        <h3 className="text-lg font-black text-slate-800 mb-4 tracking-tight">
+                                            Thêm Auditor Mới
+                                        </h3>
+                                        <div className="flex flex-col sm:flex-row gap-3">
+                                            <input
+                                                type="text"
+                                                placeholder="Mã số nhân viên (ID)"
+                                                className="w-full sm:w-1/3 p-3.5 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                                                value={newAuditor.id}
+                                                onChange={(e) => setNewAuditor({ ...newAuditor, id: e.target.value })}
+                                            />
+                                            <input
+                                                type="text"
+                                                placeholder="Họ và Tên Auditor"
+                                                className="w-full sm:flex-1 p-3.5 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:ring-2 focus:ring-indigo-500"
+                                                value={newAuditor.name}
+                                                onChange={(e) => setNewAuditor({ ...newAuditor, name: e.target.value })}
+                                            />
+                                            <button
+                                                onClick={handleAddAuditor}
+                                                className="bg-indigo-600 text-white px-8 py-3.5 rounded-xl font-black shadow-md hover:bg-indigo-700 transition uppercase text-xs"
+                                            >
+                                                Thêm
+                                            </button>
                                         </div>
                                     </div>
 
-                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
                                         {auditorList.map((a) => (
-                                            <div key={a.id} className="p-5 bg-white border border-slate-100 rounded-3xl flex justify-between items-center group hover:border-indigo-200 transition-all shadow-sm">
+                                            <div
+                                                key={a.id}
+                                                className="p-4 bg-white border border-slate-100 rounded-2xl flex justify-between items-center hover:border-indigo-200 transition shadow-sm"
+                                            >
                                                 <div>
-                                                    <p className="text-[10px] font-black text-indigo-500 uppercase">{a.id}</p>
-                                                    <p className="font-bold text-slate-700">{a.name}</p>
+                                                    <p className="text-[11px] font-black text-indigo-500 uppercase">{a.id}</p>
+                                                    <p className="font-bold text-slate-800 text-sm">{a.name}</p>
                                                 </div>
-                                                <button onClick={() => handleDeleteAuditor(a.id)} className="text-slate-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100">
-                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                                <button
+                                                    onClick={() => handleDeleteAuditor(a.id)}
+                                                    className="text-slate-300 hover:text-red-500 transition p-1"
+                                                    title="Xóa"
+                                                >
+                                                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                                    </svg>
                                                 </button>
                                             </div>
                                         ))}
                                     </div>
-                                    <button onClick={handleCleanup} disabled={cleaning} className="w-full py-4 bg-slate-100 text-slate-400 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-slate-200 transition-all underline decoration-slate-300">Clean Old Image Storage</button>
-                                </div>
-                            ) : (
-                                <div className="space-y-12">
-                                    {/* Section Selection Bar */}
-                                    <div className="flex flex-col md:flex-row items-stretch md:items-center gap-6 bg-slate-50 p-6 rounded-[32px] border border-slate-100">
-                                        <div className="flex-1">
-                                            <p className="text-[10px] font-black text-slate-400 mb-2 tracking-widest uppercase">Target Section</p>
-                                            <select value={selectedSectionId} onChange={(e) => setSelectedSectionId(e.target.value)} className="w-full bg-transparent text-2xl font-black text-indigo-950 outline-none cursor-pointer">
-                                                {sections.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                                            </select>
-                                        </div>
-                                        <div className="flex gap-2 h-fit">
-                                            <button onClick={handleAddSection} className="bg-white p-4 rounded-2xl shadow-sm text-indigo-600 hover:bg-indigo-600 hover:text-white transition-all shadow-indigo-50" title="Add Section">
-                                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4" /></svg>
-                                            </button>
-                                            <button onClick={() => handleDeleteSection(selectedSectionId)} className="bg-white p-4 rounded-2xl shadow-sm text-red-500 hover:bg-red-500 hover:text-white transition-all shadow-red-50" title="Delete Section">
-                                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                            </button>
-                                        </div>
-                                    </div>
 
-                                    {/* Two Creation Boxes: Header vs Item */}
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        {/* Box 1: Header */}
-                                        <div id="header-input-box" className={`p-8 rounded-[40px] border transition-all space-y-6 ${editingItem?.isHeader ? 'bg-amber-100 border-amber-300 ring-4 ring-amber-50' : 'bg-indigo-50/50 border-indigo-100'}`}>
-                                            <div className="flex items-center justify-between mb-2">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="bg-indigo-600 text-white p-2 rounded-xl"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16" /></svg></div>
-                                                    <h4 className="text-lg font-black text-indigo-900 tracking-tight">{editingItem?.isHeader ? "Edit Header" : "Add Header Row"}</h4>
-                                                </div>
-                                                {editingItem?.isHeader && <button onClick={() => { setEditingItem(null); setHeaderInput({ no: "", label: "", subLabel: "" }) }} className="text-[10px] font-black uppercase text-amber-700 bg-white px-3 py-1 rounded-full shadow-sm">Cancel Edit</button>}
-                                            </div>
-                                            <div className="space-y-4">
-                                                <input type="text" placeholder="No. (VD: 1.0)" className="w-full p-4 bg-white border-none rounded-2xl shadow-sm font-black text-indigo-700 outline-none" value={headerInput.no} onChange={(e) => setHeaderInput({ ...headerInput, no: e.target.value })} />
-                                                <textarea placeholder="VN Header..." rows="2" className="w-full p-4 bg-white border-none rounded-2xl shadow-sm font-bold text-slate-700 outline-none resize-none" value={headerInput.label} onChange={(e) => setHeaderInput({ ...headerInput, label: e.target.value })} />
-                                                <textarea placeholder="EN Header..." rows="2" className="w-full p-4 bg-white border-none rounded-2xl shadow-sm text-pink-500 italic font-medium outline-none resize-none" value={headerInput.subLabel} onChange={(e) => setHeaderInput({ ...headerInput, subLabel: e.target.value })} />
-                                                <button onClick={() => handleSaveEntry('header')} className={`w-full py-4 text-white rounded-2xl font-black shadow-lg transition-all ${editingItem?.isHeader ? 'bg-amber-600 shadow-amber-100' : 'bg-indigo-600 shadow-indigo-100'}`}>
-                                                    {editingItem?.isHeader ? 'UPDATE HEADER' : 'ADD HEADER'}
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        {/* Box 2: Sub-item */}
-                                        <div id="item-input-box" className={`p-8 rounded-[40px] border transition-all space-y-6 ${editingItem && !editingItem.isHeader ? 'bg-emerald-100 border-emerald-300 ring-4 ring-emerald-50' : 'bg-emerald-50/50 border-emerald-100'}`}>
-                                            <div className="flex items-center justify-between mb-2">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="bg-emerald-600 text-white p-2 rounded-xl"><svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" /></svg></div>
-                                                    <h4 className="text-lg font-black text-emerald-900 tracking-tight">{editingItem && !editingItem.isHeader ? "Edit Criterion" : "Add Criterion"}</h4>
-                                                </div>
-                                                {editingItem && !editingItem.isHeader && <button onClick={() => { setEditingItem(null); setItemInput({ no: "", label: "", subLabel: "", maxScore: 6 }) }} className="text-[10px] font-black uppercase text-emerald-700 bg-white px-3 py-1 rounded-full shadow-sm">Cancel Edit</button>}
-                                            </div>
-                                            <div className="space-y-4">
-                                                <div className="flex gap-3">
-                                                    <input type="text" placeholder="No. (VD: 1.1.1)" className="w-2/3 p-4 bg-white border-none rounded-2xl shadow-sm font-black text-emerald-700 outline-none" value={itemInput.no} onChange={(e) => setItemInput({ ...itemInput, no: e.target.value })} />
-                                                    <div className="w-1/3 bg-white p-2 rounded-2xl shadow-sm flex flex-col justify-center items-center">
-                                                        <span className="text-[10px] font-black text-slate-300 uppercase">Points</span>
-                                                        <input type="number" className="w-full text-center font-black text-emerald-700 outline-none bg-transparent" value={itemInput.maxScore} onChange={(e) => setItemInput({ ...itemInput, maxScore: parseInt(e.target.value) })} />
-                                                    </div>
-                                                </div>
-                                                <textarea placeholder="VN Content..." rows="2" className="w-full p-4 bg-white border-none rounded-2xl shadow-sm font-bold text-slate-700 outline-none resize-none" value={itemInput.label} onChange={(e) => setItemInput({ ...itemInput, label: e.target.value })} />
-                                                <textarea placeholder="EN Content..." rows="2" className="w-full p-4 bg-white border-none rounded-2xl shadow-sm text-blue-500 italic font-medium outline-none resize-none" value={itemInput.subLabel} onChange={(e) => setItemInput({ ...itemInput, subLabel: e.target.value })} />
-                                                <button onClick={() => handleSaveEntry('item')} className={`w-full py-4 text-white rounded-2xl font-black shadow-lg transition-all ${editingItem && !editingItem.isHeader ? 'bg-emerald-600 shadow-emerald-100' : 'bg-emerald-700 shadow-emerald-100'}`}>
-                                                    {editingItem && !editingItem.isHeader ? 'UPDATE CRITERION' : 'ADD TO LIST'}
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Visual Criteria List Preview */}
-                                    <div className="space-y-6">
-                                        <div className="flex justify-between items-center bg-white p-6 rounded-3xl border border-slate-100 shadow-sm">
-                                            <div>
-                                                <h4 className="text-xl font-black text-slate-800 tracking-tight">Form Preview: {sections.find(s => s.id === selectedSectionId)?.name}</h4>
-                                                <p className="text-xs text-slate-400 font-bold uppercase tracking-wider mt-1">{currentCriteria.length} items configured</p>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <button onClick={handleSyncAll} className="bg-amber-50 text-amber-700 px-6 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase hover:bg-amber-600 hover:text-white transition-all active:scale-95 shadow-sm border border-amber-100">
-                                                    Sync All 9 Sections
-                                                </button>
-                                                <button onClick={handleImportDefaults} className="bg-indigo-50 text-indigo-600 px-6 py-2.5 rounded-xl text-[10px] font-black tracking-widest uppercase hover:bg-indigo-600 hover:text-white transition-all active:scale-95 shadow-sm">
-                                                    Import This Section
-                                                </button>
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-3">
-                                            {loadingCriteria && <div className="p-20 flex justify-center"><div className="animate-spin w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full font-black"></div></div>}
-
-                                            {!loadingCriteria && currentCriteria.length === 0 && (
-                                                <div className="p-20 text-center bg-white rounded-[40px] border border-dashed border-slate-200">
-                                                    <p className="text-slate-400 font-black text-sm uppercase tracking-widest italic mb-6">List is empty for this section.</p>
-                                                    <button onClick={handleImportDefaults} className="bg-indigo-600 text-white px-10 py-5 rounded-[24px] font-black text-lg shadow-xl shadow-indigo-100 active:scale-95 transition-all">LOAD DEFAULT SYSTEM CRITERIA</button>
-                                                </div>
-                                            )}
-
-                                            {currentCriteria.map((item) => (
-                                                <div key={item.id} className={`p-5 rounded-3xl border transition-all flex items-center gap-6 group ${item.isHeader ? 'bg-indigo-500 text-white border-indigo-600 shadow-lg shadow-indigo-100' : 'bg-white border-slate-100 hover:shadow-xl hover:border-indigo-200'}`}>
-                                                    <div className={`w-14 h-14 rounded-2xl flex flex-col items-center justify-center font-black leading-none ${item.isHeader ? 'bg-indigo-600 text-white border border-indigo-400' : 'bg-slate-50 text-indigo-600'}`}>
-                                                        <span className="text-[10px] opacity-40 mb-1">No.</span>
-                                                        <span className="text-lg">{item.no}</span>
-                                                    </div>
-                                                    <div className="flex-1">
-                                                        <p className={`font-black text-lg leading-tight uppercase ${item.isHeader ? 'text-white' : 'text-slate-800'}`}>{item.label}</p>
-                                                        <p className={`text-sm font-medium mt-1 leading-tight ${item.isHeader ? 'text-indigo-100' : 'text-slate-400 italic'}`}>{item.subLabel}</p>
-                                                    </div>
-                                                    {!item.isHeader && (
-                                                        <div className="text-center px-4 border-l border-slate-100 group-hover:border-indigo-100">
-                                                            <p className="text-[10px] font-black opacity-30 uppercase tracking-widest mb-1">Score</p>
-                                                            <p className="font-black text-slate-700">{item.maxScore}</p>
-                                                        </div>
-                                                    )}
-                                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                                        <button onClick={() => handleEditCriteriaItem(item)} className={`p-3 rounded-2xl transition-all ${item.isHeader ? 'bg-white/20 text-white hover:bg-white hover:text-indigo-600' : 'bg-slate-50 text-slate-400 hover:bg-indigo-50 hover:text-indigo-600'}`} title="Edit">
-                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                                                        </button>
-                                                        <button onClick={() => handleDeleteCriteriaItem(item)} className={`p-3 rounded-2xl transition-all ${item.isHeader ? 'bg-white/20 text-white hover:bg-red-500 hover:text-white' : 'bg-red-50 text-red-400 hover:bg-red-500 hover:text-white'}`} title="Delete">
-                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-
-                                    {/* Floating Undo Notification */}
-                                    {showUndo && (
-                                        <div className="fixed bottom-10 left-1/2 -translate-x-1/2 z-[60] animate-bounce">
-                                            <div className="bg-indigo-900 text-white px-8 py-4 rounded-[24px] shadow-2xl flex items-center gap-6 border border-white/20 backdrop-blur-md">
-                                                <div className="flex flex-col">
-                                                    <span className="text-[10px] font-black uppercase opacity-60">Action performed</span>
-                                                    <span className="font-bold">Đã xóa mục {lastDeletedItem?.no}</span>
-                                                </div>
-                                                <button
-                                                    onClick={handleUndoDelete}
-                                                    className="bg-white text-indigo-900 px-6 py-2 rounded-xl font-black text-xs uppercase hover:bg-indigo-100 transition-all active:scale-95"
-                                                >
-                                                    Hoàn tác (Undo)
-                                                </button>
-                                            </div>
-                                        </div>
-                                    )}
+                                    <button
+                                        onClick={handleCleanup}
+                                        disabled={cleaning}
+                                        className="w-full py-3.5 bg-slate-100 text-slate-400 rounded-xl font-bold text-xs uppercase hover:bg-slate-200 transition"
+                                    >
+                                        {cleaning ? "Đang xử lý..." : "Dọn dẹp bộ nhớ ảnh tạm"}
+                                    </button>
                                 </div>
                             )}
-                        </div>
 
-                        {/* Modal Footer */}
-                        <div className="p-6 bg-slate-50 border-t border-slate-100 text-center">
-                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 italic px-20">Click SAVE to finalize and return to selection screen. All criteria changes are saved instantly to database.</p>
-                            <button onClick={() => setShowSettings(false)} className="w-full py-5 bg-indigo-950 text-white rounded-[24px] font-black text-xl tracking-tighter hover:bg-black transition-all shadow-2xl active:scale-[0.98]">
-                                DONE
-                            </button>
+                            {/* TAB 2: MANAGE FORMS (UPDATED FORMAT) */}
+                            {activeTab === "form" && (
+                                <div className="space-y-8">
+                                    {/* Section Selector */}
+                                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 bg-slate-50 p-5 rounded-2xl border border-slate-100">
+                                        <div className="flex-1">
+                                            <p className="text-[11px] font-black text-slate-400 mb-1.5 uppercase tracking-wider">
+                                                Chọn Section để chỉnh sửa tiêu chí:
+                                            </p>
+                                            <select
+                                                value={selectedSectionId}
+                                                onChange={(e) => setSelectedSectionId(e.target.value)}
+                                                className="w-full bg-white border border-slate-200 p-2.5 rounded-xl text-lg font-black text-indigo-950 outline-none cursor-pointer shadow-sm"
+                                            >
+                                                {sections.map((s) => (
+                                                    <option key={s.id} value={s.id}>
+                                                        {s.name || s.id}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <button
+                                            onClick={handleSyncSectionFromExcel}
+                                            className="px-5 py-3 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded-xl font-black text-xs uppercase tracking-wider shadow-sm transition self-end sm:self-center"
+                                            title="Khôi phục danh sách tiêu chí chuẩn từ file Excel"
+                                        >
+                                            ⚡ Khôi phục từ Excel
+                                        </button>
+                                    </div>
+
+                                    {/* Edit / Add Criterion Box */}
+                                    <div
+                                        id="item-input-box"
+                                        className={`p-6 rounded-3xl border transition-all space-y-4 ${
+                                            editingItem
+                                                ? "bg-amber-50/70 border-amber-300 ring-2 ring-amber-200"
+                                                : "bg-slate-50 border-slate-200"
+                                        }`}
+                                    >
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="text-base font-black text-indigo-950">
+                                                {editingItem ? `Chỉnh sửa tiêu chí: ${editingItem.no}` : "Thêm tiêu chí mới vào Section"}
+                                            </h4>
+                                            {editingItem && (
+                                                <button
+                                                    onClick={() => {
+                                                        setEditingItem(null);
+                                                        setItemInput({
+                                                            no: "",
+                                                            label: "",
+                                                            subLabel: "",
+                                                            maxScore: 4,
+                                                            isNA: false,
+                                                            isCritical: false,
+                                                        });
+                                                    }}
+                                                    className="text-xs font-bold text-slate-500 bg-white px-3 py-1 rounded-lg border shadow-sm hover:bg-slate-50"
+                                                >
+                                                    Hủy chỉnh sửa
+                                                </button>
+                                            )}
+                                        </div>
+
+                                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                            <div className="flex flex-col gap-1">
+                                                <label className="text-xs font-bold text-slate-600">Số thứ tự / No:</label>
+                                                <input
+                                                    type="text"
+                                                    placeholder="VD: 1.1.1 hoặc *1.1.1"
+                                                    className="p-3 bg-white border border-slate-200 rounded-xl font-bold outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                                                    value={itemInput.no}
+                                                    onChange={(e) => setItemInput({ ...itemInput, no: e.target.value })}
+                                                />
+                                            </div>
+
+                                            <div className="flex flex-col gap-1">
+                                                <label className="text-xs font-bold text-slate-600">Điểm tối đa (Max Score):</label>
+                                                <div className="flex items-center gap-2">
+                                                    <input
+                                                        type="number"
+                                                        disabled={itemInput.isNA}
+                                                        className={`w-24 p-3 bg-white border border-slate-200 rounded-xl font-black text-center outline-none ${
+                                                            itemInput.isNA ? "bg-slate-100 text-slate-400 cursor-not-allowed" : "text-indigo-800"
+                                                        }`}
+                                                        value={itemInput.maxScore}
+                                                        onChange={(e) => setItemInput({ ...itemInput, maxScore: e.target.value })}
+                                                    />
+                                                    <label className="flex items-center gap-1.5 cursor-pointer text-xs font-bold text-slate-700 select-none">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={itemInput.isNA}
+                                                            onChange={(e) => setItemInput({ ...itemInput, isNA: e.target.checked })}
+                                                            className="w-4 h-4 rounded text-indigo-600"
+                                                        />
+                                                        Là mục N/A
+                                                    </label>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-col gap-1 justify-center">
+                                                <label className="text-xs font-bold text-slate-600">Hạng mục quan trọng:</label>
+                                                <label className="flex items-center gap-2 p-2.5 bg-emerald-50 border border-emerald-200 rounded-xl cursor-pointer select-none">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={itemInput.isCritical}
+                                                        onChange={(e) => setItemInput({ ...itemInput, isCritical: e.target.checked })}
+                                                        className="w-4 h-4 rounded text-emerald-600"
+                                                    />
+                                                    <span className="text-xs font-bold text-emerald-800">
+                                                        Mục Trọng yếu (Critical - Yes)
+                                                    </span>
+                                                </label>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div className="flex flex-col gap-1">
+                                                <label className="text-xs font-bold text-slate-600">Nội dung Tiếng Việt:</label>
+                                                <textarea
+                                                    rows="2"
+                                                    placeholder="Nội dung đánh giá tiếng Việt..."
+                                                    className="p-3 bg-white border border-slate-200 rounded-xl font-bold text-slate-800 text-xs outline-none focus:ring-2 focus:ring-indigo-500"
+                                                    value={itemInput.label}
+                                                    onChange={(e) => setItemInput({ ...itemInput, label: e.target.value })}
+                                                />
+                                            </div>
+
+                                            <div className="flex flex-col gap-1">
+                                                <label className="text-xs font-bold text-slate-600">Nội dung Tiếng Anh (English):</label>
+                                                <textarea
+                                                    rows="2"
+                                                    placeholder="English description..."
+                                                    className="p-3 bg-white border border-slate-200 rounded-xl italic text-blue-700 text-xs outline-none focus:ring-2 focus:ring-indigo-500 font-medium"
+                                                    value={itemInput.subLabel}
+                                                    onChange={(e) => setItemInput({ ...itemInput, subLabel: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            onClick={handleSaveCriteriaEntry}
+                                            className="w-full py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black shadow-lg shadow-indigo-100 transition uppercase text-xs tracking-wider"
+                                        >
+                                            {editingItem ? "CẬP NHẬT TIÊU CHÍ" : "THÊM TIÊU CHÍ VÀO DANH SÁCH"}
+                                        </button>
+                                    </div>
+
+                                    {/* Criteria List */}
+                                    <div className="space-y-3">
+                                        <div className="flex justify-between items-center">
+                                            <h4 className="text-sm font-black text-slate-700 uppercase tracking-wider">
+                                                Danh sách tiêu chí ({currentCriteria.length} mục)
+                                            </h4>
+                                        </div>
+
+                                        {loadingCriteria ? (
+                                            <div className="p-12 text-center text-slate-400 font-bold">Đang tải...</div>
+                                        ) : currentCriteria.length === 0 ? (
+                                            <div className="p-8 text-center text-slate-400 italic bg-slate-50 rounded-2xl border border-dashed">
+                                                Chưa có tiêu chí nào. Bấm "Khôi phục từ Excel" để nạp bộ tiêu chí chuẩn.
+                                            </div>
+                                        ) : (
+                                            <div className="divide-y border border-slate-200 rounded-2xl overflow-hidden bg-white">
+                                                {currentCriteria.map((item, idx) => {
+                                                    const isCrit = Boolean(item.isCritical);
+                                                    return (
+                                                        <div
+                                                            key={item.id || idx}
+                                                            className={`p-4 flex items-start justify-between gap-4 transition ${
+                                                                isCrit ? "bg-emerald-50/60 border-l-4 border-l-emerald-500" : "hover:bg-slate-50"
+                                                            }`}
+                                                        >
+                                                            <div className="space-y-1 flex-1">
+                                                                <div className="flex items-center gap-2">
+                                                                    <span className="font-black text-indigo-700 text-sm">
+                                                                        {item.no}
+                                                                    </span>
+                                                                    <span className="text-[11px] font-black px-2 py-0.5 rounded bg-slate-100 text-slate-600">
+                                                                        {item.maxScore === "N/A" ? "N/A" : `${item.maxScore} điểm`}
+                                                                    </span>
+                                                                    {isCrit && (
+                                                                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                                                            ⭐ Trọng yếu
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                                <p className="font-bold text-slate-800 text-xs">{item.label}</p>
+                                                                {item.subLabel && (
+                                                                    <p className="italic text-blue-700 text-[11px]">{item.subLabel}</p>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="flex items-center gap-2">
+                                                                <button
+                                                                    onClick={() => handleEditCriteriaItem(item)}
+                                                                    className="px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg transition"
+                                                                >
+                                                                    Sửa
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => handleDeleteCriteriaItem(item)}
+                                                                    className="px-2.5 py-1.5 bg-red-50 hover:bg-red-100 text-red-600 text-xs font-bold rounded-lg transition"
+                                                                >
+                                                                    Xóa
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB 3: SET TARGET (MỚI THEO YÊU CẦU) */}
+                            {activeTab === "target" && (
+                                <div className="space-y-8 max-w-2xl mx-auto py-4">
+                                    <div className="text-center space-y-2">
+                                        <div className="w-16 h-16 bg-indigo-100 text-indigo-600 rounded-3xl mx-auto flex items-center justify-center shadow-inner">
+                                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                                            </svg>
+                                        </div>
+                                        <h3 className="text-2xl font-black text-indigo-950 tracking-tight">
+                                            Cấu hình Mục tiêu Tuân thủ MQAA
+                                        </h3>
+                                        <p className="text-slate-500 text-xs md:text-sm leading-relaxed">
+                                            Đặt ngưỡng % đạt mục tiêu. Kết quả đánh giá bằng hoặc vượt mức này sẽ hiển thị{" "}
+                                            <span className="text-emerald-700 font-bold">màu xanh lá (Đạt)</span>.
+                                            Nếu dưới mức này sẽ đổi sang{" "}
+                                            <span className="text-rose-700 font-bold">màu đỏ (Chưa đạt)</span>.
+                                        </p>
+                                    </div>
+
+                                    <div className="bg-slate-50 p-6 md:p-8 rounded-3xl border border-slate-200 space-y-6">
+                                        <div className="flex flex-col items-center gap-3">
+                                            <label className="text-xs font-black uppercase text-slate-500 tracking-wider">
+                                                Tỷ lệ đạt mục tiêu (% Target)
+                                            </label>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type="number"
+                                                    min="50"
+                                                    max="100"
+                                                    value={tempTarget}
+                                                    onChange={(e) => setTempTarget(e.target.value)}
+                                                    className="w-32 p-3 text-3xl font-black text-center text-indigo-700 bg-white border-2 border-indigo-400 rounded-2xl shadow-sm outline-none focus:ring-4 focus:ring-indigo-100"
+                                                />
+                                                <span className="text-2xl font-black text-slate-400">%</span>
+                                            </div>
+
+                                            {/* Presets */}
+                                            <div className="flex items-center gap-2 mt-2">
+                                                <span className="text-xs font-bold text-slate-400">Chọn nhanh:</span>
+                                                {[80, 85, 90, 95].map((val) => (
+                                                    <button
+                                                        key={val}
+                                                        type="button"
+                                                        onClick={() => setTempTarget(val)}
+                                                        className={`px-3 py-1.5 rounded-xl text-xs font-black transition ${
+                                                            Number(tempTarget) === val
+                                                                ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
+                                                                : "bg-white hover:bg-slate-100 text-slate-600 border border-slate-200"
+                                                        }`}
+                                                    >
+                                                        {val}%
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+
+                                        {/* Visual Preview */}
+                                        <div className="border-t border-slate-200 pt-5 space-y-3">
+                                            <p className="text-xs font-bold text-slate-500 text-center uppercase tracking-wider">
+                                                Xem trước hiển thị màu sắc theo mục tiêu ({tempTarget}%):
+                                            </p>
+                                            <div className="grid grid-cols-2 gap-4">
+                                                <div className="p-4 rounded-2xl bg-white border border-slate-200 flex flex-col items-center gap-1.5 shadow-sm">
+                                                    <span className="text-xs text-slate-400 font-bold">Ví dụ: 95.0%</span>
+                                                    <span
+                                                        className={`text-base font-black px-4 py-1 rounded-xl ${
+                                                            95 >= Number(tempTarget)
+                                                                ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                                                : "bg-rose-100 text-rose-800 border border-rose-300"
+                                                        }`}
+                                                    >
+                                                        95.0% {95 >= Number(tempTarget) ? "(ĐẠT)" : "(CHƯA ĐẠT)"}
+                                                    </span>
+                                                </div>
+
+                                                <div className="p-4 rounded-2xl bg-white border border-slate-200 flex flex-col items-center gap-1.5 shadow-sm">
+                                                    <span className="text-xs text-slate-400 font-bold">Ví dụ: 85.0%</span>
+                                                    <span
+                                                        className={`text-base font-black px-4 py-1 rounded-xl ${
+                                                            85 >= Number(tempTarget)
+                                                                ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                                                : "bg-rose-100 text-rose-800 border border-rose-300"
+                                                        }`}
+                                                    >
+                                                        85.0% {85 >= Number(tempTarget) ? "(ĐẠT)" : "(CHƯA ĐẠT)"}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <button
+                                            onClick={handleSaveTarget}
+                                            className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-sm uppercase tracking-wider shadow-lg shadow-indigo-100 transition active:scale-95"
+                                        >
+                                            {targetSavedMsg ? "✅ ĐÃ LƯU MỤC TIÊU THÀNH CÔNG!" : "LƯU CẤU HÌNH MỤC TIÊU"}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>

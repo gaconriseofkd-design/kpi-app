@@ -1,5 +1,5 @@
 // src/App.jsx
-import { HashRouter, Routes, Route, Link, NavLink, useLocation } from "react-router-dom";
+import { HashRouter, Routes, Route, Link, NavLink, useLocation, Navigate } from "react-router-dom";
 import { KpiSectionProvider, useKpiSection } from "./context/KpiSectionContext";
 import SectionGate from "./pages/SectionGate";
 
@@ -42,6 +42,7 @@ function Shell() {
 
   // Bypass SectionGate for standalone MQAA routes
   const isMQAARoute = location.pathname.startsWith("/mqaa-patrol") ||
+    location.pathname.startsWith("/mqaa-patrol-test") ||
     location.pathname.startsWith("/mqaa-dashboard") ||
     location.pathname.startsWith("/mqaa-entry");
 
@@ -112,6 +113,8 @@ function Shell() {
         <Route path="/help" element={<HelpPage />} />
         <Route path="/mqaa-entry" element={<MQAAEntry />} />
         <Route path="/mqaa-patrol/*" element={<MQAAPatrolRoutes />} />
+        <Route path="/mqaa-patrol-test" element={<Navigate to="/mqaa-patrol" replace />} />
+        <Route path="/mqaa-patrol-test/:sectionId" element={<Navigate to="/mqaa-patrol" replace />} />
         <Route path="/mqaa-dashboard" element={<MQAADashboard />} />
       </Routes>
     </>
