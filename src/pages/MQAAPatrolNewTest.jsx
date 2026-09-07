@@ -554,34 +554,21 @@ export default function MQAAPatrolNewTest() {
                                                 N/A
                                             </div>
                                         ) : (
-                                            <div className="flex flex-col items-center gap-1">
-                                                <input
-                                                    type="number"
-                                                    min="0"
-                                                    max={row.maxScore}
-                                                    step="0.5"
-                                                    value={row.auditScore}
-                                                    onChange={(e) => handleAuditScoreChange(idx, e.target.value)}
-                                                    className="w-16 p-1.5 text-center font-black text-sm border-2 border-indigo-300 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-600 outline-none bg-yellow-50 text-indigo-950 shadow-inner"
-                                                    placeholder="0-4"
-                                                />
-                                                {/* Quick score buttons for convenience */}
-                                                <div className="flex gap-1 mt-0.5">
-                                                    {[0, 2, 4].map((pts) => (
-                                                        <button
-                                                            key={pts}
-                                                            type="button"
-                                                            onClick={() => handleAuditScoreChange(idx, pts)}
-                                                            className={`px-1.5 py-0.5 text-[10px] font-black rounded border transition ${
-                                                                Number(row.auditScore) === pts
-                                                                    ? "bg-indigo-600 text-white border-indigo-600"
-                                                                    : "bg-white hover:bg-slate-100 text-slate-600 border-slate-200"
-                                                            }`}
-                                                        >
-                                                            {pts}
-                                                        </button>
-                                                    ))}
-                                                </div>
+                                            <div className="flex flex-wrap justify-center gap-1.5 w-full">
+                                                {(isCrit ? [-4, 0, 4] : [0, 1, 2, 3, 4]).map((pts) => (
+                                                    <button
+                                                        key={pts}
+                                                        type="button"
+                                                        onClick={() => handleAuditScoreChange(idx, pts)}
+                                                        className={`w-7 h-7 flex items-center justify-center text-xs font-black rounded border transition ${
+                                                            row.auditScore !== "" && Number(row.auditScore) === pts
+                                                                ? "bg-indigo-600 text-white border-indigo-600 shadow-md transform scale-105"
+                                                                : "bg-white hover:bg-slate-100 text-slate-600 border-slate-300 shadow-sm"
+                                                        }`}
+                                                    >
+                                                        {pts}
+                                                    </button>
+                                                ))}
                                             </div>
                                         )}
                                     </td>
