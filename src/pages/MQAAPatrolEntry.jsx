@@ -320,7 +320,26 @@ export default function MQAAPatrolEntry() {
 
         setLoading(true);
         try {
-            const rowsWithRemoteUrls = [...rows];
+            // Fill empty audit scores with max score
+            const filledRows = rows.map((r) => {
+                if (r.maxScore !== "N/A" && (r.auditScore === "" || r.auditScore === undefined || r.auditScore === null)) {
+                    return { ...r, auditScore: r.maxScore };
+                }
+                return { ...r };
+            });
+
+            // Recalculate totals to reflect auto-filled scores
+            let finalTotalMaxScore = 0;
+            let finalTotalAuditScore = 0;
+            filledRows.forEach(r => {
+                if (r.maxScore !== "N/A") {
+                    finalTotalMaxScore += Number(r.maxScore) || 0;
+                    finalTotalAuditScore += Number(r.auditScore) || 0;
+                }
+            });
+            const finalPerformance = finalTotalMaxScore > 0 ? ((finalTotalAuditScore / finalTotalMaxScore) * 100).toFixed(1) : "0.0";
+
+            const rowsWithRemoteUrls = [...filledRows];
 
             // Process image uploads
             for (let i = 0; i < rowsWithRemoteUrls.length; i++) {
@@ -365,9 +384,9 @@ export default function MQAAPatrolEntry() {
                 auditor_id: headerData.auditorId,
                 date: headerData.date,
                 section: section,
-                overall_performance: Number(totals.performance),
-                total_score: totals.totalMaxScore,
-                total_level: totals.totalAuditScore,
+                overall_performance: Number(finalPerformance),
+                total_score: finalTotalMaxScore,
+                total_level: finalTotalAuditScore,
                 evaluation_data: rowsWithRemoteUrls.map((r) => ({
                     index: r.index,
                     no: r.no,
