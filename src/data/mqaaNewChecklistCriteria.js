@@ -738,7 +738,7 @@ export const MQAA_NEW_CRITERIA = {
     ]
   },
   "Lean line DC": {
-    header: {"title":"7. Công đoạn Đóng gói  / Packing\r\nMục tiêu: Đảm bảo hàng hóa đạt chất lượng, đã dò kim loại và đủ số lượng trước khi nhập kho / Objective: Ensure the correct type of logo is used and that production order requirements are strictly followed. Monitor temperature and adhere to the metal control procedure.","rowNumber":43},
+    header: {"title":"LEAN LINE (DC & MOLDED)\r\nMục tiêu: Đảm bảo chất lượng các công đoạn. / Objective: Ensure quality.","rowNumber":1},
     footer: {"sectionName":"CÔNG ĐOẠN ĐÓNG GÓI / PACKING PROCESS","label":"XẾP HẠNG TUÂN THỦ TỔNG THỂ %: \r\nOVERALL COMPLIANCE RATING:","maxScore":208,"auditScore":0,"rowNumber":63},
     items: [
       {
@@ -1294,7 +1294,7 @@ export const MQAA_NEW_CRITERIA = {
     ]
   },
   "Lean line Molded": {
-    header: {"title":"7. Công đoạn Đóng gói  / Packing\r\nMục tiêu: Đảm bảo hàng hóa đạt chất lượng, đã dò kim loại và đủ số lượng trước khi nhập kho / Objective: Ensure the correct type of logo is used and that production order requirements are strictly followed. Monitor temperature and adhere to the metal control procedure.","rowNumber":43},
+    header: {"title":"LEAN LINE (DC & MOLDED)\r\nMục tiêu: Đảm bảo chất lượng các công đoạn. / Objective: Ensure quality.","rowNumber":1},
     footer: {"sectionName":"CÔNG ĐOẠN ĐÓNG GÓI / PACKING PROCESS","label":"XẾP HẠNG TUÂN THỦ TỔNG THỂ %: \r\nOVERALL COMPLIANCE RATING:","maxScore":208,"auditScore":0,"rowNumber":63},
     items: [
       {
