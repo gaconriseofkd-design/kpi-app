@@ -76,6 +76,7 @@ export default function MQAAPatrolEntry() {
                 let criteriaList = [];
                 if (dbCriteria && dbCriteria.length > 0) {
                     criteriaList = dbCriteria.map((c, idx) => {
+                        const isNA = c.max_score <= 0 || c.is_header;
                         const isHeader = Boolean(c.is_header);
                         const isCrit = c.is_header ? false : (c.no && c.no.startsWith("*"));
                         return {
