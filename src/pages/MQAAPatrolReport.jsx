@@ -43,7 +43,7 @@ function normalizeSectionKey(sec) {
 export default function MQAAPatrolReport() {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState("logs"); // "logs" or "summary"
-    
+
     return (
         <div className="max-w-[1200px] mx-auto p-6 bg-white shadow-xl rounded-xl mt-8">
             <div className="flex items-center justify-between mb-8 border-b pb-4">
@@ -61,13 +61,13 @@ export default function MQAAPatrolReport() {
                 </div>
 
                 <div className="flex bg-gray-100 p-1 rounded-lg border border-gray-200">
-                    <button 
+                    <button
                         className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'logs' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                         onClick={() => setActiveTab('logs')}
                     >
                         📋 Chi tiết phiếu
                     </button>
-                    <button 
+                    <button
                         className={`px-4 py-2 rounded-md text-sm font-bold transition-all ${activeTab === 'summary' ? 'bg-white text-indigo-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
                         onClick={() => setActiveTab('summary')}
                     >
@@ -185,39 +185,147 @@ function PatrolLogsTab({ navigate }) {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet("MQAA Patrol Details");
 
-        // Headers
+        // 1. Setup Column Widths
+        worksheet.columns = [
+            { key: "no", width: 12 },          // Col A: STT / No.
+            { key: "criteria", width: 75 },    // Col B: Tiêu chí / Criteria
+            { key: "maxScore", width: 15 },    // Col C: Điểm chuẩn / Max Score
+            { key: "auditScore", width: 15 },  // Col D: Điểm đánh giá / Audit Score
+            { key: "images", width: 20 },      // Col E: Hình ảnh / Images
+            { key: "description", width: 32 }, // Col F: Ghi chú / Description
+        ];
+
+        // 2. Title Block
         worksheet.mergeCells("A1:F1");
-        worksheet.getCell("A1").value = `MQAA PATROL EVALUATION - SECTION: ${record.section.toUpperCase()}`;
-        worksheet.getCell("A1").font = { bold: true, size: 14, color: { argb: "FFFFFFFF" } };
-        worksheet.getCell("A1").fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } };
-        worksheet.getCell("A1").alignment = { horizontal: "center", vertical: "middle" };
-        worksheet.getRow(1).height = 30;
+        const titleCell = worksheet.getCell("A1");
+        titleCell.value = `BÁO CÁO ĐÁNH GIÁ MQAA PATROL - ${record.section.toUpperCase()}`;
+        titleCell.font = { bold: true, size: 13, color: { argb: "FFFFFFFF" } };
+        titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E40AF" } }; // Deep Blue
+        titleCell.alignment = { horizontal: "center", vertical: "middle" };
+        worksheet.getRow(1).height = 32;
 
         worksheet.addRow([]);
-        worksheet.addRow(["Auditor Name:", record.auditor_name, "", "Date:", record.date]);
-        worksheet.addRow(["Auditor ID:", record.auditor_id, "", "Overall Performance:", `${record.overall_performance}%`]);
-        worksheet.addRow(["Total Score:", record.total_score, "", "Total Level:", record.total_level]);
+        worksheet.getRow(2).height = 8;
+
+        // 3. Meta Information Block
+        const metaRows = [
+            ["Người đánh giá (Auditor):", record.auditor_name || "—", "Ngày đánh giá (Date):", record.date || "—"],
+            ["Mã nhân viên (Auditor ID):", record.auditor_id || "—", "Hiệu suất (Performance):", `${record.overall_performance || 0}%`],
+            ["Tổng điểm chuẩn (Max Score):", record.total_score ?? "—", "Tổng điểm đạt (Audit Score):", record.total_level ?? "—"]
+        ];
+
+        metaRows.forEach((rowVals) => {
+            const r = worksheet.addRow([rowVals[0], rowVals[1], rowVals[2], rowVals[3], "", ""]);
+            r.height = 20;
+            r.getCell(1).font = { bold: true, size: 10, color: { argb: "FF374151" } };
+            r.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+            r.getCell(2).font = { bold: true, size: 10, color: { argb: "FF1F2937" } };
+            r.getCell(2).alignment = { horizontal: "left", vertical: "middle" };
+            r.getCell(3).font = { bold: true, size: 10, color: { argb: "FF374151" } };
+            r.getCell(3).alignment = { horizontal: "left", vertical: "middle" };
+            r.getCell(4).font = { bold: true, size: 10, color: { argb: "FF1F2937" } };
+            r.getCell(4).alignment = { horizontal: "center", vertical: "middle" };
+        });
+
         worksheet.addRow([]);
+        worksheet.getRow(6).height = 8;
 
-        // Criteria Table
-        const headerRow = worksheet.addRow(["No.", "Criteria", "Score", "Level", "Images", "Description"]);
-        headerRow.font = { bold: true, color: { argb: "FFFFFFFF" } };
-        headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF4F46E5" } };
-        headerRow.height = 20;
+        // 4. Criteria Table Header
+        const headerRow = worksheet.addRow([
+            "STT / No.",
+            "Nội dung tiêu chí kiểm tra / Evaluation Criteria",
+            "Điểm chuẩn\nMax Score",
+            "Điểm đánh giá\nAudit Score",
+            "Hình ảnh\nImages",
+            "Ghi chú / Mô tả\nDescription"
+        ]);
+        headerRow.height = 28;
+        headerRow.font = { bold: true, size: 10.5, color: { argb: "FFFFFFFF" } };
+        headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2563EB" } }; // Blue-600
+        headerRow.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
 
-        record.evaluation_data?.forEach((item) => {
+        // 5. Criteria Data Rows
+        const evalData = Array.isArray(record.evaluation_data) ? record.evaluation_data : [];
+        evalData.forEach((item) => {
+            const isHeader = Boolean((item.isHeader || item.is_header) && !item.no);
+            if (isHeader) {
+                const headerText = item.titleVn || item.label || "";
+                const subText = item.titleEn || item.sub_label || item.subLabel || "";
+                const row = worksheet.addRow([
+                    subText ? `${headerText} - ${subText}` : headerText,
+                    "", "", "", "", ""
+                ]);
+                const rowIdx = row.number;
+                worksheet.mergeCells(`A${rowIdx}:F${rowIdx}`);
+                row.height = 24;
+                row.getCell(1).font = { bold: true, size: 10.5, color: { argb: "FF1E3A8A" } };
+                row.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDBEAFE" } }; // Soft blue
+                row.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
+                row.eachCell({ includeEmpty: true }, (cell) => {
+                    cell.border = {
+                        top: { style: "thin", color: { argb: "FF93C5FD" } },
+                        bottom: { style: "thin", color: { argb: "FF93C5FD" } }
+                    };
+                });
+                return;
+            }
+
+            const isCrit = Boolean(item.isCritical || item.is_critical || (item.no && item.no.startsWith("*")));
+            const isNA = item.max_score === "N/A" || item.maxScore === "N/A" || item.score === "N/A" || item.max_score <= 0 || item.score <= 0;
+
+            const titleVn = item.titleVn || item.label || "";
+            const titleEn = item.titleEn || item.sub_label || item.subLabel || "";
+            const fullCriteria = titleEn ? `${titleVn}\n${titleEn}` : titleVn;
+
+            const maxScoreVal = isNA ? "N/A" : (item.max_score || item.maxScore || item.score || 4);
+            const auditScoreVal = isNA ? "N/A" : (item.audit_score !== undefined ? item.audit_score : (item.level !== undefined ? item.level : "—"));
+
+            const imgUrls = Array.isArray(item.image_urls) ? item.image_urls : (item.image_url ? [item.image_url] : []);
+            const imageDisplay = imgUrls.length > 0 ? (imgUrls.length === 1 ? imgUrls[0] : `${imgUrls.length} ảnh`) : "—";
+
             const row = worksheet.addRow([
-                item.no,
-                item.titleVn || item.label || "",
-                item.max_score || item.score || 0,
-                item.audit_score !== undefined ? item.audit_score : (item.level || 0),
-                Array.isArray(item.image_urls) ? item.image_urls.join("\n") : (item.image_url || "None"),
-                item.description || ""
+                item.no || "",
+                fullCriteria,
+                maxScoreVal,
+                auditScoreVal,
+                imageDisplay,
+                item.description || "—"
             ]);
 
-            row.eachCell((cell) => {
-                cell.border = { top: { style: "thin" }, left: { style: "thin" }, bottom: { style: "thin" }, right: { style: "thin" } };
-                cell.alignment = { wrapText: true, vertical: "middle" };
+            // Smart row height: column B has width 75 (~70 chars per line)
+            const estLines = Math.max(1, Math.ceil(fullCriteria.length / 70) + (titleEn ? 1 : 0));
+            row.height = Math.min(80, Math.max(24, estLines * 18));
+
+            const bgArgb = isCrit ? "FFF0FDF4" : "FFFFFFFF"; // Light emerald if critical
+
+            row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
+                cell.border = {
+                    top: { style: "thin", color: { argb: "FFE5E7EB" } },
+                    bottom: { style: "thin", color: { argb: "FFE5E7EB" } },
+                    left: { style: "thin", color: { argb: "FFE5E7EB" } },
+                    right: { style: "thin", color: { argb: "FFE5E7EB" } }
+                };
+
+                if (isCrit) {
+                    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: bgArgb } };
+                }
+
+                if (colNumber === 1) {
+                    cell.alignment = { horizontal: "center", vertical: "middle" };
+                    cell.font = { bold: true, size: 10, color: { argb: isCrit ? "FF047857" : "FF374151" } };
+                } else if (colNumber === 2) {
+                    cell.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+                    cell.font = { size: 9.5, color: { argb: "FF1F2937" } };
+                } else if (colNumber === 3 || colNumber === 4) {
+                    cell.alignment = { horizontal: "center", vertical: "middle" };
+                    cell.font = { bold: true, size: 10, color: { argb: cell.value === "N/A" ? "FF9CA3AF" : "FF111827" } };
+                } else if (colNumber === 5) {
+                    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
+                    cell.font = { size: 9, color: { argb: "FF4B5563" } };
+                } else {
+                    cell.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
+                    cell.font = { size: 9, color: { argb: "FF4B5563" } };
+                }
             });
         });
 
@@ -457,7 +565,7 @@ function PatrolSummaryTab() {
             if (sec === "All") return;
             const displayName = sec.replace(/_/g, " ");
             const rowData = { section: displayName };
-            
+
             trendData.forEach(m => {
                 const val = m[displayName];
                 rowData[m.rawMonth] = val !== null ? `${val}%` : "-";
@@ -586,7 +694,7 @@ function PatrolSummaryTab() {
                                     <span className="font-black text-indigo-700">{d.avgPerformance.toFixed(1)}%</span>
                                 </div>
                                 <div className="w-full bg-slate-100 rounded-full h-3.5 shadow-inner">
-                                    <div 
+                                    <div
                                         className={`h-3.5 rounded-full transition-all duration-700 ${d.avgPerformance >= 90 ? 'bg-green-500' : 'bg-red-500'}`}
                                         style={{ width: `${d.avgPerformance}%` }}
                                     ></div>
@@ -607,20 +715,20 @@ function PatrolSummaryTab() {
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
                                 <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: '#94a3b8', fontSize: 12 }} dy={10} />
                                 <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fill: '#94a3b8' }} />
-                                <Tooltip 
+                                <Tooltip
                                     contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 10px 25px rgba(0,0,0,0.1)' }}
                                     formatter={(value) => [`${value}%`]}
                                 />
                                 <Legend wrapperStyle={{ paddingTop: '20px' }} />
-                                <Line 
-                                    type="monotone" 
-                                    dataKey="Trung bình chung" 
-                                    stroke="#1e293b" 
-                                    strokeWidth={3} 
+                                <Line
+                                    type="monotone"
+                                    dataKey="Trung bình chung"
+                                    stroke="#1e293b"
+                                    strokeWidth={3}
                                     strokeDasharray="5 5"
-                                    dot={{ r: 5, strokeWidth: 2, fill: 'white' }} 
-                                    activeDot={{ r: 7 }} 
-                                    connectNulls 
+                                    dot={{ r: 5, strokeWidth: 2, fill: 'white' }}
+                                    activeDot={{ r: 7 }}
+                                    connectNulls
                                 />
                                 {OFFICIAL_SECTIONS.filter(s => s !== "All").map((s, idx) => {
                                     const sectionColors = {
@@ -636,15 +744,15 @@ function PatrolSummaryTab() {
                                     };
                                     const displayName = s.replace(/_/g, " ");
                                     return (
-                                        <Line 
-                                            key={s} 
-                                            type="monotone" 
-                                            dataKey={displayName} 
-                                            stroke={sectionColors[s] || `hsl(${idx * 40}, 70%, 50%)`} 
-                                            strokeWidth={2} 
-                                            dot={{ r: 3, strokeWidth: 1.5, fill: 'white' }} 
-                                            activeDot={{ r: 5 }} 
-                                            connectNulls 
+                                        <Line
+                                            key={s}
+                                            type="monotone"
+                                            dataKey={displayName}
+                                            stroke={sectionColors[s] || `hsl(${idx * 40}, 70%, 50%)`}
+                                            strokeWidth={2}
+                                            dot={{ r: 3, strokeWidth: 1.5, fill: 'white' }}
+                                            activeDot={{ r: 5 }}
+                                            connectNulls
                                         />
                                     );
                                 })}
