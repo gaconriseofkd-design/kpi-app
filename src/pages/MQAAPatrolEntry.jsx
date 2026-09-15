@@ -76,8 +76,8 @@ export default function MQAAPatrolEntry() {
                 let criteriaList = [];
                 if (dbCriteria && dbCriteria.length > 0) {
                     criteriaList = dbCriteria.map((c, idx) => {
-                        const isNA = c.max_score <= 0;
-                        const isCrit = c.is_header || (c.no && c.no.startsWith("*"));
+                        const isHeader = Boolean(c.is_header);
+                        const isCrit = c.is_header ? false : (c.no && c.no.startsWith("*"));
                         return {
                             index: idx + 1,
                             no: c.no,
@@ -85,6 +85,7 @@ export default function MQAAPatrolEntry() {
                             titleEn: c.sub_label || "",
                             maxScore: isNA ? "N/A" : c.max_score,
                             isCritical: isCrit,
+                            isHeader: isHeader,
                             defaultAuditScore: isNA ? "N/A" : "",
                         };
                     });
@@ -116,7 +117,8 @@ export default function MQAAPatrolEntry() {
                     if (savedData.length > 0) {
                         const merged = savedData.map((item, idx) => {
                             const isNA = item.max_score === "N/A" || item.maxScore === "N/A" || item.score === "N/A";
-                            const isCrit = Boolean(item.is_critical || item.isCritical || (item.no && item.no.startsWith("*")));
+                            const isHeader = Boolean(item.is_header || item.isHeader);
+                            const isCrit = isHeader ? false : Boolean(item.is_critical || item.isCritical || (item.no && item.no.startsWith("*")));
                             
                             const urls = Array.isArray(item.image_urls)
                                 ? item.image_urls
@@ -127,11 +129,12 @@ export default function MQAAPatrolEntry() {
 
                             return {
                                 index: idx + 1,
-                                no: item.no || `${idx + 1}`,
+                                no: item.no || (isHeader ? "" : `${idx + 1}`),
                                 titleVn: item.titleVn || item.label || "",
                                 titleEn: item.titleEn || item.sub_label || item.subLabel || "",
                                 maxScore: isNA ? "N/A" : (item.max_score || item.maxScore || item.score || 4),
                                 isCritical: isCrit,
+                                isHeader: isHeader,
                                 auditScore: isNA ? "N/A" : (item.audit_score !== undefined ? item.audit_score : (item.level !== undefined ? item.level : "")),
                                 images: images,
                                 description: item.description || "",
@@ -644,6 +647,23 @@ export default function MQAAPatrolEntry() {
                     </thead>
                     <tbody className="divide-y divide-slate-200">
                         {rows.map((row, idx) => {
+                            if (row.isHeader) {
+                                return (
+                                    <tr key={idx} className="bg-indigo-100/60 border-y-2 border-indigo-200">
+                                        <td colSpan={7} className="p-4 text-left">
+                                            <div className="font-black text-indigo-900 text-[15px] uppercase tracking-wide">
+                                                {row.titleVn}
+                                            </div>
+                                            {row.titleEn && (
+                                                <div className="text-sm font-medium italic text-indigo-700 mt-1">
+                                                    {row.titleEn}
+                                                </div>
+                                            )}
+                                        </td>
+                                    </tr>
+                                );
+                            }
+
                             const isNA = row.maxScore === "N/A";
                             const isCrit = Boolean(row.isCritical);
 
