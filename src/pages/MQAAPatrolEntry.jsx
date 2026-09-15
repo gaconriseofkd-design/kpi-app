@@ -76,9 +76,9 @@ export default function MQAAPatrolEntry() {
                 let criteriaList = [];
                 if (dbCriteria && dbCriteria.length > 0) {
                     criteriaList = dbCriteria.map((c, idx) => {
-                        const isNA = c.max_score <= 0 || c.is_header;
-                        const isHeader = Boolean(c.is_header);
-                        const isCrit = c.is_header ? false : (c.no && c.no.startsWith("*"));
+                        const isHeader = Boolean(c.is_header && !c.no);
+                        const isNA = c.max_score <= 0 || isHeader;
+                        const isCrit = Boolean((c.is_header && c.no) || (c.no && c.no.startsWith("*")));
                         return {
                             index: idx + 1,
                             no: c.no,
@@ -117,9 +117,9 @@ export default function MQAAPatrolEntry() {
                     
                     if (savedData.length > 0) {
                         const merged = savedData.map((item, idx) => {
-                            const isNA = item.max_score === "N/A" || item.maxScore === "N/A" || item.score === "N/A";
-                            const isHeader = Boolean(item.is_header || item.isHeader);
-                            const isCrit = isHeader ? false : Boolean(item.is_critical || item.isCritical || (item.no && item.no.startsWith("*")));
+                            const isHeader = Boolean((item.is_header || item.isHeader) && !item.no);
+                            const isCrit = Boolean((item.is_header && item.no) || item.is_critical || item.isCritical || (item.no && item.no.startsWith("*")));
+                            const isNA = item.max_score === "N/A" || item.maxScore === "N/A" || item.score === "N/A" || isHeader;
                             
                             const urls = Array.isArray(item.image_urls)
                                 ? item.image_urls
