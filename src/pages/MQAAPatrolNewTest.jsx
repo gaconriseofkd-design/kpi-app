@@ -553,7 +553,7 @@ export default function MQAAPatrolNewTest() {
                                             </div>
                                         ) : (
                                             <div className="flex flex-wrap justify-center gap-1.5 w-full">
-                                                {(isCrit ? [-4, 0, 4] : [0, 1, 2, 3, 4]).map((pts) => (
+                                                {(isCrit ? [-4, 0, 4] : [0, 2, 4]).map((pts) => (
                                                     <button
                                                         key={pts}
                                                         type="button"
