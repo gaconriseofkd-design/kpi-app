@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { MQAA_NEW_CRITERIA, MQAA_NEW_SECTIONS } from "../data/mqaaNewChecklistCriteria";
-import { usePatrolTarget } from "../utils/mqaaSettings";
+import { usePatrolTarget, usePatrolScoreSettings } from "../utils/mqaaSettings";
 
 // Helper to normalize section names from URLs or legacy names
 function normalizeSectionName(sec) {
@@ -26,6 +26,7 @@ export default function MQAAPatrolEntry() {
     const section = useMemo(() => normalizeSectionName(rawSection), [rawSection]);
 
     const { targetScore } = usePatrolTarget();
+    const { normalScores, criticalScores } = usePatrolScoreSettings();
 
     const [loading, setLoading] = useState(false);
     const [previewImage, setPreviewImage] = useState(null);
@@ -429,7 +430,14 @@ export default function MQAAPatrolEntry() {
     const handleQuickScoreAll = (scoreVal) => {
         const newRows = rows.map((r) => {
             if (r.maxScore === "N/A") return r;
-            const targetScore = scoreVal === "max" ? r.maxScore : scoreVal;
+            let targetScore;
+            if (scoreVal === "max") {
+                const isCrit = Boolean(r.isCritical);
+                const scoreList = isCrit ? criticalScores : normalScores;
+                targetScore = scoreList && scoreList.length > 0 ? Math.max(...scoreList) : (Number(r.maxScore) || 4);
+            } else {
+                targetScore = scoreVal;
+            }
             return {
                 ...r,
                 auditScore: targetScore,
@@ -723,7 +731,7 @@ export default function MQAAPatrolEntry() {
                                             </div>
                                         ) : (
                                             <div className="flex flex-wrap justify-center gap-1.5 w-full">
-                                                {(isCrit ? [-4, 0, 4] : [0, 2, 4]).map((pts) => (
+                                                {(isCrit ? (criticalScores?.length ? criticalScores : [-4, 0, 4]) : (normalScores?.length ? normalScores : [0, 2, 4])).map((pts) => (
                                                     <button
                                                         key={pts}
                                                         type="button"

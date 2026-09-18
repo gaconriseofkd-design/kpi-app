@@ -96,3 +96,153 @@ export function usePatrolTarget() {
 
     return { targetScore: target, setTargetScore: updateTarget };
 }
+
+const SCORE_SETTINGS_KEY = "mqaa_patrol_score_settings";
+export const DEFAULT_NORMAL_SCORES = [0, 2, 4];
+export const DEFAULT_CRITICAL_SCORES = [-4, 0, 4];
+
+/**
+ * Get current score settings for normal and critical criteria.
+ */
+export function getPatrolScoreSettings() {
+    try {
+        const local = localStorage.getItem(SCORE_SETTINGS_KEY);
+        if (local) {
+            const parsed = JSON.parse(local);
+            const normal = Array.isArray(parsed.normalScores) && parsed.normalScores.length > 0
+                ? parsed.normalScores.map(Number).filter(n => !isNaN(n))
+                : DEFAULT_NORMAL_SCORES;
+            const critical = Array.isArray(parsed.criticalScores) && parsed.criticalScores.length > 0
+                ? parsed.criticalScores.map(Number).filter(n => !isNaN(n))
+                : DEFAULT_CRITICAL_SCORES;
+            return {
+                normalScores: normal.slice(0, 5),
+                criticalScores: critical.slice(0, 5)
+            };
+        }
+    } catch (e) {
+        console.warn("Error reading score settings from localStorage:", e);
+    }
+    return {
+        normalScores: DEFAULT_NORMAL_SCORES,
+        criticalScores: DEFAULT_CRITICAL_SCORES
+    };
+}
+
+/**
+ * Save score settings to localStorage and Supabase
+ */
+export async function setPatrolScoreSettings({ normalScores, criticalScores }) {
+    const validNormal = (Array.isArray(normalScores) && normalScores.length > 0
+        ? normalScores.map(Number).filter(n => !isNaN(n))
+        : DEFAULT_NORMAL_SCORES).slice(0, 5);
+
+    const validCritical = (Array.isArray(criticalScores) && criticalScores.length > 0
+        ? criticalScores.map(Number).filter(n => !isNaN(n))
+        : DEFAULT_CRITICAL_SCORES).slice(0, 5);
+
+    const payload = {
+        normalScores: validNormal,
+        criticalScores: validCritical
+    };
+
+    // 1. Save to localStorage
+    try {
+        localStorage.setItem(SCORE_SETTINGS_KEY, JSON.stringify(payload));
+        window.dispatchEvent(new CustomEvent("mqaa_score_settings_changed", { detail: payload }));
+    } catch (e) {
+        console.warn("Error saving score settings to localStorage:", e);
+    }
+
+    // 2. Persist to Supabase
+    try {
+        await Promise.all([
+            supabase.from("mqaa_patrol_sections").upsert({
+                id: "_CONFIG_NORMAL_SCORES_",
+                name: JSON.stringify(validNormal),
+                sort_order: 9998
+            }),
+            supabase.from("mqaa_patrol_sections").upsert({
+                id: "_CONFIG_CRITICAL_SCORES_",
+                name: JSON.stringify(validCritical),
+                sort_order: 9997
+            })
+        ]);
+    } catch (err) {
+        console.warn("Error persisting score settings to Supabase:", err);
+    }
+
+    return payload;
+}
+
+/**
+ * React hook to read and update score settings with live syncing
+ */
+export function usePatrolScoreSettings() {
+    const [scoreSettings, setScoreSettingsState] = useState(getPatrolScoreSettings);
+
+    useEffect(() => {
+        // Fetch remote config from Supabase on mount
+        const fetchRemote = async () => {
+            try {
+                const { data } = await supabase
+                    .from("mqaa_patrol_sections")
+                    .select("id, name")
+                    .in("id", ["_CONFIG_NORMAL_SCORES_", "_CONFIG_CRITICAL_SCORES_"]);
+
+                if (data && data.length > 0) {
+                    let normal = null;
+                    let critical = null;
+
+                    data.forEach(row => {
+                        try {
+                            if (row.id === "_CONFIG_NORMAL_SCORES_" && row.name) {
+                                const parsed = JSON.parse(row.name);
+                                if (Array.isArray(parsed) && parsed.length > 0) normal = parsed.map(Number);
+                            }
+                            if (row.id === "_CONFIG_CRITICAL_SCORES_" && row.name) {
+                                const parsed = JSON.parse(row.name);
+                                if (Array.isArray(parsed) && parsed.length > 0) critical = parsed.map(Number);
+                            }
+                        } catch (e) {}
+                    });
+
+                    if (normal || critical) {
+                        setScoreSettingsState(prev => {
+                            const updated = {
+                                normalScores: normal || prev.normalScores,
+                                criticalScores: critical || prev.criticalScores
+                            };
+                            localStorage.setItem(SCORE_SETTINGS_KEY, JSON.stringify(updated));
+                            return updated;
+                        });
+                    }
+                }
+            } catch (err) {
+                // Ignore if not found
+            }
+        };
+        fetchRemote();
+
+        // Listen for local changes
+        const handleLocalChange = (e) => {
+            if (e.detail) {
+                setScoreSettingsState(e.detail);
+            }
+        };
+
+        window.addEventListener("mqaa_score_settings_changed", handleLocalChange);
+        return () => window.removeEventListener("mqaa_score_settings_changed", handleLocalChange);
+    }, []);
+
+    const updateScoreSettings = async (newSettings) => {
+        const saved = await setPatrolScoreSettings(newSettings);
+        setScoreSettingsState(saved);
+    };
+
+    return {
+        normalScores: scoreSettings.normalScores,
+        criticalScores: scoreSettings.criticalScores,
+        setScoreSettings: updateScoreSettings
+    };
+}

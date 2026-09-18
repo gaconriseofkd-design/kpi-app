@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useState, useEffect, useMemo } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { MQAA_NEW_SECTIONS, MQAA_NEW_CRITERIA } from "../data/mqaaNewChecklistCriteria";
-import { usePatrolTarget } from "../utils/mqaaSettings";
+import { usePatrolTarget, usePatrolScoreSettings, DEFAULT_NORMAL_SCORES, DEFAULT_CRITICAL_SCORES } from "../utils/mqaaSettings";
 import PasswordModal from "../components/PasswordModal";
 
 const OFFICIAL_SECTION_ORDER = [
@@ -21,7 +21,7 @@ export default function MQAAPatrolSelection() {
     const navigate = useNavigate();
     const [showSettings, setShowSettings] = useState(false);
     const [showPasswordModal, setShowPasswordModal] = useState(false);
-    const [activeTab, setActiveTab] = useState("auditor"); // 'auditor' | 'form' | 'target'
+    const [activeTab, setActiveTab] = useState("auditor"); // 'auditor' | 'form' | 'target' | 'scoring'
 
     // Target Setting State
     const { targetScore, setTargetScore } = usePatrolTarget();
@@ -31,6 +31,17 @@ export default function MQAAPatrolSelection() {
     useEffect(() => {
         setTempTarget(targetScore);
     }, [targetScore]);
+
+    // Score Levels State (1 to 5 levels per category)
+    const { normalScores, criticalScores, setScoreSettings } = usePatrolScoreSettings();
+    const [tempNormalScores, setTempNormalScores] = useState(normalScores);
+    const [tempCriticalScores, setTempCriticalScores] = useState(criticalScores);
+    const [scoreSavedMsg, setScoreSavedMsg] = useState(false);
+
+    useEffect(() => {
+        setTempNormalScores(normalScores);
+        setTempCriticalScores(criticalScores);
+    }, [normalScores, criticalScores]);
 
     // Auditors State
     const [auditorList, setAuditorList] = useState([]);
@@ -280,6 +291,63 @@ export default function MQAAPatrolSelection() {
         setTimeout(() => setTargetSavedMsg(false), 2500);
     };
 
+    // Score Levels Handlers
+    const handleSetNormalCount = (count) => {
+        const c = Math.max(1, Math.min(5, count));
+        let arr = [...tempNormalScores];
+        if (arr.length < c) {
+            while (arr.length < c) {
+                const last = arr.length > 0 ? (Number(arr[arr.length - 1]) || 0) : 0;
+                arr.push(last + 2);
+            }
+        } else if (arr.length > c) {
+            arr = arr.slice(0, c);
+        }
+        setTempNormalScores(arr);
+    };
+
+    const handleSetCriticalCount = (count) => {
+        const c = Math.max(1, Math.min(5, count));
+        let arr = [...tempCriticalScores];
+        if (arr.length < c) {
+            while (arr.length < c) {
+                const last = arr.length > 0 ? (Number(arr[arr.length - 1]) || 0) : 0;
+                arr.push(last + 2);
+            }
+        } else if (arr.length > c) {
+            arr = arr.slice(0, c);
+        }
+        setTempCriticalScores(arr);
+    };
+
+    const handleNormalScoreChange = (index, val) => {
+        const arr = [...tempNormalScores];
+        arr[index] = val === "" ? "" : Number(val);
+        setTempNormalScores(arr);
+    };
+
+    const handleCriticalScoreChange = (index, val) => {
+        const arr = [...tempCriticalScores];
+        arr[index] = val === "" ? "" : Number(val);
+        setTempCriticalScores(arr);
+    };
+
+    const handleSaveScoreSettings = async () => {
+        const cleanNormal = tempNormalScores
+            .map(n => (n === "" ? 0 : Number(n)))
+            .filter(n => !isNaN(n));
+        const cleanCritical = tempCriticalScores
+            .map(n => (n === "" ? 0 : Number(n)))
+            .filter(n => !isNaN(n));
+
+        await setScoreSettings({
+            normalScores: cleanNormal.length > 0 ? cleanNormal : DEFAULT_NORMAL_SCORES,
+            criticalScores: cleanCritical.length > 0 ? cleanCritical : DEFAULT_CRITICAL_SCORES
+        });
+        setScoreSavedMsg(true);
+        setTimeout(() => setScoreSavedMsg(false), 2500);
+    };
+
     const handleOpenSettings = () => {
         setShowPasswordModal(true);
     };
@@ -447,6 +515,16 @@ export default function MQAAPatrolSelection() {
                                     }`}
                                 >
                                     3. SET TARGET
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab("scoring")}
+                                    className={`px-5 md:px-6 py-2.5 rounded-xl text-xs font-black tracking-wider transition ${
+                                        activeTab === "scoring"
+                                            ? "bg-white text-indigo-600 shadow-md"
+                                            : "text-slate-400 hover:text-slate-600"
+                                    }`}
+                                >
+                                    4. MỐC ĐIỂM (SCORING)
                                 </button>
                             </div>
 
@@ -838,6 +916,270 @@ export default function MQAAPatrolSelection() {
                                             className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-2xl font-black text-sm uppercase tracking-wider shadow-lg shadow-indigo-100 transition active:scale-95"
                                         >
                                             {targetSavedMsg ? "✅ ĐÃ LƯU MỤC TIÊU THÀNH CÔNG!" : "LƯU CẤU HÌNH MỤC TIÊU"}
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* TAB 4: MỐC ĐIỂM (SCORING LEVELS) */}
+                            {activeTab === "scoring" && (
+                                <div className="space-y-8 max-w-4xl mx-auto py-2">
+                                    <div className="text-center space-y-2">
+                                        <div className="w-16 h-16 bg-blue-100 text-blue-600 rounded-3xl mx-auto flex items-center justify-center shadow-inner">
+                                            <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+                                            </svg>
+                                        </div>
+                                        <h3 className="text-2xl font-black text-slate-900 tracking-tight">
+                                            Cấu hình Mốc điểm Chấm MQAA Patrol
+                                        </h3>
+                                        <p className="text-slate-500 text-xs md:text-sm leading-relaxed max-w-xl mx-auto">
+                                            Tùy chỉnh số lượng và giá trị các mốc điểm (từ 1 đến 5 mốc) riêng biệt cho <strong className="text-indigo-700">Mục Thường</strong> và <strong className="text-emerald-700">Mục Trọng Yếu</strong>. Cấu hình này sẽ tự động đồng bộ sang giao diện chấm điểm.
+                                        </p>
+                                    </div>
+
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        {/* 1. MỤC THƯỜNG */}
+                                        <div className="bg-slate-50 border-2 border-indigo-100 rounded-3xl p-6 flex flex-col justify-between space-y-6 shadow-sm">
+                                            <div className="space-y-4">
+                                                <div className="flex items-center justify-between pb-3 border-b border-indigo-100">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-3 h-3 rounded-full bg-indigo-600"></span>
+                                                        <h4 className="font-black text-indigo-950 text-base">
+                                                            1. Mục Tiêu chí Thường
+                                                        </h4>
+                                                    </div>
+                                                    <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-indigo-100 text-indigo-700">
+                                                        {tempNormalScores.length} mốc điểm
+                                                    </span>
+                                                </div>
+
+                                                {/* Chọn số lượng mốc điểm: 1 đến 5 */}
+                                                <div>
+                                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">
+                                                        Chọn số mốc điểm (1 - 5):
+                                                    </label>
+                                                    <div className="grid grid-cols-5 gap-1.5">
+                                                        {[1, 2, 3, 4, 5].map((cnt) => (
+                                                            <button
+                                                                key={cnt}
+                                                                type="button"
+                                                                onClick={() => handleSetNormalCount(cnt)}
+                                                                className={`py-2 rounded-xl text-xs font-black transition ${
+                                                                    tempNormalScores.length === cnt
+                                                                        ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
+                                                                        : "bg-white hover:bg-slate-100 text-slate-600 border border-slate-200"
+                                                                }`}
+                                                            >
+                                                                {cnt} mốc
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* Các ô nhập giá trị mốc điểm */}
+                                                <div>
+                                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">
+                                                        Giá trị từng mốc điểm:
+                                                    </label>
+                                                    <div className="flex flex-wrap gap-2.5">
+                                                        {tempNormalScores.map((score, idx) => (
+                                                            <div key={idx} className="flex-1 min-w-[60px] text-center">
+                                                                <span className="text-[10px] font-bold text-slate-400 block mb-1">
+                                                                    Mốc {idx + 1}
+                                                                </span>
+                                                                <input
+                                                                    type="number"
+                                                                    value={score}
+                                                                    onChange={(e) => handleNormalScoreChange(idx, e.target.value)}
+                                                                    className="w-full py-2 text-center text-sm font-black text-indigo-900 bg-white border-2 border-indigo-200 rounded-xl focus:border-indigo-600 outline-none shadow-sm"
+                                                                />
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* Gợi ý mẫu mốc điểm */}
+                                                <div className="pt-2">
+                                                    <span className="text-[11px] font-bold text-slate-400 block mb-1.5">Mẫu gợi ý:</span>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setTempNormalScores([0, 2, 4])}
+                                                            className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-600 text-xs font-bold rounded-lg border border-slate-200 transition"
+                                                        >
+                                                            [0, 2, 4]
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setTempNormalScores([0, 1, 2, 3, 4])}
+                                                            className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-600 text-xs font-bold rounded-lg border border-slate-200 transition"
+                                                        >
+                                                            [0, 1, 2, 3, 4]
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setTempNormalScores([0, 4])}
+                                                            className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-600 text-xs font-bold rounded-lg border border-slate-200 transition"
+                                                        >
+                                                            [0, 4]
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Preview thực tế */}
+                                            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-inner">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">
+                                                    Xem trước nút bấm thực tế:
+                                                </span>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {tempNormalScores.map((sc, i) => (
+                                                        <div
+                                                            key={i}
+                                                            className="w-8 h-8 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-700 font-black text-xs flex items-center justify-center shadow-sm"
+                                                        >
+                                                            {sc === "" ? 0 : sc}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* 2. MỤC QUAN TRỌNG */}
+                                        <div className="bg-slate-50 border-2 border-emerald-100 rounded-3xl p-6 flex flex-col justify-between space-y-6 shadow-sm">
+                                            <div className="space-y-4">
+                                                <div className="flex items-center justify-between pb-3 border-b border-emerald-100">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="w-3 h-3 rounded-full bg-emerald-600"></span>
+                                                        <h4 className="font-black text-emerald-950 text-base">
+                                                            2. Mục Tiêu chí Trọng Yếu (*)
+                                                        </h4>
+                                                    </div>
+                                                    <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                                                        {tempCriticalScores.length} mốc điểm
+                                                    </span>
+                                                </div>
+
+                                                {/* Chọn số lượng mốc điểm: 1 đến 5 */}
+                                                <div>
+                                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">
+                                                        Chọn số mốc điểm (1 - 5):
+                                                    </label>
+                                                    <div className="grid grid-cols-5 gap-1.5">
+                                                        {[1, 2, 3, 4, 5].map((cnt) => (
+                                                            <button
+                                                                key={cnt}
+                                                                type="button"
+                                                                onClick={() => handleSetCriticalCount(cnt)}
+                                                                className={`py-2 rounded-xl text-xs font-black transition ${
+                                                                    tempCriticalScores.length === cnt
+                                                                        ? "bg-emerald-600 text-white shadow-md shadow-emerald-100"
+                                                                        : "bg-white hover:bg-slate-100 text-slate-600 border border-slate-200"
+                                                                }`}
+                                                            >
+                                                                {cnt} mốc
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* Các ô nhập giá trị mốc điểm */}
+                                                <div>
+                                                    <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2">
+                                                        Giá trị từng mốc điểm (hỗ trợ điểm âm):
+                                                    </label>
+                                                    <div className="flex flex-wrap gap-2.5">
+                                                        {tempCriticalScores.map((score, idx) => (
+                                                            <div key={idx} className="flex-1 min-w-[60px] text-center">
+                                                                <span className="text-[10px] font-bold text-slate-400 block mb-1">
+                                                                    Mốc {idx + 1}
+                                                                </span>
+                                                                <input
+                                                                    type="number"
+                                                                    value={score}
+                                                                    onChange={(e) => handleCriticalScoreChange(idx, e.target.value)}
+                                                                    className="w-full py-2 text-center text-sm font-black text-emerald-900 bg-white border-2 border-emerald-200 rounded-xl focus:border-emerald-600 outline-none shadow-sm"
+                                                                />
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+
+                                                {/* Gợi ý mẫu mốc điểm */}
+                                                <div className="pt-2">
+                                                    <span className="text-[11px] font-bold text-slate-400 block mb-1.5">Mẫu gợi ý:</span>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setTempCriticalScores([-4, 0, 4])}
+                                                            className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-600 text-xs font-bold rounded-lg border border-slate-200 transition"
+                                                        >
+                                                            [-4, 0, 4]
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setTempCriticalScores([-4, 4])}
+                                                            className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-600 text-xs font-bold rounded-lg border border-slate-200 transition"
+                                                        >
+                                                            [-4, 4]
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setTempCriticalScores([0, 4])}
+                                                            className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-600 text-xs font-bold rounded-lg border border-slate-200 transition"
+                                                        >
+                                                            [0, 4]
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            onClick={() => setTempCriticalScores([-4, -2, 0, 2, 4])}
+                                                            className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-600 text-xs font-bold rounded-lg border border-slate-200 transition"
+                                                        >
+                                                            [-4, -2, 0, 2, 4]
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Preview thực tế */}
+                                            <div className="bg-white p-3.5 rounded-2xl border border-slate-200 shadow-inner">
+                                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block mb-2">
+                                                    Xem trước nút bấm thực tế:
+                                                </span>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {tempCriticalScores.map((sc, i) => (
+                                                        <div
+                                                            key={i}
+                                                            className="w-8 h-8 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-700 font-black text-xs flex items-center justify-center shadow-sm"
+                                                        >
+                                                            {sc === "" ? 0 : sc}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="flex items-center gap-3 pt-2">
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                setTempNormalScores(DEFAULT_NORMAL_SCORES);
+                                                setTempCriticalScores(DEFAULT_CRITICAL_SCORES);
+                                            }}
+                                            className="px-6 py-4 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-2xl font-black text-xs uppercase tracking-wider transition"
+                                        >
+                                            Mặc định ban đầu
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={handleSaveScoreSettings}
+                                            className="flex-1 py-4 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-sm uppercase tracking-wider shadow-lg shadow-blue-100 transition active:scale-95"
+                                        >
+                                            {scoreSavedMsg ? "✅ ĐÃ LƯU MỐC ĐIỂM THÀNH CÔNG!" : "LƯU CẤU HÌNH MỐC ĐIỂM"}
                                         </button>
                                     </div>
                                 </div>
