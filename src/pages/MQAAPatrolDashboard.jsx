@@ -339,6 +339,9 @@ export default function MQAAPatrolDashboard() {
 
                     const englishText = item.sub_label || item.subLabel || criteriaMap[item.no] || "";
 
+                    const imgUrls = Array.isArray(item.image_urls) ? item.image_urls : (item.image_url ? [item.image_url] : []);
+                    const primaryImg = imgUrls[0] || "";
+
                     const r = detailSheet.addRow([
                         item.no,
                         englishText ? {
@@ -349,7 +352,7 @@ export default function MQAAPatrolDashboard() {
                         } : item.label,
                         scoreVal,
                         levelVal,
-                        item.image_url ? { text: "Link hình ảnh", hyperlink: item.image_url } : "",
+                        primaryImg ? { text: "Link hình ảnh", hyperlink: primaryImg, tooltip: "Nhấp để mở hình ảnh" } : "",
                         item.description || ""
                     ]);
 
@@ -362,8 +365,8 @@ export default function MQAAPatrolDashboard() {
                         });
                     }
 
-                    if (item.image_url) {
-                        r.getCell(5).font = { color: { argb: 'FF0000FF' }, underline: true };
+                    if (primaryImg) {
+                        r.getCell(5).font = { color: { argb: 'FF1D4ED8' }, underline: true, bold: true };
                     }
 
                     r.eachCell(c => {

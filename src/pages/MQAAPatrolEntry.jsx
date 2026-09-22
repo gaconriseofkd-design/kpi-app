@@ -354,27 +354,22 @@ export default function MQAAPatrolEntry() {
                     for (let j = 0; j < row.images.length; j++) {
                         const imgObj = row.images[j];
                         if (imgObj.file) {
-                            try {
-                                const compressed = await compressImage(imgObj.file);
-                                const fileName = `mqaa_patrol/${Date.now()}_${i}_${j}_${section.replace(/\s+/g, "_")}.jpg`;
-                                const { error: upErr } = await supabase.storage
-                                    .from("mqaa-images")
-                                    .upload(fileName, compressed);
+                            const compressed = await compressImage(imgObj.file);
+                            const fileName = `mqaa_patrol/${Date.now()}_${i}_${j}_${section.replace(/\s+/g, "_")}.jpg`;
+                            const { error: upErr } = await supabase.storage
+                                .from("mqaa-images")
+                                .upload(fileName, compressed);
 
-                                if (!upErr) {
-                                    const { data: { publicUrl } } = supabase.storage
-                                        .from("mqaa-images")
-                                        .getPublicUrl(fileName);
-                                    finalUrls.push(publicUrl);
-                                } else {
-                                    console.warn("Storage upload failed, fallback:", upErr);
-                                    finalUrls.push(imgObj.url);
-                                }
-                            } catch (e) {
-                                console.warn("Image upload error:", e);
-                                finalUrls.push(imgObj.url);
+                            if (upErr) {
+                                throw new Error(`Lỗi tải ảnh mục "${row.titleVn || row.no}" lên kho Supabase: ${upErr.message}. Vui lòng kiểm tra bucket 'mqaa-images'.`);
                             }
-                        } else {
+
+                            const { data: { publicUrl } } = supabase.storage
+                                .from("mqaa-images")
+                                .getPublicUrl(fileName);
+                            finalUrls.push(publicUrl);
+                        } else if (imgObj.url && !imgObj.url.startsWith("blob:")) {
+                            // Giữ lại URL hợp lệ đã có từ trước (không lưu blob)
                             finalUrls.push(imgObj.url);
                         }
                     }

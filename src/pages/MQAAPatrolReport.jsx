@@ -185,19 +185,40 @@ function PatrolLogsTab({ navigate }) {
         const workbook = new ExcelJS.Workbook();
         const worksheet = workbook.addWorksheet("MQAA Patrol Details");
 
+        const evalData = Array.isArray(record.evaluation_data) ? record.evaluation_data : [];
+
+        // Count max images attached per criteria to dynamically allocate columns if multiple
+        let maxImages = 1;
+        evalData.forEach((item) => {
+            const urls = Array.isArray(item.image_urls) ? item.image_urls : (item.image_url ? [item.image_url] : []);
+            if (urls.length > maxImages) {
+                maxImages = urls.length;
+            }
+        });
+
         // 1. Setup Column Widths
-        worksheet.columns = [
+        const columns = [
             { key: "no", width: 12 },          // Col A: STT / No.
             { key: "criteria", width: 75 },    // Col B: Tiêu chí / Criteria
             { key: "maxScore", width: 15 },    // Col C: Điểm chuẩn / Max Score
             { key: "auditScore", width: 15 },  // Col D: Điểm đánh giá / Audit Score
-            { key: "images", width: 20 },      // Col E: Hình ảnh / Images
-            { key: "description", width: 32 }, // Col F: Ghi chú / Description
         ];
 
+        if (maxImages <= 1) {
+            columns.push({ key: "image", width: 20 });
+        } else {
+            for (let i = 1; i <= maxImages; i++) {
+                columns.push({ key: `image_${i}`, width: 18 });
+            }
+        }
+        columns.push({ key: "description", width: 32 });
+
+        worksheet.columns = columns;
+        const totalCols = columns.length;
+
         // 2. Title Block
-        worksheet.mergeCells("A1:F1");
-        const titleCell = worksheet.getCell("A1");
+        worksheet.mergeCells(1, 1, 1, totalCols);
+        const titleCell = worksheet.getCell(1, 1);
         titleCell.value = `BÁO CÁO ĐÁNH GIÁ MQAA PATROL - ${record.section.toUpperCase()}`;
         titleCell.font = { bold: true, size: 13, color: { argb: "FFFFFFFF" } };
         titleCell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF1E40AF" } }; // Deep Blue
@@ -215,7 +236,12 @@ function PatrolLogsTab({ navigate }) {
         ];
 
         metaRows.forEach((rowVals) => {
-            const r = worksheet.addRow([rowVals[0], rowVals[1], rowVals[2], rowVals[3], "", ""]);
+            const rData = new Array(totalCols).fill("");
+            rData[0] = rowVals[0];
+            rData[1] = rowVals[1];
+            rData[2] = rowVals[2];
+            rData[3] = rowVals[3];
+            const r = worksheet.addRow(rData);
             r.height = 20;
             r.getCell(1).font = { bold: true, size: 10, color: { argb: "FF374151" } };
             r.getCell(1).alignment = { horizontal: "left", vertical: "middle" };
@@ -231,32 +257,38 @@ function PatrolLogsTab({ navigate }) {
         worksheet.getRow(6).height = 8;
 
         // 4. Criteria Table Header
-        const headerRow = worksheet.addRow([
+        const headerValues = [
             "STT / No.",
             "Nội dung tiêu chí kiểm tra / Evaluation Criteria",
             "Điểm chuẩn\nMax Score",
-            "Điểm đánh giá\nAudit Score",
-            "Hình ảnh\nImages",
-            "Ghi chú / Mô tả\nDescription"
-        ]);
+            "Điểm đánh giá\nAudit Score"
+        ];
+        if (maxImages <= 1) {
+            headerValues.push("Hình ảnh\nImages");
+        } else {
+            for (let i = 1; i <= maxImages; i++) {
+                headerValues.push(`Hình ảnh ${i}\nImage ${i}`);
+            }
+        }
+        headerValues.push("Ghi chú / Mô tả\nDescription");
+
+        const headerRow = worksheet.addRow(headerValues);
         headerRow.height = 28;
         headerRow.font = { bold: true, size: 10.5, color: { argb: "FFFFFFFF" } };
         headerRow.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF2563EB" } }; // Blue-600
         headerRow.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
 
         // 5. Criteria Data Rows
-        const evalData = Array.isArray(record.evaluation_data) ? record.evaluation_data : [];
         evalData.forEach((item) => {
             const isHeader = Boolean((item.isHeader || item.is_header) && !item.no);
             if (isHeader) {
                 const headerText = item.titleVn || item.label || "";
                 const subText = item.titleEn || item.sub_label || item.subLabel || "";
-                const row = worksheet.addRow([
-                    subText ? `${headerText} - ${subText}` : headerText,
-                    "", "", "", "", ""
-                ]);
+                const rowVals = new Array(totalCols).fill("");
+                rowVals[0] = subText ? `${headerText} - ${subText}` : headerText;
+                const row = worksheet.addRow(rowVals);
                 const rowIdx = row.number;
-                worksheet.mergeCells(`A${rowIdx}:F${rowIdx}`);
+                worksheet.mergeCells(rowIdx, 1, rowIdx, totalCols);
                 row.height = 24;
                 row.getCell(1).font = { bold: true, size: 10.5, color: { argb: "FF1E3A8A" } };
                 row.getCell(1).fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDBEAFE" } }; // Soft blue
@@ -281,16 +313,35 @@ function PatrolLogsTab({ navigate }) {
             const auditScoreVal = isNA ? "N/A" : (item.audit_score !== undefined ? item.audit_score : (item.level !== undefined ? item.level : "—"));
 
             const imgUrls = Array.isArray(item.image_urls) ? item.image_urls : (item.image_url ? [item.image_url] : []);
-            const imageDisplay = imgUrls.length > 0 ? (imgUrls.length === 1 ? imgUrls[0] : `${imgUrls.length} ảnh`) : "—";
 
-            const row = worksheet.addRow([
+            const rowVals = [
                 item.no || "",
                 fullCriteria,
                 maxScoreVal,
-                auditScoreVal,
-                imageDisplay,
-                item.description || "—"
-            ]);
+                auditScoreVal
+            ];
+
+            for (let i = 0; i < maxImages; i++) {
+                const url = imgUrls[i];
+                if (url && typeof url === "string" && url.trim() !== "") {
+                    const isBlob = url.startsWith("blob:");
+                    if (isBlob) {
+                        rowVals.push("Ảnh chưa đồng bộ");
+                    } else {
+                        rowVals.push({
+                            text: maxImages > 1 ? `Xem ảnh ${i + 1}` : "Xem ảnh",
+                            hyperlink: url.trim(),
+                            tooltip: "Nhấp để xem ảnh"
+                        });
+                    }
+                } else {
+                    rowVals.push("—");
+                }
+            }
+
+            rowVals.push(item.description || "—");
+
+            const row = worksheet.addRow(rowVals);
 
             // Smart row height: column B has width 75 (~70 chars per line)
             const estLines = Math.max(1, Math.ceil(fullCriteria.length / 70) + (titleEn ? 1 : 0));
@@ -319,9 +370,13 @@ function PatrolLogsTab({ navigate }) {
                 } else if (colNumber === 3 || colNumber === 4) {
                     cell.alignment = { horizontal: "center", vertical: "middle" };
                     cell.font = { bold: true, size: 10, color: { argb: cell.value === "N/A" ? "FF9CA3AF" : "FF111827" } };
-                } else if (colNumber === 5) {
-                    cell.alignment = { horizontal: "center", vertical: "middle", wrapText: true };
-                    cell.font = { size: 9, color: { argb: "FF4B5563" } };
+                } else if (colNumber >= 5 && colNumber < 5 + maxImages) {
+                    cell.alignment = { horizontal: "center", vertical: "middle" };
+                    if (cell.value && typeof cell.value === "object" && cell.value.hyperlink) {
+                        cell.font = { size: 9.5, color: { argb: "FF1D4ED8" }, underline: true, bold: true };
+                    } else {
+                        cell.font = { size: 9, color: { argb: "FF9CA3AF" } };
+                    }
                 } else {
                     cell.alignment = { horizontal: "left", vertical: "middle", wrapText: true };
                     cell.font = { size: 9, color: { argb: "FF4B5563" } };
