@@ -157,8 +157,23 @@ export default function EntryPageMolding() {
       return alert("Không thể nhập KPI cho ngày trong tương lai.");
     }
 
-    if (!workerId || !date || !shift || !category) {
-      alert("Vui lòng nhập đủ: MSNV, Ngày, Ca, Loại hàng.");
+    if (!workerId || !date || !shift) {
+      alert("Vui lòng nhập đủ: MSNV, Ngày, Ca.");
+      return;
+    }
+
+    if (!inputHours || Number(inputHours) <= 0) {
+      alert("Vui lòng nhập Giờ làm việc (> 0).");
+      return;
+    }
+
+    if (!category || category.trim() === "") {
+      alert("Vui lòng chọn Loại hàng.");
+      return;
+    }
+
+    if (output === "" || output === null || output === undefined || Number(output) <= 0) {
+      alert("Vui lòng nhập Sản lượng / ca (> 0).");
       return;
     }
 
@@ -250,19 +265,19 @@ export default function EntryPageMolding() {
         </div>
 
         <div>
-          <label>Giờ làm việc (người nhập)</label>
+          <label>Giờ làm việc (người nhập) <span className="text-red-500 font-bold">*</span></label>
           <input type="number" className="input" value={inputHours} onChange={e => setInputHours(e.target.value)} />
         </div>
 
         <div>
-          <label>Loại hàng</label>
+          <label>Loại hàng <span className="text-red-500 font-bold">*</span></label>
           <select className="input" value={category} onChange={e => setCategory(e.target.value)}>
             <option value="">-- Chọn loại hàng --</option>
             {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
         </div>
         <div>
-          <label>Sản lượng / ca</label>
+          <label>Sản lượng / ca <span className="text-red-500 font-bold">*</span></label>
           <input type="number" className="input" value={output} onChange={e => setOutput(e.target.value)} />
         </div>
 

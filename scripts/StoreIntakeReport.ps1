@@ -4,8 +4,8 @@ param(
     [string]$TargetReport = ""
 )
 
-$SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
-$SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0"
+$SUPABASE_URL = "https://ewhfhputqeyebffjwtnl.supabase.co"
+$SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3aGZocHV0cWV5ZWJmZmp3dG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyOTU1OTMsImV4cCI6MjEwNDg3MTU5M30.a368bZeQDr2du8R4ipKHpMZm0ITJlIqeD6wqba-fbRM"
 $headers = @{ "apikey" = $SUPABASE_KEY; "Authorization" = "Bearer $SUPABASE_KEY" }
 
 $settings = $null
@@ -48,7 +48,12 @@ Add-Type -AssemblyName System.Drawing
 # --- UI Automation Setup ---
 $win32Src = @"
 using System;
+using System.Text;
+using System.Threading;
 using System.Runtime.InteropServices;
+using System.Diagnostics;
+using System.Collections.Generic;
+
 public class WinHelper {
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmd);
@@ -57,84 +62,297 @@ public class WinHelper {
     [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
     [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
     [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)] public static extern IntPtr FindWindow(string lpClassName, string lpWindowName);
+    [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr FindWindowEx(IntPtr parentHandle, IntPtr childAfter, string className, string windowTitle);
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)] public static extern int GetClassName(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+    [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr OpenDesktop(string lpszDesktop, uint dwFlags, bool fInherit, uint dwDesiredAccess);
+    [DllImport("user32.dll", SetLastError = true)] public static extern bool SetThreadDesktop(IntPtr hDesktop);
+    [DllImport("user32.dll", SetLastError = true)] public static extern bool CloseDesktop(IntPtr hDesktop);
+    [DllImport("oleacc.dll")] public static extern int AccessibleObjectFromWindow(IntPtr hwnd, uint id, ref Guid iid, [In, Out, MarshalAs(UnmanagedType.IUnknown)] ref object ppvObject);
+
+    const uint OBJID_NATIVEOM = 0xFFFFFFF0;
+    static Guid IID_IDispatch = new Guid("{00020400-0000-0000-C000-000000000046}");
+
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc enumProc, IntPtr lParam);
+
+    public static List<IntPtr> FindExcel7Windows() {
+        List<IntPtr> list = new List<IntPtr>();
+        Thread t = new Thread(() => {
+            IntPtr hDesk = OpenDesktop("default", 0, false, 0x01FF);
+            if (hDesk != IntPtr.Zero) SetThreadDesktop(hDesk);
+
+            EnumWindows((hWnd, lParam) => {
+                StringBuilder sbClass = new StringBuilder(256);
+                GetClassName(hWnd, sbClass, 256);
+                if (sbClass.ToString() == "XLMAIN") {
+                    IntPtr hChild = IntPtr.Zero;
+                    while (true) {
+                        hChild = FindWindowEx(hWnd, hChild, "XLDESK", null);
+                        if (hChild != IntPtr.Zero) {
+                            IntPtr hExcel7 = FindWindowEx(hChild, IntPtr.Zero, "EXCEL7", null);
+                            if (hExcel7 != IntPtr.Zero && !list.Contains(hExcel7)) {
+                                list.Add(hExcel7);
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                    IntPtr directChild = FindWindowEx(hWnd, IntPtr.Zero, "EXCEL7", null);
+                    if (directChild != IntPtr.Zero && !list.Contains(directChild)) {
+                        list.Add(directChild);
+                    }
+                }
+                return true;
+            }, IntPtr.Zero);
+
+            if (hDesk != IntPtr.Zero) CloseDesktop(hDesk);
+        });
+        t.Start();
+        t.Join();
+        return list;
+    }
+
+    public static object GetExcelWindow(IntPtr hExcel7) {
+        object obj = null;
+        int res = AccessibleObjectFromWindow(hExcel7, OBJID_NATIVEOM, ref IID_IDispatch, ref obj);
+        if (res == 0 && obj != null) return obj;
+        return null;
+    }
+
+    public static IntPtr FindVisibleZalo(out uint zaloPid) {
+        uint targetPid = 0;
+        IntPtr targetHwnd = IntPtr.Zero;
+        Process[] procs = Process.GetProcessesByName("Zalo");
+        HashSet<uint> pids = new HashSet<uint>();
+        foreach (Process p in procs) { pids.Add((uint)p.Id); }
+
+        EnumWindows((hWnd, lParam) => {
+            if (IsWindowVisible(hWnd)) {
+                uint pid;
+                GetWindowThreadProcessId(hWnd, out pid);
+                if (pids.Contains(pid)) {
+                    StringBuilder sbTitle = new StringBuilder(512);
+                    GetWindowText(hWnd, sbTitle, 512);
+                    StringBuilder sbClass = new StringBuilder(512);
+                    GetClassName(hWnd, sbClass, 512);
+                    string title = sbTitle.ToString();
+                    string cls = sbClass.ToString();
+
+                    if (cls == "Chrome_WidgetWin_1" && title == "Zalo") {
+                        targetHwnd = hWnd;
+                        targetPid = pid;
+                        return false;
+                    }
+                    if (targetHwnd == IntPtr.Zero && cls == "Chrome_WidgetWin_1") {
+                        targetHwnd = hWnd;
+                        targetPid = pid;
+                    }
+                }
+            }
+            return true;
+        }, IntPtr.Zero);
+
+        zaloPid = targetPid;
+        return targetHwnd;
+    }
+
+    public static bool FocusZalo(out uint activePid) {
+        bool success = false;
+        uint outPid = 0;
+        Thread t = new Thread(() => {
+            IntPtr hDesk = OpenDesktop("default", 0, false, 0x01FF);
+            if (hDesk != IntPtr.Zero) SetThreadDesktop(hDesk);
+
+            uint targetPid;
+            IntPtr hWnd = FindVisibleZalo(out targetPid);
+            if (hWnd == IntPtr.Zero) {
+                if (hDesk != IntPtr.Zero) CloseDesktop(hDesk);
+                return;
+            }
+
+            uint zaloThread = GetWindowThreadProcessId(hWnd, out targetPid);
+            uint currentThread = GetCurrentThreadId();
+            IntPtr fgHwnd = GetForegroundWindow();
+            uint dummy;
+            uint fgThread = GetWindowThreadProcessId(fgHwnd, out dummy);
+
+            if (fgThread != zaloThread) {
+                AttachThreadInput(currentThread, zaloThread, true);
+                AttachThreadInput(fgThread, zaloThread, true);
+            }
+
+            ShowWindow(hWnd, 9); // SW_RESTORE
+            ShowWindow(hWnd, 5); // SW_SHOW
+            SetForegroundWindow(hWnd);
+
+            if (fgThread != zaloThread) {
+                AttachThreadInput(currentThread, zaloThread, false);
+                AttachThreadInput(fgThread, zaloThread, false);
+            }
+
+            Thread.Sleep(600);
+
+            IntPtr newFg = GetForegroundWindow();
+            uint newFgPid;
+            GetWindowThreadProcessId(newFg, out newFgPid);
+            outPid = newFgPid;
+            success = (newFgPid == targetPid);
+
+            if (hDesk != IntPtr.Zero) CloseDesktop(hDesk);
+        });
+        t.Start();
+        t.Join();
+        activePid = outPid;
+        return success;
+    }
 }
 "@
 Add-Type -TypeDefinition $win32Src -Language CSharp -ErrorAction SilentlyContinue
 
-$script:zaloHandle = [IntPtr]::Zero
-$script:myHandle = (Get-Process -Id $PID).MainWindowHandle
-
 function Focus-Zalo {
-    if ($script:myHandle -ne [IntPtr]::Zero) {
-        [WinHelper]::ShowWindow($script:myHandle, 6) | Out-Null
+    $activePid = 0
+    $focusOk = [WinHelper]::FocusZalo([ref]$activePid)
+    if (-not $focusOk) {
+        $wshell = New-Object -ComObject WScript.Shell
+        $wshell.AppActivate("Zalo") | Out-Null
+        Start-Sleep -Milliseconds 800
+        $focusOk = [WinHelper]::FocusZalo([ref]$activePid)
     }
-    $zaloThread = [WinHelper]::GetWindowThreadProcessId($script:zaloHandle, [ref]0)
-    $myThread = [WinHelper]::GetCurrentThreadId()
-    $fgWindow = [WinHelper]::GetForegroundWindow()
-    $fgThread = [WinHelper]::GetWindowThreadProcessId($fgWindow, [ref]0)
-    
-    if ($fgThread -ne $zaloThread) {
-        [WinHelper]::AttachThreadInput($myThread, $zaloThread, $true) | Out-Null
-        [WinHelper]::AttachThreadInput($fgThread, $zaloThread, $true) | Out-Null
-    }
-    
-    [WinHelper]::ShowWindow($script:zaloHandle, 9) | Out-Null
-    Start-Sleep -Milliseconds 300
-    [WinHelper]::SetForegroundWindow($script:zaloHandle) | Out-Null
-    
-    if ($fgThread -ne $zaloThread) {
-        [WinHelper]::AttachThreadInput($myThread, $zaloThread, $false) | Out-Null
-        [WinHelper]::AttachThreadInput($fgThread, $zaloThread, $false) | Out-Null
+
+    $allZaloPids = @((Get-Process -Name Zalo -ErrorAction SilentlyContinue).Id)
+    if ($allZaloPids.Count -gt 0 -and (-not ($allZaloPids -contains $activePid))) {
+        throw "Khong the focus vao Zalo (PID dang active la $activePid khong phai Zalo)!"
     }
     Start-Sleep -Milliseconds 500
+}
+
+function Get-StoredData {
+    # 1. Ưu tiên cao nhất: Lấy dữ liệu từ workbook Ovn Pro Schedule đang mở treo sẵn trên máy
+    Write-Host "Dang kiem tra file Ovn Pro Schedule dang mo treo tren may..." -ForegroundColor Cyan
+    $excel7s = [WinHelper]::FindExcel7Windows()
+    foreach ($h in $excel7s) {
+        $win = [WinHelper]::GetExcelWindow($h)
+        if ($win) {
+            try {
+                $app = $win.Application
+                foreach ($wb in $app.Workbooks) {
+                    if ($wb.Name -like "*Schedule*" -or $wb.FullName -like "*Schedule*") {
+                        foreach ($sh in $wb.Sheets) {
+                            if ($sh.Name -ieq "STORED") {
+                                Write-Host "-> Da ket noi truc tiep vao sheet STORED cua file dang mo treo: $($wb.Name)!" -ForegroundColor Green
+                                return @{
+                                    IsRunningInstance = $true
+                                    Workbook = $wb
+                                    Sheet = $sh
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch {}
+        }
+    }
+
+    # 2. Dự phòng: Nếu chưa mở treo sẵn, tự động mở đọc trực tiếp file Ovn Pro Schedule.xlsb
+    Write-Host "Khong tim thay file dang mo treo, chuyen sang che do mo doc truc tiep..." -ForegroundColor Yellow
+    $schedulePath = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Nhân Lg\Schedule\Ovn Pro Schedule.xlsb"
+    if (-not (Test-Path $schedulePath)) {
+        $schedulePath = "$env:USERPROFILE\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Nhân Lg\Schedule\Ovn Pro Schedule.xlsb"
+    }
+
+    if (Test-Path $schedulePath) {
+        $excelNew = New-Object -ComObject Excel.Application
+        $excelNew.Visible = $false
+        $excelNew.DisplayAlerts = $false
+        $wbNew = $excelNew.Workbooks.Open($schedulePath, 0, $true)
+        $shNew = $wbNew.Sheets.Item("STORED")
+        return @{
+            IsRunningInstance = $false
+            ExcelApp = $excelNew
+            Workbook = $wbNew
+            Sheet = $shNew
+        }
+    }
+
+    return $null
 }
 
 # --- Main Logic ---
 try {
     # Initialize Zalo
-    Write-Host "Dang tim Zalo PC..." -ForegroundColor Cyan
-    $zaloProcess = Get-Process -Name Zalo -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle } | Select-Object -First 1
-    if (-not $zaloProcess) {
-        $zaloProcess = Get-Process -Name Zalo -ErrorAction SilentlyContinue | Select-Object -First 1
-    }
-    if (-not $zaloProcess) {
+    Write-Host "Dang kiem tra Zalo PC..." -ForegroundColor Cyan
+    $allZalo = Get-Process -Name Zalo -ErrorAction SilentlyContinue
+    if (-not $allZalo -or $allZalo.Count -eq 0) {
         throw "Hay mo Zalo PC truoc khi chay script!"
-    }
-    $script:zaloHandle = $zaloProcess.MainWindowHandle
-    if ($script:zaloHandle -eq [IntPtr]::Zero) {
-        $script:zaloHandle = [WinHelper]::FindWindow($null, "Zalo")
     }
 
     if ($runDaily) {
-        Write-Host "Bat dau lay du lieu Excel cho Daily Report..." -ForegroundColor Cyan
-        if (-not (Test-Path $EXCEL_FILE_PATH)) { throw "Khong tim thay file Excel tai: $EXCEL_FILE_PATH" }
+        Write-Host "Bat dau lay du lieu cho Bao cao Tong so luong nhap kho (Daily Report)..." -ForegroundColor Cyan
+        $storedInfo = Get-StoredData
+        if (-not $storedInfo) {
+            throw "Khong the tim thay sheet STORED trong file Ovn Pro Schedule!"
+        }
 
-        $excel = New-Object -ComObject Excel.Application
-        $excel.Visible = $false
-        $excel.DisplayAlerts = $false
+        $sheet = $storedInfo.Sheet
 
-        $workbook = $excel.Workbooks.Open($EXCEL_FILE_PATH, 0, $true)
-        $sheet = $workbook.Sheets.Item("REALTIME STORED")
+        $moldedQty = 0
+        $dieCutQty = 0
+        $othersQty = 0
+        $totalQty  = 0
 
-        if (-not $sheet) { throw "Khong tim thay sheet 'REALTIME STORED' trong file." }
+        $moldedText = ""
+        $dieCutText = ""
+        $othersText = ""
+        $totalText  = ""
 
-        $molded = $sheet.Range("B2").Text
-        $dieCut = $sheet.Range("B3").Text
-        $others = $sheet.Range("B4").Text
-        $total  = $sheet.Range("B5").Text
+        for ($r = 2; $r -le 10; $r++) {
+            $type = $sheet.Cells.Item($r, 1).Text.Trim()
+            $qtyStr = $sheet.Cells.Item($r, 2).Text.Trim()
+            if ([string]::IsNullOrWhiteSpace($type)) { continue }
 
-        $workbook.Close($false)
-        $excel.Quit()
-        [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excel) | Out-Null
-        $excel = $null
+            $num = 0
+            $cleanQty = $qtyStr -replace "[^\d\.-]", ""
+            [double]::TryParse($cleanQty, [ref]$num) | Out-Null
 
-        if ($molded -match "Pairs") { $molded = $molded -replace "(?i)\s*Pairs\s*", "" }
-        if ($dieCut -match "Pairs") { $dieCut = $dieCut -replace "(?i)\s*Pairs\s*", "" }
-        if ($others -match "Pairs") { $others = $others -replace "(?i)\s*Pairs\s*", "" }
-        if ($total -match "Pairs")  { $total  = $total -replace "(?i)\s*Pairs\s*", "" }
+            if ($type -match "MOLDED") {
+                $moldedText = $qtyStr
+                $moldedQty = $num
+            } elseif ($type -match "DIE\s*CUT") {
+                $dieCutText = $qtyStr
+                $dieCutQty = $num
+            } elseif ($type -match "OTHER") {
+                $othersText = $qtyStr
+                $othersQty = $num
+            } elseif ($type -match "TOTAL") {
+                $totalText = $qtyStr
+                $totalQty = $num
+            }
+        }
+
+        # Neu khong co dong Total san thi tu dong cong tong
+        if ($totalQty -eq 0 -or [string]::IsNullOrWhiteSpace($totalText)) {
+            $totalQty = $moldedQty + $dieCutQty + $othersQty
+            $totalText = "{0:N0}" -f $totalQty
+        }
+
+        # TUYET DOI KHONG DONG FILE NEU DANG MO TREO
+        if (-not $storedInfo.IsRunningInstance) {
+            try { $storedInfo.Workbook.Close($false) } catch {}
+            try { $storedInfo.ExcelApp.Quit() } catch {}
+            try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($storedInfo.ExcelApp) | Out-Null } catch {}
+        } else {
+            Write-Host "File dang mo treo: Giu nguyen nguyen ven, KHONG dong file, KHONG tac dong vao file!" -ForegroundColor Green
+        }
+
+        if ($moldedText -match "Pairs") { $moldedText = $moldedText -replace "(?i)\s*Pairs\s*", "" }
+        if ($dieCutText -match "Pairs") { $dieCutText = $dieCutText -replace "(?i)\s*Pairs\s*", "" }
+        if ($othersText -match "Pairs") { $othersText = $othersText -replace "(?i)\s*Pairs\s*", "" }
+        if ($totalText  -match "Pairs") { $totalText  = $totalText  -replace "(?i)\s*Pairs\s*", "" }
 
         $currentTime = Get-Date -Format "HH:mm dd/MM/yy"
-        $reportMessage = "Tổng số lượng nhập kho đến hiện tại ($currentTime)`nMolded: $molded Pairs`nDie Cut: $dieCut Pairs`nOthers: $others Pairs`nTotal: $total Pairs"
+        $reportMessage = "Tổng số lượng nhập kho đến hiện tại ($currentTime)`nMolded: $moldedText Pairs`nDie Cut: $dieCutText Pairs`nOthers: $othersText Pairs`nTotal: $totalText Pairs"
 
         Write-Host "Noi dung bao cao Daily:"
         Write-Host $reportMessage -ForegroundColor Green
@@ -597,144 +815,8 @@ try {
         }
     }
     if ($runEmployeesVoice) {
-        Write-Host "Bat dau doc va gui bao cao Employees Voice..." -ForegroundColor Cyan
-        
-        $VOICE_EXCEL_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\TRUONG OFFICE\Tiếng Nói Từ Hiện Trường Sản Xuất.xlsx"
-        if (-not (Test-Path $VOICE_EXCEL_PATH)) {
-            Write-Host "Khong tim thay file Excel: $VOICE_EXCEL_PATH" -ForegroundColor Red
-        } else {
-            $excelVoice = $null
-            $wbVoice = $null
-            $wasOpenedByUs = $false
-            $isExcelCreatedByUs = $false
-            
-            try {
-                $excelVoice = [System.Runtime.InteropServices.Marshal]::GetActiveObject("Excel.Application")
-                Write-Host "Da ket noi voi Excel dang chay." -ForegroundColor Cyan
-            } catch {
-                $excelVoice = New-Object -ComObject Excel.Application
-                $isExcelCreatedByUs = $true
-                Write-Host "Da mo Excel moi." -ForegroundColor Cyan
-            }
-            
-            try {
-                foreach ($wb in $excelVoice.Workbooks) {
-                    if ($wb.FullName -eq $VOICE_EXCEL_PATH) {
-                        $wbVoice = $wb
-                        break
-                    }
-                }
-                
-                if (-not $wbVoice) {
-                    $wbVoice = $excelVoice.Workbooks.Open($VOICE_EXCEL_PATH, 0, $true)
-                    $wasOpenedByUs = $true
-                }
-                
-                $shVoice = $wbVoice.Sheets.Item(1)
-                $lastRow = $shVoice.Cells.Item($shVoice.Rows.Count, 1).End(-4162).Row
-                if ($lastRow -lt 2) { $lastRow = 1 }
-                
-                $allRows = @()
-                for ($i = 2; $i -le $lastRow; $i++) {
-                    $timeStr = $shVoice.Cells.Item($i, 2).Text
-                    $section = $shVoice.Cells.Item($i, 6).Text
-                    $opinion = $shVoice.Cells.Item($i, 7).Text
-                    
-                    if (-not [string]::IsNullOrWhiteSpace($opinion)) {
-                        $parsedDate = Get-Date
-                        if ([DateTime]::TryParse($timeStr, [ref]$parsedDate)) {
-                            $allRows += [PSCustomObject]@{
-                                Date = $parsedDate.Date
-                                DateStr = $parsedDate.ToString("dd/MM")
-                                Section = $section.Trim()
-                                Opinion = $opinion.Trim()
-                            }
-                        }
-                    }
-                }
-                
-                if ($allRows.Count -gt 0) {
-                    $maxDate = ($allRows | Measure-Object -Property Date -Maximum).Maximum
-                    $currentDate = Get-Date
-                    $isFriday = ($currentDate.DayOfWeek -eq [System.DayOfWeek]::Friday)
-                    
-                    if ($isFriday) {
-                        $diff = (1 - [int]$maxDate.DayOfWeek)
-                        if ($diff -gt 0) { $diff -= 7 }
-                        $startDate = $maxDate.AddDays($diff)
-                        
-                        $filteredRows = $allRows | Where-Object { $_.Date -ge $startDate -and $_.Date -le $maxDate }
-                        $reportTitle = "[BÁO CÁO TUẦN] TIẾNG NÓI TỪ HIỆN TRƯỜNG SẢN XUẤT 🗣`n📅 Thời gian: $($startDate.ToString('dd/MM/yyyy')) - $($maxDate.ToString('dd/MM/yyyy'))"
-                    } else {
-                        $filteredRows = $allRows | Where-Object { $_.Date -eq $maxDate }
-                        $reportTitle = "[BÁO CÁO NGÀY] TIẾNG NÓI TỪ HIỆN TRƯỜNG SẢN XUẤT 🗣`n📅 Ngày ghi nhận: $($maxDate.ToString('dd/MM/yyyy'))"
-                    }
-                    
-                    if ($filteredRows.Count -gt 0) {
-                        $grouped = $filteredRows | Group-Object -Property Section
-                        $msg = $reportTitle + "`n`n"
-                        foreach ($group in $grouped) {
-                            $sectionName = $group.Name
-                            if ([string]::IsNullOrWhiteSpace($sectionName)) { $sectionName = "KHU VỰC KHÁC" }
-                            
-                            $msg += "🏢 $($sectionName):`n"
-                            $idx = 1
-                            foreach ($row in $group.Group) {
-                                if ($isFriday) {
-                                    $msg += "$idx. $($row.Opinion) ($($row.DateStr))`n"
-                                } else {
-                                    $msg += "$idx. $($row.Opinion)`n"
-                                }
-                                $idx++
-                            }
-                            $msg += "`n"
-                        }
-                        
-                        if ($isFriday) {
-                            $msg += "---------------------------------`nBan quản lý đã ghi nhận các ý kiến trong tuần. Cảm ơn sự đóng góp của các bạn!"
-                        } else {
-                            $msg += "---------------------------------`nMọi ý kiến đã được ghi nhận. Cảm ơn sự đóng góp của các bạn!"
-                        }
-                        
-                        Write-Host "Noi dung bao cao Employees Voice:"
-                        Write-Host $msg -ForegroundColor Green
-                        
-                        $TARGET_ZALO_GROUP = "Employees voice"
-                        Focus-Zalo
-                        Start-Sleep -Seconds 1
-                        
-                        [System.Windows.Forms.SendKeys]::SendWait("^f")
-                        Start-Sleep -Milliseconds 800
-                        [System.Windows.Forms.Clipboard]::SetText($TARGET_ZALO_GROUP, [System.Windows.Forms.TextDataFormat]::UnicodeText)
-                        [System.Windows.Forms.SendKeys]::SendWait("^v")
-                        Start-Sleep -Seconds 2
-                        [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-                        Start-Sleep -Seconds 2
-                        
-                        [System.Windows.Forms.Clipboard]::SetText($msg, [System.Windows.Forms.TextDataFormat]::UnicodeText)
-                        [System.Windows.Forms.SendKeys]::SendWait("^v")
-                        Start-Sleep -Milliseconds 600
-                        [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-                        Start-Sleep -Seconds 1
-                    } else {
-                        Write-Host "Khong co du lieu nao trong khoang thoi gian nay." -ForegroundColor Yellow
-                    }
-                } else {
-                    Write-Host "File Excel khong co du lieu hop le." -ForegroundColor Yellow
-                }
-            } catch {
-                Write-Host "Loi khi doc hoac gui bao cao Employees Voice: $_" -ForegroundColor Red
-            } finally {
-                if ($wasOpenedByUs -and $wbVoice) {
-                    try { $wbVoice.Close($false) } catch {}
-                }
-                if ($isExcelCreatedByUs -and $excelVoice) {
-                    try { $excelVoice.Quit(); [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excelVoice) | Out-Null } catch {}
-                } elseif ($excelVoice) {
-                    try { [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excelVoice) | Out-Null } catch {}
-                }
-            }
-        }
+        Write-Host "Chuyen tiep sang Send_Employees_Voice.ps1..." -ForegroundColor Cyan
+        & (Join-Path $PSScriptRoot "Send_Employees_Voice.ps1") -ManualTrigger
     }
 
     Write-Host "=== HOAN TAT GUI BAO CAO ===" -ForegroundColor Green

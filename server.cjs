@@ -16,8 +16,8 @@ if (!fs.existsSync(envPath)) {
   const defaultEnv = `# CẤU HÌNH KẾT NỐI SUPABASE CHO KPI APP CỤC BỘ (LOCAL HOST)
 # Bạn có thể chỉnh sửa các giá trị dưới đây mà không cần đóng gói lại file exe.
 
-VITE_SUPABASE_URL=https://doyipagavbxupiwbitgi.supabase.co
-VITE_SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0
+VITE_SUPABASE_URL=https://ewhfhputqeyebffjwtnl.supabase.co
+VITE_SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3aGZocHV0cWV5ZWJmZmp3dG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyOTU1OTMsImV4cCI6MjEwNDg3MTU5M30.a368bZeQDr2du8R4ipKHpMZm0ITJlIqeD6wqba-fbRM
 VITE_SUPABASE_SERVICE_ROLE_KEY=
 PORT=5000
 `;
@@ -50,8 +50,8 @@ function loadEnv() {
 loadEnv();
 
 const PORT = process.env.PORT || 5000;
-const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://doyipagavbxupiwbitgi.supabase.co';
-const anonKey = process.env.VITE_SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0';
+const supabaseUrl = process.env.VITE_SUPABASE_URL || 'https://ewhfhputqeyebffjwtnl.supabase.co';
+const anonKey = process.env.VITE_SUPABASE_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3aGZocHV0cWV5ZWJmZmp3dG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyOTU1OTMsImV4cCI6MjEwNDg3MTU5M30.a368bZeQDr2du8R4ipKHpMZm0ITJlIqeD6wqba-fbRM';
 const serviceRole = process.env.VITE_SUPABASE_SERVICE_ROLE_KEY || anonKey; // Fallback về anonKey nếu trống
 
 // Khởi tạo Supabase Clients

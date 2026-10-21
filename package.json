@@ -24,6 +24,8 @@
     "exceljs": "^4.4.0",
     "express": "^5.2.1",
     "file-saver": "^2.0.5",
+    "pg": "^8.23.0",
+    "pg-schema-dump": "^2.0.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-router-dom": "^7.9.3",

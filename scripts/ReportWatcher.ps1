@@ -1,8 +1,8 @@
 ﻿# scripts/ReportWatcher.ps1
 # Script này chạy ẩn qua 1 file bat duy nhất (Report Watcher Auto-Start) để quản lý & tự động gửi tất cả các báo cáo Zalo.
 
-$SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
-$SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0"
+$SUPABASE_URL = "https://ewhfhputqeyebffjwtnl.supabase.co"
+$SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3aGZocHV0cWV5ZWJmZmp3dG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyOTU1OTMsImV4cCI6MjEwNDg3MTU5M30.a368bZeQDr2du8R4ipKHpMZm0ITJlIqeD6wqba-fbRM"
 
 $headers = @{
     "apikey"        = $SUPABASE_KEY
@@ -15,6 +15,7 @@ $scriptPath = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $storeIntakeScript = Join-Path $scriptPath "StoreIntakeReport.ps1"
 $mqaaScript        = Join-Path $scriptPath "MQAAAutomation.ps1"
 $otScript          = Join-Path $scriptPath "Send_OT_Pivot_Report.ps1"
+$voiceScript       = Join-Path $scriptPath "Send_Employees_Voice.ps1"
 
 function Ensure-AllScriptsBom {
     try {
@@ -39,6 +40,7 @@ Write-Host "==========================================================" -Foregro
 
 $script:lastAutoOTReport = ""
 $script:lastAutoOTRefresh = ""
+$script:lastAutoVoiceReport = ""
 
 while ($true) {
     try {
@@ -66,6 +68,9 @@ while ($true) {
                 } elseif ($reportType -eq "ot_report" -or $reportType -eq "%ot" -or $reportType -eq "ot") {
                     Write-Host "Dang thuc thi Send_OT_Pivot_Report.ps1..."
                     & powershell.exe -File $otScript
+                } elseif ($reportType -eq "employees_voice" -or $reportType -eq "voice") {
+                    Write-Host "Dang thuc thi Send_Employees_Voice.ps1..."
+                    & powershell.exe -ExecutionPolicy Bypass -File $voiceScript -ManualTrigger
                 } else {
                     Write-Host "Dang thuc thi StoreIntakeReport.ps1 cho $reportType..."
                     & powershell.exe -File $storeIntakeScript -ManualTrigger -TargetReport $reportType
@@ -96,10 +101,10 @@ while ($true) {
             if ($script:lastAutoOTReport -ne $currentDate) {
                 # Kiem tra xem nguoi dung co bat tu dong khong
                 $sysData = Invoke-RestMethod -Uri "$SUPABASE_URL/rest/v1/system_settings?id=eq.1" -Headers $headers -Method Get
-                $isOtEnabled = $true
+                $isOtEnabled = $false
                 if ($sysData -and $sysData.Count -gt 0) {
-                    if ($sysData[0].is_ot_report_enabled -eq $false) {
-                        $isOtEnabled = $false
+                    if ($sysData[0].is_ot_report_enabled -eq $true) {
+                        $isOtEnabled = $true
                     }
                 }
                 
@@ -115,6 +120,35 @@ while ($true) {
         }
     } catch {
         Write-Host "Loi khi chay OT tu dong: $_" -ForegroundColor Red
+    }
+
+    # 6. Kiem tra gui bao cao Employees Voice luc 08:00 (hoac ngay khi bat lai neu chua gui trong ngay)
+    try {
+        $currentHour = (Get-Date).Hour
+        $currentMinute = (Get-Date).Minute
+        $currentDate = (Get-Date).ToString("yyyy-MM-dd")
+        
+        # Kiem tra neu tu 8h tro di va chua gui trong ngay hom nay
+        if ($currentHour -ge 8 -and $script:lastAutoVoiceReport -ne $currentDate) {
+            # Kiem tra xem nguoi dung co bat tu dong khong
+            $sysData = Invoke-RestMethod -Uri "$SUPABASE_URL/rest/v1/system_settings?id=eq.1" -Headers $headers -Method Get
+            $isVoiceEnabled = $true
+            if ($sysData -and $sysData.Count -gt 0) {
+                if ($sysData[0].is_employees_voice_enabled -eq $false) {
+                    $isVoiceEnabled = $false
+                }
+            }
+
+            if ($isVoiceEnabled) {
+                Write-Host ">>> Kich hoat KIEM TRA & GUI bao cao Employees Voice (08:00) <<<" -ForegroundColor Green
+                & powershell.exe -ExecutionPolicy Bypass -File $voiceScript -Action "AutoCheck"
+            } else {
+                Write-Host ">>> Bao cao Employees Voice tu dong dang bi TAT tren he thong <<<" -ForegroundColor Yellow
+            }
+            $script:lastAutoVoiceReport = $currentDate
+        }
+    } catch {
+        Write-Host "Loi khi chay Employees Voice tu dong: $_" -ForegroundColor Red
     }
     
     # Nghỉ 15 giây trước khi lặp lại

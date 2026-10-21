@@ -394,8 +394,20 @@ function ApproverModeLeanline({ section }) {
   function buildReviewRows() {
     if (tplDate > today) return alert("Không thể chọn ngày trong tương lai.");
     if (!selectedWorkers.length) return alert("Chưa chọn nhân viên.");
+    if (!tplWorkHours || Number(tplWorkHours) <= 0) return alert("Vui lòng nhập Giờ làm việc (> 0).");
 
     const isTraining = section === "LEANLINE_TRAINING";
+    if (isTraining) {
+      if (!tplCategory || tplCategory.trim() === "") return alert("Vui lòng chọn Công đoạn học việc / Loại hàng.");
+      if (tplOutput === "" || tplOutput === null || tplOutput === undefined || Number(tplOutput) <= 0) {
+        return alert("Vui lòng nhập Sản lượng (> 0).");
+      }
+    } else {
+      if (tplOE === "" || tplOE === null || tplOE === undefined || Number(tplOE) <= 0) {
+        return alert("Vui lòng nhập %OE (> 0).");
+      }
+    }
+
     const rows = selectedWorkers.map((w) => {
       const scores = calculateScores(isTraining ? 0 : tplOE, tplDefects, prodRules, section, tplLine, tplCompliance);
       return {
@@ -452,11 +464,29 @@ function ApproverModeLeanline({ section }) {
   async function saveBatch() {
     const idxs = Array.from(selReview).sort((a, b) => a - b);
     if (!idxs.length) return alert("Chưa chọn dòng để lưu.");
-    setSaving(true);
     const list = idxs.map((i) => reviewRows[i]);
-    const now = new Date().toISOString();
-
     const isTraining = section === "LEANLINE_TRAINING";
+
+    for (const r of list) {
+      if (!r.work_hours || Number(r.work_hours) <= 0) {
+        return alert(`MSNV ${r.msnv} (${r.hoten}): Giờ làm việc phải lớn hơn 0.`);
+      }
+      if (isTraining) {
+        if (!r.category || String(r.category).trim() === "") {
+          return alert(`MSNV ${r.msnv} (${r.hoten}): Chưa chọn Công đoạn học việc / Loại hàng.`);
+        }
+        if (r.output === "" || r.output === null || r.output === undefined || Number(r.output) <= 0) {
+          return alert(`MSNV ${r.msnv} (${r.hoten}): Sản lượng phải lớn hơn 0.`);
+        }
+      } else {
+        if (r.oe === "" || r.oe === null || r.oe === undefined || Number(r.oe) <= 0) {
+          return alert(`MSNV ${r.msnv} (${r.hoten}): %OE phải lớn hơn 0.`);
+        }
+      }
+    }
+
+    setSaving(true);
+    const now = new Date().toISOString();
     const payload = list.map((r) => {
       const rawScores = calculateScores(r.oe, r.defects, prodRules, section, r.line, r.compliance);
       const overflow = isTraining ? 0 : Math.max(0, rawScores.rawTotal - 15);
@@ -636,12 +666,12 @@ function ApproverModeLeanline({ section }) {
             <div><label>Ngày</label><input type="date" className="input" value={tplDate} onChange={e => setTplDate(e.target.value)} max={today} /></div>
             <div><label>Ca</label><select className="input" value={tplShift} onChange={(e) => setTplShift(e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></div>
             <div><label>Máy làm việc</label><select className="input" value={tplLine} onChange={(e) => setTplLine(e.target.value)}>{currentMachines.map(m => (<option key={m} value={m}>{m}</option>))}</select></div>
-            <div><label>Giờ làm việc</label><input type="number" step="0.1" className="input" value={tplWorkHours} onChange={(e) => setTplWorkHours(e.target.value)} /></div>
+            <div><label>Giờ làm việc <span className="text-red-500 font-bold">*</span></label><input type="number" step="0.1" className="input" value={tplWorkHours} onChange={(e) => setTplWorkHours(e.target.value)} /></div>
             <div><label>Giờ dừng máy</label><input type="number" step="0.1" className="input" value={tplStopHours} onChange={(e) => setTplStopHours(e.target.value)} /></div>
             {section === "LEANLINE_TRAINING" ? (
               <>
                 <div>
-                  <label>Công đoạn học việc</label>
+                  <label>Công đoạn học việc / Loại hàng <span className="text-red-500 font-bold">*</span></label>
                   <select className="input" value={tplCategory} onChange={(e) => setTplCategory(e.target.value)}>
                     <option value="CHẶT ĐÔI MOLDED">CHẶT ĐÔI MOLDED</option>
                     <option value="CHẶT ĐÔI DC">CHẶT ĐÔI DC</option>
@@ -651,12 +681,12 @@ function ApproverModeLeanline({ section }) {
                   </select>
                 </div>
                 <div>
-                  <label>Sản lượng (Đôi/ca)</label>
+                  <label>Sản lượng (Đôi/ca) <span className="text-red-500 font-bold">*</span></label>
                   <input type="number" step="1" className="input" value={tplOutput} onChange={(e) => setTplOutput(e.target.value)} />
                 </div>
               </>
             ) : (
-              <div><label>%OE</label><input type="number" step="1" className="input" value={tplOE} onChange={(e) => setTplOE(e.target.value)} /></div>
+              <div><label>%OE <span className="text-red-500 font-bold">*</span></label><input type="number" step="1" className="input" value={tplOE} onChange={(e) => setTplOE(e.target.value)} /></div>
             )}
             <div><label>Số đôi phế</label><input type="number" step="0.5" className="input" value={tplDefects} onChange={(e) => setTplDefects(e.target.value)} /></div>
 
@@ -934,7 +964,11 @@ function ApproverModeMolding({ section }) {
   function buildReviewRows() {
     if (tplDate > today) return alert("Không thể chọn ngày trong tương lai.");
     if (!selectedWorkers.length) return alert("Chưa chọn NV.");
-    if (!tplCategory) return alert("Chưa chọn Loại hàng.");
+    if (!tplWorkingInput || Number(tplWorkingInput) <= 0) return alert("Vui lòng nhập Giờ làm việc (> 0).");
+    if (!tplCategory || tplCategory.trim() === "") return alert("Chưa chọn Loại hàng.");
+    if (tplOutput === "" || tplOutput === null || tplOutput === undefined || Number(tplOutput) <= 0) {
+      return alert("Vui lòng nhập Sản lượng đầu ra (> 0).");
+    }
 
     const rows = selectedWorkers.map((w) => {
       const result = calculateScoresMolding({
@@ -984,6 +1018,19 @@ function ApproverModeMolding({ section }) {
     if (!idxs.length) return alert("Chưa chọn dòng.");
 
     const list = idxs.map(i => reviewRows[i]);
+
+    // Bắt buộc Giờ làm việc, Loại hàng, Sản lượng cho tất cả các dòng
+    for (const r of list) {
+      if (!r.work_hours || Number(r.work_hours) <= 0) {
+        return alert(`MSNV ${r.msnv} (${r.hoten}): Giờ làm việc phải lớn hơn 0.`);
+      }
+      if (!r.category || String(r.category).trim() === "") {
+        return alert(`MSNV ${r.msnv} (${r.hoten}): Chưa chọn Loại hàng.`);
+      }
+      if (r.output === "" || r.output === null || r.output === undefined || Number(r.output) <= 0) {
+        return alert(`MSNV ${r.msnv} (${r.hoten}): Sản lượng phải lớn hơn 0.`);
+      }
+    }
 
     setSaving(true);
     const now = new Date().toISOString();
@@ -1065,9 +1112,9 @@ function ApproverModeMolding({ section }) {
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-sm">
               <label>Ngày: <input type="date" className="input" value={tplDate} onChange={e => setTplDate(e.target.value)} max={today} /></label>
               <label>Ca: <select className="input" value={tplShift} onChange={e => setTplShift(e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></label>
-              <label>Giờ LV (input): <input type="number" className="input" value={tplWorkingInput} onChange={e => setTplWorkingInput(e.target.value)} /></label>
-              <label>Loại hàng: <select className="input" value={tplCategory} onChange={e => setTplCategory(e.target.value)}><option value="">--Chọn--</option>{categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
-              <label>Sản lượng đầu ra: <input type="number" className="input" value={tplOutput} onChange={e => setTplOutput(e.target.value)} /></label>
+              <label>Giờ LV (input) <span className="text-red-500 font-bold">*</span>: <input type="number" className="input" value={tplWorkingInput} onChange={e => setTplWorkingInput(e.target.value)} /></label>
+              <label>Loại hàng <span className="text-red-500 font-bold">*</span>: <select className="input" value={tplCategory} onChange={e => setTplCategory(e.target.value)}><option value="">--Chọn--</option>{categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}</select></label>
+              <label>Sản lượng đầu ra <span className="text-red-500 font-bold">*</span>: <input type="number" className="input" value={tplOutput} onChange={e => setTplOutput(e.target.value)} /></label>
               <label>Số đôi phế: <input type="number" step="0.5" className="input" value={tplDefects} onChange={e => setTplDefects(e.target.value)} /></label>
               <label className="flex flex-col gap-1">
                 <span className="flex items-center flex-wrap gap-1">

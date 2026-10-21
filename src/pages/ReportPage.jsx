@@ -1888,6 +1888,17 @@ function AdjustEmployeeRecordsMolding() {
 
   async function saveRecord() {
     if (!editRecord || !liveScores) return;
+
+    if (!editRecord.working_input || Number(editRecord.working_input) <= 0) {
+      return alert("Vui lòng nhập Giờ làm việc (> 0).");
+    }
+    if (!editRecord.category || String(editRecord.category).trim() === "") {
+      return alert("Vui lòng chọn Loại hàng.");
+    }
+    if (editRecord.output === "" || editRecord.output === null || editRecord.output === undefined || Number(editRecord.output) <= 0) {
+      return alert("Vui lòng nhập Sản lượng đầu ra (> 0).");
+    }
+
     setSaving(true);
     try {
       const payload = {
@@ -2165,7 +2176,7 @@ function AdjustEmployeeRecordsMolding() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1">Loại hàng / Mã hàng</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Loại hàng / Mã hàng <span className="text-red-500 font-bold">*</span></label>
                   <select
                     className="input w-full font-semibold text-indigo-700"
                     value={editRecord.category || ""}
@@ -2179,7 +2190,7 @@ function AdjustEmployeeRecordsMolding() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1">Giờ làm việc (Người nhập)</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Giờ làm việc (Người nhập) <span className="text-red-500 font-bold">*</span></label>
                   <input
                     type="number"
                     step="0.1"
@@ -2190,7 +2201,7 @@ function AdjustEmployeeRecordsMolding() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1">Sản lượng đầu ra (Output / Ca)</label>
+                  <label className="block text-sm font-medium text-gray-600 mb-1">Sản lượng đầu ra (Output / Ca) <span className="text-red-500 font-bold">*</span></label>
                   <input
                     type="number"
                     className="input w-full font-semibold text-slate-800"

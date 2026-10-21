@@ -8,6 +8,7 @@ const REPORTS = [
     { id: "wip_report", name: "Báo Cáo WIP", dbKey: "is_wip_enabled", time: "08:00 & 16:00" },
     { id: "mqaa_patrol", name: "Báo Cáo MQAA Patrol", dbKey: "is_mqaa_patrol_enabled", time: "08:00" },
     { id: "ot_report", name: "Báo Cáo % OT", dbKey: "is_ot_report_enabled", time: "14:00" },
+    { id: "employees_voice", name: "Báo Cáo Tiếng Nói Hiện Trường (Employees Voice)", dbKey: "is_employees_voice_enabled", time: "08:00 (Hằng ngày & Thứ 7 tổng kết)" },
 ];
 
 export default function ReportAdmin() {

@@ -311,7 +311,11 @@ export default function ApproverModeHybrid({ section }) {
     }
 
     if (!tplDate || !tplShift) return alert("Nhập Ngày & Ca.");
-    if (!tplCategory) return alert("Vui lòng chọn Loại năng suất.");
+    if (!tplWorkHours || Number(tplWorkHours) <= 0) return alert("Vui lòng nhập Giờ làm việc (> 0).");
+    if (!tplCategory || tplCategory.trim() === "") return alert("Vui lòng chọn Loại năng suất / Loại hàng.");
+    if (tplOutput === "" || tplOutput === null || tplOutput === undefined || Number(tplOutput) <= 0) {
+      return alert("Vui lòng nhập Sản lượng (> 0).");
+    }
     if (!selectedWorkers.length) return alert("Chưa chọn nhân viên.");
 
     // Logic check Lamination
@@ -400,8 +404,22 @@ export default function ApproverModeHybrid({ section }) {
   async function saveBatch() {
     const idxs = Array.from(selReview).sort((a, b) => a - b);
     if (!idxs.length) return alert("Chưa chọn dòng để lưu.");
-    setSaving(true);
     const list = idxs.map((i) => reviewRows[i]);
+
+    // Bắt buộc Giờ làm việc, Loại hàng, Sản lượng cho tất cả các dòng
+    for (const r of list) {
+      if (!r.work_hours || Number(r.work_hours) <= 0) {
+        return alert(`MSNV ${r.msnv} (${r.hoten}): Giờ làm việc phải lớn hơn 0.`);
+      }
+      if (!r.category || String(r.category).trim() === "") {
+        return alert(`MSNV ${r.msnv} (${r.hoten}): Chưa chọn Loại năng suất / Loại hàng.`);
+      }
+      if (r.output === "" || r.output === null || r.output === undefined || Number(r.output) <= 0) {
+        return alert(`MSNV ${r.msnv} (${r.hoten}): Sản lượng phải lớn hơn 0.`);
+      }
+    }
+
+    setSaving(true);
     const now = new Date().toISOString();
 
     const payload = list.map((r) => {
@@ -610,15 +628,15 @@ export default function ApproverModeHybrid({ section }) {
             <div><label>Ngày</label><input type="date" className="input" value={tplDate} onChange={e => setTplDate(e.target.value)} max={today} /></div>
             <div><label>Ca</label><select className="input" value={tplShift} onChange={(e) => setTplShift(e.target.value)}><option value="Ca 1">Ca 1</option><option value="Ca 2">Ca 2</option><option value="Ca 3">Ca 3</option><option value="Ca HC">Ca HC</option></select></div>
             <div><label>Máy làm việc</label><select className="input" value={tplLine} onChange={(e) => setTplLine(e.target.value)}>{currentMachines.map(m => (<option key={m} value={m}>{m}</option>))}</select></div>
-            <div><label>Loại năng suất</label>
+            <div><label>Loại năng suất / Loại hàng <span className="text-red-500 font-bold">*</span></label>
               <select className="input" value={tplCategory} onChange={(e) => setTplCategory(e.target.value)} disabled={categoryOptions.length === 0}>
                 <option value="">-- Chọn loại NS --</option>
                 {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <div><label>Giờ làm việc</label><input type="number" step="0.1" className="input" value={tplWorkHours} onChange={(e) => setTplWorkHours(e.target.value)} /></div>
+            <div><label>Giờ làm việc <span className="text-red-500 font-bold">*</span></label><input type="number" step="0.1" className="input" value={tplWorkHours} onChange={(e) => setTplWorkHours(e.target.value)} /></div>
             <div><label>Giờ dừng máy</label><input type="number" step="0.1" className="input" value={tplStopHours} onChange={(e) => setTplStopHours(e.target.value)} /></div>
-            <div><label>Sản lượng</label><input type="number" step="1" className="input" value={tplOutput} onChange={(e) => setTplOutput(e.target.value)} /></div>
+            <div><label>Sản lượng <span className="text-red-500 font-bold">*</span></label><input type="number" step="1" className="input" value={tplOutput} onChange={(e) => setTplOutput(e.target.value)} /></div>
 
             {section === 'LAMINATION' ? (
               <>
@@ -710,7 +728,11 @@ export default function ApproverModeHybrid({ section }) {
 
           <div className="flex justify-end gap-3">
             <button className="btn" onClick={() => setStep(1)}>‹ Quay lại</button>
-            <button className="btn btn-primary" onClick={buildReviewRows} disabled={!tplDate || !tplShift || !tplLine || !tplCategory}>
+            <button
+              className="btn btn-primary"
+              onClick={buildReviewRows}
+              disabled={!tplDate || !tplShift || !tplLine || !tplCategory || !tplWorkHours || Number(tplWorkHours) <= 0 || tplOutput === "" || Number(tplOutput) <= 0}
+            >
               Áp dụng Template ({selectedWorkers.length}) ›
             </button>
           </div>

@@ -2447,3 +2447,568 @@
 [2026-09-10 08:01:04] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
 [2026-09-10 08:01:17] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
 [2026-09-10 08:01:17] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-09-11 08:00:09] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-11 08:00:11] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-06'
+[2026-09-11 08:00:11] [INFO] Dang kiem tra Zalo PC...
+[2026-09-11 08:00:11] [INFO] Zalo dang mo: PID=2000 | Title='Zalo'
+[2026-09-11 08:00:11] [INFO] Minimize terminal, focus Zalo...
+[2026-09-11 08:00:14] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-10...
+[2026-09-11 08:00:23] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-11 08:00:29] [ERROR] LOI NGHIEM TRONG: The URI prefix is not recognized.
+[2026-09-12 08:00:06] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-12 08:00:08] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-06'
+[2026-09-12 08:00:08] [INFO] Dang kiem tra Zalo PC...
+[2026-09-12 08:00:08] [INFO] Zalo dang mo: PID=2000 | Title='Zalo'
+[2026-09-12 08:00:08] [INFO] Minimize terminal, focus Zalo...
+[2026-09-12 08:00:11] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-11...
+[2026-09-12 08:00:21] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-12 08:00:40] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-09-12 08:00:59] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-09-12 08:00:59] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-09-13 08:00:05] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-13 08:00:05] [ERROR] LOI NGHIEM TRONG: {"message":"Service for this project is restricted due to the following violations: exceed_egress_quota. The project owner must upgrade their plan or remove spend caps to restore service."}
+[2026-09-14 08:00:06] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-14 08:00:07] [ERROR] LOI NGHIEM TRONG: {"message":"Service for this project is restricted due to the following violations: exceed_egress_quota. The project owner must upgrade their plan or remove spend caps to restore service."}
+[2026-09-15 08:00:09] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-15 08:00:12] [ERROR] LOI NGHIEM TRONG: {"message":"Service for this project is restricted due to the following violations: exceed_egress_quota. The project owner must upgrade their plan or remove spend caps to restore service."}
+[2026-09-15 08:29:25] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-15 08:29:25] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-06'
+[2026-09-15 08:29:25] [INFO] Dang kiem tra Zalo PC...
+[2026-09-15 08:29:25] [INFO] Zalo dang mo: PID=2000 | Title='Zalo'
+[2026-09-15 08:29:25] [INFO] Minimize terminal, focus Zalo...
+[2026-09-15 08:29:29] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-14...
+[2026-09-15 08:29:37] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-15 08:29:42] [ERROR] LOI NGHIEM TRONG: The URI prefix is not recognized.
+[2026-09-16 08:01:20] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-16 08:02:03] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-06'
+[2026-09-16 08:02:03] [INFO] Dang kiem tra Zalo PC...
+[2026-09-16 08:02:03] [INFO] Zalo dang mo: PID=2000 | Title='Zalo'
+[2026-09-16 08:02:03] [INFO] Minimize terminal, focus Zalo...
+[2026-09-16 08:02:07] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-15...
+[2026-09-16 08:02:19] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-16 08:02:25] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-09-16 08:02:33] [ERROR] LOI NGHIEM TRONG: The URI prefix is not recognized.
+[2026-09-17 08:00:09] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-17 08:00:11] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-06'
+[2026-09-17 08:00:11] [INFO] Dang kiem tra Zalo PC...
+[2026-09-17 08:00:12] [INFO] Zalo dang mo: PID=2000 | Title='Zalo'
+[2026-09-17 08:00:12] [INFO] Minimize terminal, focus Zalo...
+[2026-09-17 08:00:15] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-16...
+[2026-09-17 08:00:25] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-17 08:00:34] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-09-17 08:00:39] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-09-17 08:00:39] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-09-18 08:00:05] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-18 08:00:07] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-06'
+[2026-09-18 08:00:07] [INFO] Dang kiem tra Zalo PC...
+[2026-09-18 08:00:07] [INFO] Zalo dang mo: PID=2000 | Title='Zalo'
+[2026-09-18 08:00:07] [INFO] Minimize terminal, focus Zalo...
+[2026-09-18 08:00:11] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-17...
+[2026-09-18 08:00:19] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-18 08:00:27] [ERROR] LOI NGHIEM TRONG: The URI prefix is not recognized.
+[2026-09-19 08:00:04] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-19 08:00:04] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-06'
+[2026-09-19 08:00:04] [INFO] Dang kiem tra Zalo PC...
+[2026-09-19 08:00:04] [INFO] Zalo dang mo: PID=2000 | Title='Zalo'
+[2026-09-19 08:00:04] [INFO] Minimize terminal, focus Zalo...
+[2026-09-19 08:00:08] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-18...
+[2026-09-19 08:00:16] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-19 08:00:23] [INFO] Da gui phieu auditor: Lê Thị Ngân
+[2026-09-19 08:00:23] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-09-20 08:00:04] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-20 08:00:05] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-06'
+[2026-09-20 08:00:05] [INFO] Dang kiem tra Zalo PC...
+[2026-09-20 08:00:05] [INFO] Zalo dang mo: PID=2000 | Title='Zalo'
+[2026-09-20 08:00:05] [INFO] Minimize terminal, focus Zalo...
+[2026-09-20 08:00:08] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-19...
+[2026-09-20 08:00:17] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-20 08:00:23] [INFO] Da gui phieu auditor: Lê Thị Ngân
+[2026-09-20 08:00:23] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-09-21 08:00:04] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-21 08:00:05] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-06'
+[2026-09-21 08:00:05] [INFO] Dang kiem tra Zalo PC...
+[2026-09-21 08:00:05] [INFO] Zalo dang mo: PID=2000 | Title='Zalo'
+[2026-09-21 08:00:05] [INFO] Minimize terminal, focus Zalo...
+[2026-09-21 08:00:08] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-20...
+[2026-09-21 08:00:16] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-21 08:00:21] [INFO] Da gui phieu auditor: Lê Thị Ngân
+[2026-09-21 08:00:27] [ERROR] LOI NGHIEM TRONG: The URI prefix is not recognized.
+[2026-09-22 08:00:04] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-22 08:00:05] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-06'
+[2026-09-22 08:00:05] [INFO] Dang kiem tra Zalo PC...
+[2026-09-22 08:00:05] [INFO] Zalo dang mo: PID=14656 | Title='Zalo'
+[2026-09-22 08:00:05] [INFO] Minimize terminal, focus Zalo...
+[2026-09-22 08:00:08] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-21...
+[2026-09-22 08:00:17] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-22 08:00:24] [ERROR] LOI NGHIEM TRONG: The URI prefix is not recognized.
+[2026-09-23 08:00:17] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-23 08:00:29] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-06'
+[2026-09-23 08:00:29] [INFO] Dang kiem tra Zalo PC...
+[2026-09-23 08:00:32] [INFO] Zalo dang mo: PID=14656 | Title='Zalo'
+[2026-09-23 08:00:32] [INFO] Minimize terminal, focus Zalo...
+[2026-09-23 08:00:37] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-22...
+[2026-09-23 08:00:54] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-23 08:01:03] [ERROR] LOI NGHIEM TRONG: The URI prefix is not recognized.
+[2026-09-24 08:00:07] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-24 08:00:08] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-06'
+[2026-09-24 08:00:08] [INFO] Dang kiem tra Zalo PC...
+[2026-09-24 08:00:08] [INFO] Zalo dang mo: PID=14656 | Title='Zalo'
+[2026-09-24 08:00:08] [INFO] Minimize terminal, focus Zalo...
+[2026-09-24 08:00:11] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-23...
+[2026-09-24 08:00:20] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-24 08:00:36] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-09-24 08:00:42] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-09-24 08:00:47] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-09-24 08:01:00] [INFO] Da gui phieu auditor: Nguyễn Thị Thanh Trúc
+[2026-09-24 08:01:00] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-09-25 08:00:04] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-25 08:00:05] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-06'
+[2026-09-25 08:00:05] [INFO] Dang kiem tra Zalo PC...
+[2026-09-25 08:00:05] [INFO] Zalo dang mo: PID=14656 | Title='Zalo'
+[2026-09-25 08:00:05] [INFO] Minimize terminal, focus Zalo...
+[2026-09-25 08:00:08] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-24...
+[2026-09-25 08:00:16] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-25 08:00:30] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-09-25 08:00:36] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-09-25 08:00:49] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-09-25 08:00:54] [INFO] Da gui phieu auditor: Lâm Ngọc Thảo
+[2026-09-25 08:00:59] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-09-25 08:01:13] [INFO] Da gui phieu auditor: Trần Thị Tinh Vi
+[2026-09-25 08:01:20] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-09-25 08:01:33] [INFO] Da gui phieu auditor: Nguyễn Thị Thanh Trúc
+[2026-09-25 08:01:34] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-09-26 08:00:04] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-26 08:00:05] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-06'
+[2026-09-26 08:00:05] [INFO] Dang kiem tra Zalo PC...
+[2026-09-26 08:00:05] [INFO] Zalo dang mo: PID=14656 | Title='Zalo'
+[2026-09-26 08:00:05] [INFO] Minimize terminal, focus Zalo...
+[2026-09-26 08:00:09] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-25...
+[2026-09-26 08:00:18] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-26 08:00:18] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-09-27 08:00:04] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-27 08:00:11] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-06'
+[2026-09-27 08:00:11] [INFO] Dang kiem tra Zalo PC...
+[2026-09-27 08:00:12] [INFO] Zalo dang mo: PID=14656 | Title='Zalo'
+[2026-09-27 08:00:12] [INFO] Minimize terminal, focus Zalo...
+[2026-09-27 08:00:15] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-26...
+[2026-09-27 08:00:27] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-27 08:00:47] [INFO] Da gui phieu auditor: Triệu Hải Dương
+[2026-09-27 08:01:03] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-09-27 08:01:08] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-09-27 08:01:14] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-09-27 08:01:28] [INFO] Da gui phieu auditor: Nguyễn Thị Thanh Trúc
+[2026-09-27 08:01:33] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-09-27 08:01:38] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-09-27 08:01:47] [INFO] Da gui phieu auditor: Lâm Ngọc Thảo
+[2026-09-27 08:02:02] [INFO] Da gui phieu auditor: Trần Thị Tinh Vi
+[2026-09-27 08:02:03] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-09-28 08:00:04] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-28 08:00:06] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-06'
+[2026-09-28 08:00:06] [INFO] Dang kiem tra Zalo PC...
+[2026-09-28 08:00:06] [INFO] Zalo dang mo: PID=14656 | Title='Zalo'
+[2026-09-28 08:00:06] [INFO] Minimize terminal, focus Zalo...
+[2026-09-28 08:00:09] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-27...
+[2026-09-28 08:00:17] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-28 08:00:33] [INFO] Da gui phieu auditor: Nguyễn Thị Thanh Trúc
+[2026-09-28 08:00:38] [INFO] Da gui bang tong ket ngay.
+[2026-09-28 08:00:39] [INFO] Da cap nhat last_patrol_report_monday = 2026-09-27
+[2026-09-28 08:00:39] [INFO] === HOAN TAT ===
+[2026-09-29 08:00:05] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-29 08:00:07] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-27'
+[2026-09-29 08:00:07] [INFO] Dang kiem tra Zalo PC...
+[2026-09-29 08:00:07] [INFO] Zalo dang mo: PID=14656 | Title='Zalo'
+[2026-09-29 08:00:07] [INFO] Minimize terminal, focus Zalo...
+[2026-09-29 08:00:11] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-28...
+[2026-09-29 08:00:27] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-29 08:01:08] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-09-29 08:01:08] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-09-30 08:00:16] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-09-30 08:00:26] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-27'
+[2026-09-30 08:00:26] [INFO] Dang kiem tra Zalo PC...
+[2026-09-30 08:00:27] [INFO] Zalo dang mo: PID=14656 | Title='Zalo'
+[2026-09-30 08:00:27] [INFO] Minimize terminal, focus Zalo...
+[2026-09-30 08:00:30] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-29...
+[2026-09-30 08:00:45] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-09-30 08:00:53] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-09-30 08:00:59] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-09-30 08:01:04] [INFO] Da gui phieu auditor: Lê Thị Ngân
+[2026-09-30 08:01:35] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-09-30 08:01:41] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-09-30 08:01:59] [INFO] Da gui phieu auditor: Triệu Hải Dương
+[2026-09-30 08:02:04] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-09-30 08:02:09] [INFO] Da gui phieu auditor: Lâm Ngọc Thảo
+[2026-09-30 08:02:24] [INFO] Da gui phieu auditor: Trần Thị Tinh Vi
+[2026-09-30 08:02:32] [INFO] Da gui bang tong ket ngay.
+[2026-09-30 08:02:33] [INFO] Da cap nhat last_patrol_report_monday = 2026-09-29
+[2026-09-30 08:02:33] [INFO] === HOAN TAT ===
+[2026-10-01 08:00:05] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-01 08:00:06] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-29'
+[2026-10-01 08:00:06] [INFO] Dang kiem tra Zalo PC...
+[2026-10-01 08:00:07] [INFO] Zalo dang mo: PID=14656 | Title='Zalo'
+[2026-10-01 08:00:07] [INFO] Minimize terminal, focus Zalo...
+[2026-10-01 08:00:10] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-09-30...
+[2026-10-01 08:00:19] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-01 08:00:25] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-10-01 08:00:41] [INFO] Da gui phieu auditor: Trần Thị Tinh Vi
+[2026-10-01 08:00:57] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-01 08:01:02] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-01 08:01:07] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-01 08:01:20] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-10-01 08:01:26] [INFO] Da gui phieu auditor: Triệu Hải Dương
+[2026-10-01 08:01:31] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-10-01 08:01:36] [INFO] Da gui bang tong ket ngay.
+[2026-10-01 08:01:37] [INFO] Da cap nhat last_patrol_report_monday = 2026-09-30
+[2026-10-01 08:01:37] [INFO] === HOAN TAT ===
+[2026-10-02 08:00:04] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-02 08:00:05] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-30'
+[2026-10-02 08:00:05] [INFO] Dang kiem tra Zalo PC...
+[2026-10-02 08:00:05] [INFO] Zalo dang mo: PID=14656 | Title='Zalo'
+[2026-10-02 08:00:06] [INFO] Minimize terminal, focus Zalo...
+[2026-10-02 08:00:09] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-01...
+[2026-10-02 08:00:18] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-02 08:00:24] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-10-02 08:00:34] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-10-02 08:00:53] [INFO] Da gui phieu auditor: Trần Thị Tinh Vi
+[2026-10-02 08:01:09] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-02 08:01:14] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-02 08:01:20] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-02 08:01:20] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-10-03 08:00:04] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-03 08:00:05] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-30'
+[2026-10-03 08:00:05] [INFO] Dang kiem tra Zalo PC...
+[2026-10-03 08:00:05] [INFO] Zalo dang mo: PID=14656 | Title='Zalo'
+[2026-10-03 08:00:05] [INFO] Minimize terminal, focus Zalo...
+[2026-10-03 08:00:08] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-02...
+[2026-10-03 08:00:17] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-03 08:00:22] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-10-03 08:00:27] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-10-03 08:00:47] [INFO] Da gui phieu auditor: Trần Thị Tinh Vi
+[2026-10-03 08:01:03] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-03 08:01:08] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-03 08:01:13] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-03 08:01:13] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-10-03 11:32:28] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-03 11:32:29] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-30'
+[2026-10-03 11:32:30] [INFO] Dang kiem tra Zalo PC...
+[2026-10-03 11:32:30] [INFO] Zalo dang mo: PID=7524 | Title='Zalo'
+[2026-10-03 11:32:30] [INFO] Minimize terminal, focus Zalo...
+[2026-10-03 11:32:34] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-02...
+[2026-10-03 11:32:45] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-03 11:32:50] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-10-03 11:32:56] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-10-03 11:34:12] [INFO] Da gui phieu auditor: Trần Thị Tinh Vi
+[2026-10-03 11:35:36] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-03 11:35:42] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-03 11:35:47] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-03 11:35:47] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-10-04 08:00:03] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-04 08:00:04] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-30'
+[2026-10-04 08:00:04] [INFO] Dang kiem tra Zalo PC...
+[2026-10-04 08:00:04] [INFO] Zalo dang mo: PID=7524 | Title='Zalo'
+[2026-10-04 08:00:04] [INFO] Minimize terminal, focus Zalo...
+[2026-10-04 08:00:07] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-03...
+[2026-10-04 08:00:26] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-04 08:00:33] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-10-04 08:00:43] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-10-04 08:01:01] [INFO] Da gui phieu auditor: Trần Thị Tinh Vi
+[2026-10-04 08:01:15] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-04 08:01:20] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-04 08:01:26] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-04 08:01:26] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-10-05 08:00:05] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-05 08:00:07] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-30'
+[2026-10-05 08:00:07] [INFO] Dang kiem tra Zalo PC...
+[2026-10-05 08:00:07] [INFO] Zalo dang mo: PID=7524 | Title='Zalo'
+[2026-10-05 08:00:07] [INFO] Minimize terminal, focus Zalo...
+[2026-10-05 08:00:10] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-04...
+[2026-10-05 08:00:10] [WARN] Khong co du lieu Patrol cho ngay 2026-10-04. Bo qua.
+[2026-10-05 08:00:10] [INFO] === HOAN TAT ===
+[2026-10-06 08:00:06] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-06 08:00:07] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-30'
+[2026-10-06 08:00:07] [INFO] Dang kiem tra Zalo PC...
+[2026-10-06 08:00:07] [INFO] Zalo dang mo: PID=7524 | Title='Zalo'
+[2026-10-06 08:00:07] [INFO] Minimize terminal, focus Zalo...
+[2026-10-06 08:00:10] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-05...
+[2026-10-06 08:00:21] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-06 08:00:53] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-10-07 08:00:05] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-07 08:00:06] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-30'
+[2026-10-07 08:00:06] [INFO] Dang kiem tra Zalo PC...
+[2026-10-07 08:00:06] [INFO] Zalo dang mo: PID=7524 | Title='Zalo'
+[2026-10-07 08:00:06] [INFO] Minimize terminal, focus Zalo...
+[2026-10-07 08:00:09] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-06...
+[2026-10-07 08:00:17] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-07 08:00:24] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-10-07 08:00:25] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-10-07 12:54:38] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-07 12:54:39] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-30'
+[2026-10-07 12:54:39] [INFO] Dang kiem tra Zalo PC...
+[2026-10-07 12:54:39] [INFO] Zalo dang mo: PID=7524 | Title='Zalo'
+[2026-10-07 12:54:39] [INFO] Minimize terminal, focus Zalo...
+[2026-10-07 12:54:43] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-06...
+[2026-10-07 12:54:51] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-07 12:54:57] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-10-07 12:54:57] [ERROR] LOI NGHIEM TRONG: Cannot convert value "N/A" to type "System.Double". Error: "Input string was not in a correct format."
+[2026-10-07 13:01:10] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-07 13:01:13] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-09-30'
+[2026-10-07 13:01:13] [INFO] Dang kiem tra Zalo PC...
+[2026-10-07 13:01:13] [INFO] Zalo dang mo: PID=7524 | Title='Zalo'
+[2026-10-07 13:01:14] [INFO] Minimize terminal, focus Zalo...
+[2026-10-07 13:01:17] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-06...
+[2026-10-07 13:01:25] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-07 13:01:31] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-10-07 13:01:59] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-07 13:02:04] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-07 13:02:10] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-10-07 13:02:50] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-10-07 13:05:22] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-07 13:05:28] [INFO] Da gui bang tong ket ngay.
+[2026-10-07 13:05:28] [INFO] Da cap nhat last_patrol_report_monday = 2026-10-06
+[2026-10-07 13:05:30] [INFO] === HOAN TAT ===
+[2026-10-08 08:00:07] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-08 08:00:08] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-10-06'
+[2026-10-08 08:00:08] [INFO] Dang kiem tra Zalo PC...
+[2026-10-08 08:00:08] [INFO] Zalo dang mo: PID=7524 | Title='Zalo'
+[2026-10-08 08:00:08] [INFO] Minimize terminal, focus Zalo...
+[2026-10-08 08:00:11] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-07...
+[2026-10-08 08:00:19] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-08 08:00:25] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-10-08 08:00:31] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-08 08:00:37] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-08 08:00:55] [INFO] Da gui phieu auditor: Lê Thị Ngân
+[2026-10-08 08:01:00] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-10-08 08:01:14] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-08 08:01:29] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-10-08 08:01:34] [INFO] Da gui bang tong ket ngay.
+[2026-10-08 08:01:35] [INFO] Da cap nhat last_patrol_report_monday = 2026-10-07
+[2026-10-08 08:01:35] [INFO] === HOAN TAT ===
+[2026-10-09 08:00:04] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-09 08:00:05] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-10-07'
+[2026-10-09 08:00:05] [INFO] Dang kiem tra Zalo PC...
+[2026-10-09 08:00:05] [INFO] Zalo dang mo: PID=7524 | Title='Zalo'
+[2026-10-09 08:00:05] [INFO] Minimize terminal, focus Zalo...
+[2026-10-09 08:00:10] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-08...
+[2026-10-09 08:00:18] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-09 08:00:34] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-10-09 08:00:48] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-09 08:00:54] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-09 08:01:10] [INFO] Da gui phieu auditor: Lê Thị Ngân
+[2026-10-09 08:01:23] [INFO] Da gui phieu auditor: Triệu Hải Dương
+[2026-10-09 08:01:37] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-10-09 08:01:52] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-10-09 08:02:08] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-09 08:02:14] [INFO] Da gui phieu auditor: Nguyễn Thị Thanh Trúc
+[2026-10-09 08:02:27] [INFO] Da gui phieu auditor: Lâm Ngọc Thảo
+[2026-10-09 08:02:33] [INFO] Da gui bang tong ket ngay.
+[2026-10-09 08:02:34] [INFO] Da cap nhat last_patrol_report_monday = 2026-10-08
+[2026-10-09 08:02:34] [INFO] === HOAN TAT ===
+[2026-10-10 08:00:06] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-10 08:00:07] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-10-08'
+[2026-10-10 08:00:07] [INFO] Dang kiem tra Zalo PC...
+[2026-10-10 08:00:07] [INFO] Zalo dang mo: PID=7524 | Title='Zalo'
+[2026-10-10 08:00:07] [INFO] Minimize terminal, focus Zalo...
+[2026-10-10 08:00:10] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-09...
+[2026-10-10 08:00:19] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-10 08:01:25] [INFO] Da gui phieu auditor: Ngô Thị Bích Ngọc
+[2026-10-10 08:01:30] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-10 08:01:39] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-10 08:01:55] [INFO] Da gui phieu auditor: Lê Thị Ngân
+[2026-10-10 08:02:00] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-10-10 08:02:17] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-10 08:02:22] [INFO] Da gui phieu auditor: Lâm Ngọc Thảo
+[2026-10-10 08:02:41] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-10-10 08:02:54] [INFO] Da gui phieu auditor: Triệu Hải Dương
+[2026-10-10 08:03:00] [INFO] Da gui bang tong ket ngay.
+[2026-10-10 08:03:06] [INFO] Da gui tong ket tuan.
+[2026-10-10 08:03:06] [INFO] Da cap nhat last_patrol_report_monday = 2026-10-09
+[2026-10-10 08:03:06] [INFO] === HOAN TAT ===
+[2026-10-11 08:00:04] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-11 08:00:05] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-10-09'
+[2026-10-11 08:00:05] [INFO] Dang kiem tra Zalo PC...
+[2026-10-11 08:00:05] [INFO] Zalo dang mo: PID=7524 | Title='Zalo'
+[2026-10-11 08:00:05] [INFO] Minimize terminal, focus Zalo...
+[2026-10-11 08:00:08] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-10...
+[2026-10-11 08:00:16] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-11 08:00:31] [INFO] Da gui phieu auditor: Triệu Hải Dương
+[2026-10-11 08:00:37] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-10-11 08:00:53] [INFO] Da gui phieu auditor: Nguyễn Thị Liên
+[2026-10-11 08:00:58] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-11 08:01:04] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-11 08:01:25] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-11 08:01:32] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-10-11 08:01:41] [INFO] Da gui phieu auditor: Lâm Ngọc Thảo
+[2026-10-11 08:01:48] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-10-11 08:01:54] [INFO] Da gui bang tong ket ngay.
+[2026-10-11 08:01:55] [INFO] Da cap nhat last_patrol_report_monday = 2026-10-10
+[2026-10-11 08:01:55] [INFO] === HOAN TAT ===
+[2026-10-12 08:00:27] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-12 08:00:30] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-10-10'
+[2026-10-12 08:00:30] [INFO] Dang kiem tra Zalo PC...
+[2026-10-12 08:00:30] [INFO] Zalo dang mo: PID=7524 | Title='Zalo'
+[2026-10-12 08:00:30] [INFO] Minimize terminal, focus Zalo...
+[2026-10-12 08:00:33] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-11...
+[2026-10-12 08:00:42] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-12 08:00:58] [INFO] Da gui phieu auditor: Triệu Hải Dương
+[2026-10-12 08:01:05] [INFO] Da gui bang tong ket ngay.
+[2026-10-12 08:01:05] [INFO] Da cap nhat last_patrol_report_monday = 2026-10-11
+[2026-10-12 08:01:05] [INFO] === HOAN TAT ===
+[2026-10-13 08:00:44] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-13 08:00:46] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-10-11'
+[2026-10-13 08:00:46] [INFO] Dang kiem tra Zalo PC...
+[2026-10-13 08:00:46] [INFO] Zalo dang mo: PID=7524 | Title='Zalo'
+[2026-10-13 08:00:46] [INFO] Minimize terminal, focus Zalo...
+[2026-10-13 08:00:49] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-12...
+[2026-10-13 08:00:59] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-13 08:01:23] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-13 08:01:29] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-10-13 08:01:43] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-10-13 08:01:57] [INFO] Da gui phieu auditor: Nguyễn Thị Thanh Trúc
+[2026-10-13 08:02:11] [INFO] Da gui phieu auditor: Lâm Ngọc Thảo
+[2026-10-13 08:02:17] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-13 08:02:36] [INFO] Da gui phieu auditor: Triệu Hải Dương
+[2026-10-13 08:02:49] [INFO] Da gui phieu auditor: Lê Thị Ngân
+[2026-10-13 08:02:56] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-13 08:03:06] [INFO] Da gui bang tong ket ngay.
+[2026-10-13 08:03:26] [INFO] Da cap nhat last_patrol_report_monday = 2026-10-12
+[2026-10-13 08:03:26] [INFO] === HOAN TAT ===
+[2026-10-14 08:00:06] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-14 08:00:07] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-10-12'
+[2026-10-14 08:00:07] [INFO] Dang kiem tra Zalo PC...
+[2026-10-14 08:00:07] [INFO] Zalo dang mo: PID=7524 | Title='Zalo'
+[2026-10-14 08:00:07] [INFO] Minimize terminal, focus Zalo...
+[2026-10-14 08:00:10] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-13...
+[2026-10-14 08:00:19] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-14 08:00:25] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-10-14 08:00:30] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-10-14 08:00:45] [INFO] Da gui phieu auditor: Nguyễn Thị Thanh Trúc
+[2026-10-14 08:00:50] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-10-14 08:00:55] [INFO] Da gui phieu auditor: Lâm Ngọc Thảo
+[2026-10-14 08:01:00] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-14 08:01:14] [INFO] Da gui phieu auditor: Triệu Hải Dương
+[2026-10-14 08:01:19] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-14 08:01:34] [INFO] Da gui phieu auditor: Lê Thị Ngân
+[2026-10-14 08:01:40] [INFO] Da gui bang tong ket ngay.
+[2026-10-14 08:01:40] [INFO] Da cap nhat last_patrol_report_monday = 2026-10-13
+[2026-10-14 08:01:40] [INFO] === HOAN TAT ===
+[2026-10-15 08:00:05] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-15 08:00:07] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-10-13'
+[2026-10-15 08:00:07] [INFO] Dang kiem tra Zalo PC...
+[2026-10-15 08:00:07] [INFO] Zalo dang mo: PID=17028 | Title='Zalo'
+[2026-10-15 08:00:07] [INFO] Minimize terminal, focus Zalo...
+[2026-10-15 08:00:20] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-14...
+[2026-10-15 08:00:30] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-15 08:00:46] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-10-15 08:01:05] [INFO] Da gui phieu auditor: Nguyễn Thị Liên
+[2026-10-15 08:01:20] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-15 08:01:39] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-10-15 08:02:03] [INFO] Da gui phieu auditor: Nguyễn Thị Thanh Trúc
+[2026-10-15 08:02:10] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-15 08:02:17] [INFO] Da gui phieu auditor: Lâm Ngọc Thảo
+[2026-10-15 08:02:34] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-15 08:02:49] [INFO] Da gui phieu auditor: Triệu Hải Dương
+[2026-10-15 08:02:54] [INFO] Da gui bang tong ket ngay.
+[2026-10-15 08:02:55] [INFO] Da cap nhat last_patrol_report_monday = 2026-10-14
+[2026-10-15 08:02:55] [INFO] === HOAN TAT ===
+[2026-10-16 08:00:31] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-16 08:00:33] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-10-14'
+[2026-10-16 08:00:33] [INFO] Dang kiem tra Zalo PC...
+[2026-10-16 08:00:33] [INFO] Zalo dang mo: PID=17028 | Title='Zalo'
+[2026-10-16 08:00:33] [INFO] Minimize terminal, focus Zalo...
+[2026-10-16 08:00:36] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-15...
+[2026-10-16 08:00:45] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-16 08:00:53] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-10-16 08:01:01] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-16 08:01:24] [INFO] Da gui phieu auditor: Trần Thị Tinh Vi
+[2026-10-16 08:01:29] [INFO] Da gui phieu auditor: Nguyễn Thị Liên
+[2026-10-16 08:01:35] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-10-16 08:01:41] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-16 08:01:47] [INFO] Da gui phieu auditor: Lâm Ngọc Thảo
+[2026-10-16 08:01:53] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-16 08:02:12] [INFO] Da gui phieu auditor: Triệu Hải Dương
+[2026-10-16 08:02:20] [INFO] Da gui bang tong ket ngay.
+[2026-10-16 08:02:21] [INFO] Da cap nhat last_patrol_report_monday = 2026-10-15
+[2026-10-16 08:02:21] [INFO] === HOAN TAT ===
+[2026-10-17 08:00:16] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-17 08:00:20] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-10-15'
+[2026-10-17 08:00:20] [INFO] Dang kiem tra Zalo PC...
+[2026-10-17 08:00:21] [INFO] Zalo dang mo: PID=17028 | Title='Zalo'
+[2026-10-17 08:00:21] [INFO] Minimize terminal, focus Zalo...
+[2026-10-17 08:00:24] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-16...
+[2026-10-17 08:00:36] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-17 08:01:12] [INFO] Da gui phieu auditor: Ngô Thị Bích Ngọc
+[2026-10-17 08:01:53] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-17 08:01:58] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-10-17 08:02:14] [INFO] Da gui phieu auditor: Nguyễn Thị Liên
+[2026-10-17 08:02:20] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-10-17 08:02:26] [INFO] Da gui phieu auditor: Lâm Ngọc Thảo
+[2026-10-17 08:02:32] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-17 08:02:38] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-17 08:02:45] [INFO] Da gui phieu auditor: Triệu Hải Dương
+[2026-10-17 08:02:52] [INFO] Da gui bang tong ket ngay.
+[2026-10-17 08:03:03] [INFO] Da gui tong ket tuan.
+[2026-10-17 08:03:11] [INFO] Da cap nhat last_patrol_report_monday = 2026-10-16
+[2026-10-17 08:03:14] [INFO] === HOAN TAT ===
+[2026-10-18 08:00:20] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-18 08:00:25] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-10-16'
+[2026-10-18 08:00:25] [INFO] Dang kiem tra Zalo PC...
+[2026-10-18 08:00:25] [INFO] Zalo dang mo: PID=17028 | Title='Zalo'
+[2026-10-18 08:00:26] [INFO] Minimize terminal, focus Zalo...
+[2026-10-18 08:00:29] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-17...
+[2026-10-18 08:00:41] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-18 08:01:02] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-18 08:01:30] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-10-18 08:01:51] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-10-18 08:01:57] [INFO] Da gui phieu auditor: Trần Thị Tinh Vi
+[2026-10-18 08:02:02] [INFO] Da gui phieu auditor: Lâm Ngọc Thảo
+[2026-10-18 08:02:08] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-18 08:02:14] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-18 08:02:19] [INFO] Da gui bang tong ket ngay.
+[2026-10-18 08:02:19] [INFO] Da cap nhat last_patrol_report_monday = 2026-10-17
+[2026-10-18 08:02:19] [INFO] === HOAN TAT ===
+[2026-10-19 08:00:09] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-19 08:00:26] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-10-17'
+[2026-10-19 08:00:27] [INFO] Dang kiem tra Zalo PC...
+[2026-10-19 08:00:53] [INFO] Zalo dang mo: PID=17028 | Title='Zalo'
+[2026-10-19 08:00:54] [INFO] Minimize terminal, focus Zalo...
+[2026-10-19 08:00:59] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-18...
+[2026-10-19 08:01:09] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-19 08:01:26] [INFO] Da gui phieu auditor: Nguyễn Thị Thanh Trúc
+[2026-10-19 08:01:32] [INFO] Da gui bang tong ket ngay.
+[2026-10-19 08:01:34] [INFO] Da cap nhat last_patrol_report_monday = 2026-10-18
+[2026-10-19 08:01:34] [INFO] === HOAN TAT ===
+[2026-10-20 08:00:05] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-20 08:00:06] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-10-18'
+[2026-10-20 08:00:06] [INFO] Dang kiem tra Zalo PC...
+[2026-10-20 08:00:06] [INFO] Zalo dang mo: PID=17028 | Title='Zalo'
+[2026-10-20 08:00:06] [INFO] Minimize terminal, focus Zalo...
+[2026-10-20 08:00:10] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-19...
+[2026-10-20 08:00:23] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-20 08:01:13] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-20 08:01:19] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-20 08:01:25] [INFO] Da gui phieu auditor: Trần Thị Tinh Vi
+[2026-10-20 08:01:31] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-10-20 08:01:37] [INFO] Da gui phieu auditor: Lâm Ngọc Thảo
+[2026-10-20 08:02:00] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-20 08:02:06] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-10-20 08:02:11] [INFO] Da gui phieu auditor: Triệu Hải Dương
+[2026-10-20 08:02:21] [INFO] Da gui bang tong ket ngay.
+[2026-10-20 08:02:24] [INFO] Da cap nhat last_patrol_report_monday = 2026-10-19
+[2026-10-20 08:02:25] [INFO] === HOAN TAT ===
+[2026-10-21 08:00:08] [INFO] === BAT DAU CHAY MQAA Automation ===
+[2026-10-21 08:00:08] [INFO] Settings: ZaloGroup='MQAA TESTING REPORT' | PatrolGroup='MQAA TESTING REPORT' | PatrolTime='08:00' | LastPatrol='2026-10-19'
+[2026-10-21 08:00:08] [INFO] Dang kiem tra Zalo PC...
+[2026-10-21 08:00:09] [INFO] Zalo dang mo: PID=17028 | Title='Zalo'
+[2026-10-21 08:00:09] [INFO] Minimize terminal, focus Zalo...
+[2026-10-21 08:00:12] [INFO] >>> Bat dau gui bao cao Patrol ngay 2026-10-20...
+[2026-10-21 08:00:29] [INFO] Da chuyen sang nhom Zalo: MQAA TESTING REPORT
+[2026-10-21 08:00:41] [INFO] Da gui phieu auditor: Nguyễn Thị Thanh Trúc
+[2026-10-21 08:00:46] [INFO] Da gui phieu auditor: Nguyễn Ngọc Chiều
+[2026-10-21 08:01:00] [INFO] Da gui phieu auditor: Trần Ngọc Huyền
+[2026-10-21 08:01:05] [INFO] Da gui phieu auditor: Lâm Ngọc Thảo
+[2026-10-21 08:01:10] [INFO] Da gui phieu auditor: Lê Thị Mãi
+[2026-10-21 08:01:15] [INFO] Da gui phieu auditor: Bùi Thị Thu
+[2026-10-21 08:01:32] [INFO] Da gui phieu auditor: Phan Thị Huỳnh Như
+[2026-10-21 08:01:47] [INFO] Da gui phieu auditor: Nguyễn Thị Hà Phương
+[2026-10-21 08:01:53] [INFO] Da gui bang tong ket ngay.
+[2026-10-21 08:01:53] [INFO] Da cap nhat last_patrol_report_monday = 2026-10-20
+[2026-10-21 08:01:53] [INFO] === HOAN TAT ===

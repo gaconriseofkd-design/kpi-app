@@ -2,8 +2,8 @@
 # Script gửi lại báo cáo Patrol ngày 22/05 và 23/05 vào Zalo
 # Sau khi gửi xong, cập nhật last_patrol_report_monday = 2026-05-23
 
-$SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
-$SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0"
+$SUPABASE_URL = "https://ewhfhputqeyebffjwtnl.supabase.co"
+$SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3aGZocHV0cWV5ZWJmZmp3dG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyOTU1OTMsImV4cCI6MjEwNDg3MTU5M30.a368bZeQDr2du8R4ipKHpMZm0ITJlIqeD6wqba-fbRM"
 $PATROL_ZALO_GROUP = "MQAA TESTING REPORT"
 $DATES_TO_SEND = @("2026-05-22", "2026-05-23")
 

@@ -328,7 +328,24 @@ export default function EntryPage() {
     if (!form.workerId) return alert("Nhập MSNV.");
     if (!form.approverId) return alert("Không tìm thấy Người duyệt cho MSNV này.");
     if (!form.date) return alert("Chọn ngày.");
-    if (isHybrid && !form.category) return alert("Vui lòng chọn Loại năng suất (Category).");
+
+    // Bắt buộc nhập Giờ làm việc
+    if (!form.workHours || Number(form.workHours) <= 0) {
+      return alert("Vui lòng nhập Giờ làm việc (> 0).");
+    }
+
+    if (isHybrid) {
+      if (!form.category || form.category.trim() === "") {
+        return alert("Vui lòng chọn Loại hàng / Loại năng suất.");
+      }
+      if (form.output === "" || form.output === null || form.output === undefined || Number(form.output) <= 0) {
+        return alert("Vui lòng nhập Sản lượng (> 0).");
+      }
+    } else {
+      if (form.oe === "" || form.oe === null || form.oe === undefined || Number(form.oe) <= 0) {
+        return alert("Vui lòng nhập %OE (> 0).");
+      }
+    }
 
     const violationsValue = form.compliance === "NONE" ? 0 : 1;
     const isUpdate = await findExisting(form.workerId, form.date, section);
@@ -474,7 +491,7 @@ export default function EntryPage() {
           </select>
         </label>
 
-        <label>Giờ làm việc:
+        <label>Giờ làm việc <span className="text-red-500 font-bold">*</span>:
           <input type="number" className="input" value={form.workHours} onChange={(e) => handleChange("workHours", Number(e.target.value))} />
         </label>
 
@@ -488,18 +505,18 @@ export default function EntryPage() {
 
         {isHybrid ? (
           <>
-            <label>Loại năng suất (Category):
+            <label>Loại năng suất / Loại hàng <span className="text-red-500 font-bold">*</span>:
               <select className="input" value={form.category} onChange={(e) => handleChange("category", e.target.value)}>
                 <option value="">-- Chọn loại --</option>
                 {categoryOptions.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </label>
-            <label>Sản lượng (Output):
+            <label>Sản lượng (Output) <span className="text-red-500 font-bold">*</span>:
               <input type="number" className="input" value={form.output} onChange={(e) => handleChange("output", Number(e.target.value))} />
             </label>
           </>
         ) : (
-          <label>%OE:
+          <label>%OE <span className="text-red-500 font-bold">*</span>:
             <input type="number" className="input" value={form.oe} onChange={(e) => handleChange("oe", Number(e.target.value))} step="0.01" />
           </label>
         )}

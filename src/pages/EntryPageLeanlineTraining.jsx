@@ -99,7 +99,15 @@ export default function EntryPageLeanlineTraining() {
     if (!workerId) return alert("Vui lòng nhập MSNV.");
     if (!approverId) return alert("Không tìm thấy Người duyệt cho MSNV này.");
     if (!date) return alert("Vui lòng chọn ngày làm việc.");
-    if (!apprenticeStage) return alert("Vui lòng chọn công đoạn đang học việc.");
+    if (!workHours || Number(workHours) <= 0) {
+      return alert("Vui lòng nhập Giờ làm việc (> 0).");
+    }
+    if (!apprenticeStage || apprenticeStage.trim() === "") {
+      return alert("Vui lòng chọn Công đoạn học việc / Loại hàng.");
+    }
+    if (output === "" || output === null || output === undefined || Number(output) <= 0) {
+      return alert("Vui lòng nhập Sản lượng (> 0).");
+    }
 
     try {
       setLoading(true);
@@ -226,7 +234,7 @@ export default function EntryPageLeanlineTraining() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Công đoạn đang học việc:</label>
+          <label className="block text-sm font-medium mb-1">Công đoạn đang học việc / Loại hàng <span className="text-red-500 font-bold">*</span>:</label>
           <select
             className="input w-full"
             value={apprenticeStage}
@@ -241,7 +249,7 @@ export default function EntryPageLeanlineTraining() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Giờ làm việc:</label>
+          <label className="block text-sm font-medium mb-1">Giờ làm việc <span className="text-red-500 font-bold">*</span>:</label>
           <input
             type="number"
             className="input w-full"
@@ -272,7 +280,7 @@ export default function EntryPageLeanlineTraining() {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Sản lượng (Đôi/ca):</label>
+          <label className="block text-sm font-medium mb-1">Sản lượng (Đôi/ca) <span className="text-red-500 font-bold">*</span>:</label>
           <input
             type="number"
             className="input w-full"

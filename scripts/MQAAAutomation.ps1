@@ -8,8 +8,8 @@ param(
 )
 
 # === Cấu hình (Người dùng thay đổi tại đây) ===
-$SUPABASE_URL = "https://doyipagavbxupiwbitgi.supabase.co"
-$SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRveWlwYWdhdmJ4dXBpd2JpdGdpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTkyMTc0NzUsImV4cCI6MjA3NDc5MzQ3NX0.hRCtL5wOxFXFPAR_r0vyYsL044d0caT-EZqx-p9kva0"
+$SUPABASE_URL = "https://ewhfhputqeyebffjwtnl.supabase.co"
+$SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImV3aGZocHV0cWV5ZWJmZmp3dG5sIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODkyOTU1OTMsImV4cCI6MjEwNDg3MTU5M30.a368bZeQDr2du8R4ipKHpMZm0ITJlIqeD6wqba-fbRM"
 $ZALO_GROUP_NAME  = "MQAA TESTING REPORT"
 $DEFAULT_REPORT_TIME = "08:00"
 
@@ -223,9 +223,16 @@ try {
                                     if ($rec.evaluation_data) {
                                         foreach ($item in $rec.evaluation_data) {
                                             $isHeader = if ($item.is_header -ne $null) { $item.is_header } else { $item.isHeader }
-                                            if (-not $isHeader -and [double]$item.level -lt [double]$item.score) {
-                                                $desc = if ($item.description) { $item.description } else { $item.label }
-                                                $evidenceItems += [PSCustomObject]@{ Section = $sg.Name; Text = $desc; Image = $item.image_url }
+                                            if (-not $isHeader) {
+                                                $levelNum = 0
+                                                $scoreNum = 0
+                                                $canParseLevel = [double]::TryParse([string]$item.level, [ref]$levelNum)
+                                                $canParseScore = [double]::TryParse([string]$item.score, [ref]$scoreNum)
+                                                
+                                                if ($canParseLevel -and $canParseScore -and $levelNum -lt $scoreNum) {
+                                                    $desc = if ($item.description) { $item.description } else { $item.label }
+                                                    $evidenceItems += [PSCustomObject]@{ Section = $sg.Name; Text = $desc; Image = $item.image_url }
+                                                }
                                             }
                                         }
                                     }
