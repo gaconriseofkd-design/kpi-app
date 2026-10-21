@@ -260,10 +260,10 @@ $targetFolders = @(
 
 $voiceFile = $null
 foreach ($dir in $targetFolders) {
-    if (Test-Path $dir) {
-        $found = Get-ChildItem -Path $dir -Filter "*Ti*ng*N*i*.xlsx" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (Test-Path -LiteralPath $dir) {
+        $found = Get-ChildItem -LiteralPath $dir -ErrorAction SilentlyContinue | Where-Object { $_.Name -like "*Ti*ng*N*i*.xlsx" } | Select-Object -First 1
         if (-not $found) {
-            $found = Get-ChildItem -Path $dir -Filter "*.xlsx" -ErrorAction SilentlyContinue | Select-Object -First 1
+            $found = Get-ChildItem -LiteralPath $dir -ErrorAction SilentlyContinue | Where-Object { $_.Extension -ieq ".xlsx" } | Select-Object -First 1
         }
         if ($found) {
             $voiceFile = $found
@@ -297,19 +297,24 @@ try {
 
     Write-Log "Tong so dong du lieu trong Excel: $lastRow (Cot: $lastCol)"
 
-    # Xac dinh cot 'Xac nhan trang thai'
+    # Xac dinh cot 'Xac nhan trang thai' (Cot 19 / S) va 'Noi dung xu ly' (Cot 20 / T)
     $statusCol = 0
+    $solutionCol = 0
     for ($c = 1; $c -le $lastCol; $c++) {
         $headerText = $ws.Cells.Item(1, $c).Text.Trim()
         if ($headerText -match "Xác nhận trạng thái|trạng thái|trang thai|xac nhan|status") {
             $statusCol = $c
-            break
+        }
+        if ($headerText -match "Nội dung xử lí|nội dung xử lý|noi dung xu ly|nội dung giải quyết|kết quả xử lý|solution|resolution") {
+            $solutionCol = $c
         }
     }
     if ($statusCol -eq 0 -and $lastCol -ge 19) { $statusCol = 19 }
-    elseif ($statusCol -eq 0) { $statusCol = $lastCol }
+    elseif ($statusCol -eq 0) { $statusCol = [Math]::Min(19, $lastCol) }
 
-    Write-Log "Cot Xac nhan trang thai nam o vi tri cot: $statusCol"
+    if ($solutionCol -eq 0 -and $lastCol -ge 20) { $solutionCol = 20 }
+
+    Write-Log "Cot Xac nhan trang thai: Cot $statusCol | Cot Noi dung xu ly: Cot $solutionCol"
 
     for ($r = 2; $r -le $lastRow; $r++) {
         $idStr = $ws.Cells.Item($r, 1).Text.Trim()
@@ -338,6 +343,12 @@ try {
         # Doc trang thai xu ly tu cot 'Xac nhan trang thai'
         $statusVal   = if ($statusCol -gt 0) { $ws.Cells.Item($r, $statusCol).Text.Trim() } else { "" }
         $isResolved  = ($statusVal -match "^(ok|done|da xong|đã xong|hoan thanh|hoàn thành)$")
+
+        # Doc noi dung xu ly tu cot T ('Noi dung xu li')
+        $solutionVal = if ($solutionCol -gt 0) { $ws.Cells.Item($r, $solutionCol).Text.Trim() } else { "" }
+        if ([string]::IsNullOrWhiteSpace($solutionVal) -and $lastCol -ge 20) {
+            $solutionVal = $ws.Cells.Item($r, 20).Text.Trim()
+        }
 
         # Parse thoi gian
         $parsedDate = Get-Date
@@ -387,6 +398,7 @@ try {
             Wish          = $wishContent
             StatusVal     = $statusVal
             IsResolved    = $isResolved
+            SolutionVal   = $solutionVal
         }
     }
 } catch {
@@ -477,7 +489,7 @@ if ($newUnsentRecords.Count -gt 0) {
 
 # B. GUI NHAC NHO HANG NGAY CHO CAC PHAN ANH CHUA XAC NHAN "OK"
 # Chay khi: ManualTrigger (nguoi dung bam chu dong) HOAC luc 8h hang ngay neu hom nay chua gui nhac nho
-$shouldSendDailyReminder = $ManualTrigger -or ($lastReminderDate -ne $todayStr)
+$shouldSendDailyReminder = ($Action -ne "WeeklySummary") -and ($ManualTrigger -or ($lastReminderDate -ne $todayStr))
 
 if ($pendingReminderRecords.Count -gt 0) {
     if ($shouldSendDailyReminder) {
@@ -530,7 +542,7 @@ if ($pendingReminderRecords.Count -gt 0) {
         }
 } else {
     Write-Log "Khong co phan anh nao dang ton dong chua xu ly."
-    if ($ManualTrigger -and $newUnsentRecords.Count -eq 0) {
+    if ($ManualTrigger -and $newUnsentRecords.Count -eq 0 -and $Action -ne "WeeklySummary") {
         Write-Log "Tat ca phan anh trong file Excel deu da duoc xac nhan OK (hoan tat)."
         $doneMsg  = "📢 [TIẾNG NÓI HIỆN TRƯỜNG] - THÔNG BÁO TIẾN ĐỘ`n`n"
         $doneMsg += "✅ Hiện tại tất cả các ý kiến phản ánh từ hiện trường đều đã được xử lý và xác nhận OK!`n"
@@ -549,74 +561,98 @@ $weekCode = "$((Get-Date).Year)-W$currentWeekNum"
 if ($Action -eq "WeeklySummary" -or ($isWeekend -and $tracking.last_weekly_summary_week -ne $weekCode)) {
     Write-Log "Bat dau tao bao cao TONG KET TUAN ($weekCode)..."
     
-    # Lay cac phan anh trong 7 ngay gan nhat
-    $sevenDaysAgo = (Get-Date).Date.AddDays(-6)
-    $weeklyRecords = @($records | Where-Object { $_.Date.Date -ge $sevenDaysAgo } | Sort-Object Id)
+    $now = Get-Date
+    $firstDayOfMonth = [DateTime]::new($now.Year, $now.Month, 1)
+    $monthYearStr = $now.ToString("MM/yyyy")
+    $periodStr = "Từ 01/$($now.ToString('MM')) đến $($now.ToString('dd/MM/yyyy'))"
 
-    $totalWeekly = $weeklyRecords.Count
-    if ($totalWeekly -gt 0) {
-        $resolvedWeekly = @($weeklyRecords | Where-Object { $_.IsResolved })
-        $unresolvedWeekly = @($weeklyRecords | Where-Object { -not $_.IsResolved })
+    # Lay cac phan anh tu dau thang den hien tai (bao gom ca cac phan anh ton dong chua xong tu truoc neu co)
+    $summaryRecords = @($records | Where-Object { $_.Date.Date -ge $firstDayOfMonth.Date -or (-not $_.IsResolved) } | Sort-Object Id)
+    $totalSummary = $summaryRecords.Count
+
+    if ($totalSummary -gt 0) {
+        $resolvedSummary   = @($summaryRecords | Where-Object { $_.IsResolved })
+        $unresolvedSummary = @($summaryRecords | Where-Object { -not $_.IsResolved })
+        $percentResolved   = if ($totalSummary -gt 0) { [Math]::Round(($resolvedSummary.Count / $totalSummary) * 100, 0) } else { 0 }
 
         $weekMsg  = "📊 [TỔNG KẾT TUẦN] TIẾNG NÓI TỪ HIỆN TRƯỜNG SẢN XUẤT 🗣️`n"
-        $weekMsg += "📅 Tuần $currentWeekNum ($($sevenDaysAgo.ToString('dd/MM')) - $((Get-Date).ToString('dd/MM/yyyy')))`n"
-        $weekMsg += "🔢 Tổng số ý kiến tiếp nhận trong tuần: $totalWeekly phản ánh`n"
+        $weekMsg += "📅 Tuần $currentWeekNum - Tháng $monthYearStr ($periodStr)`n"
+        $weekMsg += "🔢 Tổng số ý kiến tiếp nhận từ đầu tháng: $totalSummary phản ánh`n"
         $weekMsg += "=============================================`n`n"
 
         # Thong ke tien do xu ly
         $weekMsg += "📊 TỔNG HỢP TIẾN ĐỘ XỬ LÝ:`n"
-        $weekMsg += "  • 🟢 Đã xử lý (OK): $($resolvedWeekly.Count) ý kiến`n"
-        $weekMsg += "  • 🔴 Chưa hoàn tất: $($unresolvedWeekly.Count) ý kiến`n`n"
+        $weekMsg += "  • 🟢 Đã hoàn tất xử lý (OK): $($resolvedSummary.Count) ý kiến ($percentResolved%)`n"
+        $weekMsg += "  • 🔴 Chưa hoàn tất: $($unresolvedSummary.Count) ý kiến`n`n"
 
         # Thong ke theo Section
         $weekMsg += "🏢 PHÂN BỔ THEO BỘ PHẬN (SECTION):`n"
-        $bySection = $weeklyRecords | Group-Object -Property Section
+        $bySection = $summaryRecords | Group-Object -Property Section
         foreach ($sec in $bySection) {
-            $weekMsg += "  • $($sec.Name): $($sec.Count) ý kiến`n"
+            $secResolved = @($sec.Group | Where-Object { $_.IsResolved }).Count
+            $secUnresolved = @($sec.Group | Where-Object { -not $_.IsResolved }).Count
+            $secNote = if ($secUnresolved -gt 0) { " [🔴 $secUnresolved chưa xong]" } else { " [🟢 100% OK]" }
+            $weekMsg += "  • $($sec.Name): $($sec.Count) ý kiến$secNote`n"
         }
         $weekMsg += "`n"
 
         # Thong ke An danh vs Co ten
-        $anonCount = @($weeklyRecords | Where-Object { $_.IsAnonymous }).Count
-        $publicCount = @($weeklyRecords | Where-Object { -not $_.IsAnonymous }).Count
+        $anonCount = @($summaryRecords | Where-Object { $_.IsAnonymous }).Count
+        $publicCount = @($summaryRecords | Where-Object { -not $_.IsAnonymous }).Count
         $weekMsg += "👥 HÌNH THỨC GỬI: 🕵️ Ẩn danh: $anonCount  |  🧑 Có danh tính: $publicCount`n`n"
 
         # Danh sach phan anh CHUA XU LY (neu co)
-        if ($unresolvedWeekly.Count -gt 0) {
+        if ($unresolvedSummary.Count -gt 0) {
             $weekMsg += "⚠️ CÁC PHẢN ÁNH CHƯA XỬ LÝ (CẦN GIẢI QUYẾT GẤP):`n"
             $idxU = 1
-            foreach ($item in $unresolvedWeekly) {
+            foreach ($item in $unresolvedSummary) {
                 $shortContent = $item.Content
-                if ($shortContent.Length -gt 120) { $shortContent = $shortContent.Substring(0, 117) + "..." }
+                if ($shortContent.Length -gt 220) { $shortContent = $shortContent.Substring(0, 217) + "..." }
                 $shortContent = $shortContent -replace "`r?`n", " "
 
-                $weekMsg += "$idxU️⃣ #$($item.Id) [$($item.Section)] - Ngày $($item.Date.ToString('dd/MM')) [🔴 CHƯA OK]`n"
+                $loc = if (-not [string]::IsNullOrWhiteSpace($item.Line)) { "$($item.Section) - $($item.Line)" } else { $item.Section }
+                $weekMsg += "$idxU️⃣ #$($item.Id) [$loc] - Ngày $($item.Date.ToString('dd/MM')) [🔴 CHƯA OK]`n"
                 $weekMsg += "   • Người gửi: $($item.Sender)`n"
                 $weekMsg += "   • Nội dung: `"$shortContent`"`n"
+                if (-not [string]::IsNullOrWhiteSpace($item.Wish)) {
+                    $shortWish = $item.Wish -replace "`r?`n", " "
+                    if ($shortWish.Length -gt 150) { $shortWish = $shortWish.Substring(0, 147) + "..." }
+                    $weekMsg += "   • Nguyện vọng: `"$shortWish`"`n"
+                }
+                if (-not [string]::IsNullOrWhiteSpace($item.SolutionVal)) {
+                    $weekMsg += "   • ⏳ Ghi chú xử lý: $($item.SolutionVal)`n"
+                }
+                $weekMsg += "`n"
                 $idxU++
             }
-            $weekMsg += "`n"
         }
 
-        # Danh sach phan anh DA XU LY XONG (OK)
-        if ($resolvedWeekly.Count -gt 0) {
+        # Danh sach phan anh DA XU LY XONG (OK) - Bao gom Cot T (Noi dung xu ly)
+        if ($resolvedSummary.Count -gt 0) {
             $weekMsg += "✅ CÁC PHẢN ÁNH ĐÃ XỬ LÝ HOÀN TẤT (OK):`n"
             $idxR = 1
-            foreach ($item in $resolvedWeekly) {
+            foreach ($item in $resolvedSummary) {
                 $shortContent = $item.Content
-                if ($shortContent.Length -gt 120) { $shortContent = $shortContent.Substring(0, 117) + "..." }
+                if ($shortContent.Length -gt 220) { $shortContent = $shortContent.Substring(0, 217) + "..." }
                 $shortContent = $shortContent -replace "`r?`n", " "
 
-                $weekMsg += "$idxR️⃣ #$($item.Id) [$($item.Section)] - Ngày $($item.Date.ToString('dd/MM')) [🟢 ĐÃ XỬ LÝ OK]`n"
+                $loc = if (-not [string]::IsNullOrWhiteSpace($item.Line)) { "$($item.Section) - $($item.Line)" } else { $item.Section }
+                $weekMsg += "$idxR️⃣ #$($item.Id) [$loc] - Ngày $($item.Date.ToString('dd/MM')) [🟢 ĐÃ XỬ LÝ OK]`n"
                 $weekMsg += "   • Người gửi: $($item.Sender)`n"
-                $weekMsg += "   • Nội dung: `"$shortContent`"`n"
+                $weekMsg += "   • Nội dung phản ánh: `"$shortContent`"`n"
+                
+                $solText = if (-not [string]::IsNullOrWhiteSpace($item.SolutionVal)) { 
+                    $item.SolutionVal.Trim() -replace "`r?`n", " " 
+                } else { 
+                    "Đã xác nhận giải quyết hoàn tất" 
+                }
+                $weekMsg += "   • 🛠️ Nội dung xử lý: $solText`n`n"
                 $idxR++
             }
-            $weekMsg += "`n"
         }
 
         $weekMsg += "=============================================`n"
-        $weekMsg += "👉 Đề nghị các Trưởng bộ phận rà soát tiến độ xử lý và phản hồi dứt điểm các kiến nghị tồn đọng trước tuần làm việc mới!"
+        $weekMsg += "👉 Đề nghị Quản lý các Bộ phận tiếp tục theo dõi, tiếp thu và xử lý dứt điểm các ý kiến từ hiện trường!"
 
         Write-Log "Dang gui Bao cao Tong Ket Tuan vao nhom Zalo '$ZALO_GROUP_NAME'..."
         $sentWeekOk = Send-ZaloMessageVoice -text $weekMsg
@@ -627,7 +663,7 @@ if ($Action -eq "WeeklySummary" -or ($isWeekend -and $tracking.last_weekly_summa
             Write-Log "Da gui thanh cong Bao cao Tong Ket Tuan ($weekCode)!"
         }
     } else {
-        Write-Log "Tuan nay khong co phan anh nao phat sinh. Bo qua tong ket tuan."
+        Write-Log "Tu dau thang den nay khong co phan anh nao phat sinh. Bo qua tong ket tuan."
     }
 }
 
