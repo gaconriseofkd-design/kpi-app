@@ -279,6 +279,15 @@ if (-not $voiceFile) {
 
 Write-Log "Tim thay file Excel: $($voiceFile.FullName)"
 
+# Copy sang thu muc TEMP de doc an toan, tuyet doi khong khoa file tren OneDrive
+$tempVoicePath = "$env:TEMP\Voice_Temp_Report.xlsx"
+try {
+    Copy-Item -LiteralPath $voiceFile.FullName -Destination $tempVoicePath -Force
+    $openVoicePath = $tempVoicePath
+} catch {
+    $openVoicePath = $voiceFile.FullName
+}
+
 # Doc du lieu tu file Excel
 $excel = $null
 $wb = $null
@@ -289,7 +298,7 @@ try {
     $excel.Visible = $false
     $excel.DisplayAlerts = $false
 
-    $wb = $excel.Workbooks.Open($voiceFile.FullName, 0, $true) # Mo che do ReadOnly
+    $wb = $excel.Workbooks.Open($openVoicePath, 0, $true) # Mo che do ReadOnly tu file temp
     $ws = $wb.Sheets.Item(1)
     
     $lastRow = $ws.Cells.Item($ws.Rows.Count, 1).End(-4162).Row
@@ -412,6 +421,8 @@ try {
             [System.Runtime.InteropServices.Marshal]::ReleaseComObject($excel) | Out-Null
         } catch {}
     }
+    [System.GC]::Collect()
+    [System.GC]::WaitForPendingFinalizers()
 }
 
 # Xu ly gui tin nhan

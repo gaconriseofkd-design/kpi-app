@@ -222,14 +222,18 @@ function Focus-Zalo {
     }
 
     $allZaloPids = @((Get-Process -Name Zalo -ErrorAction SilentlyContinue).Id)
-    if ($allZaloPids.Count -gt 0 -and (-not ($allZaloPids -contains $activePid))) {
-        throw "Khong the focus vao Zalo (PID dang active la $activePid khong phai Zalo)!"
+    if ($allZaloPids.Count -eq 0) {
+        throw "Khong tim thay ung dung Zalo dang chay tren may!"
+    }
+    if (-not ($allZaloPids -contains $activePid)) {
+        throw "CANH BAO AN TOAN: Khong the lay Focus cua so Zalo (PID dang active la $activePid khong phai Zalo)! Tu choi gui phim de tranh bam nham."
     }
     Start-Sleep -Milliseconds 500
 }
 
-function Get-StoredData {
-    # 1. Ưu tiên cao nhất: Lấy dữ liệu từ workbook Ovn Pro Schedule đang mở treo sẵn trên máy
+function Get-ScheduleWorkbook {
+    # 1. Ưu tiên cao nhất: Lấy dữ liệu từ workbook Ovn Pro Schedule đang mở treo sẵn trên máy (nếu user đang mở)
+    # Tuyệt đối không đóng hay tác động vào file này nếu người dùng đang mở làm việc/treo máy.
     Write-Host "Dang kiem tra file Ovn Pro Schedule dang mo treo tren may..." -ForegroundColor Cyan
     $excel7s = [WinHelper]::FindExcel7Windows()
     foreach ($h in $excel7s) {
@@ -239,15 +243,11 @@ function Get-StoredData {
                 $app = $win.Application
                 foreach ($wb in $app.Workbooks) {
                     if ($wb.Name -like "*Schedule*" -or $wb.FullName -like "*Schedule*") {
-                        foreach ($sh in $wb.Sheets) {
-                            if ($sh.Name -ieq "STORED") {
-                                Write-Host "-> Da ket noi truc tiep vao sheet STORED cua file dang mo treo: $($wb.Name)!" -ForegroundColor Green
-                                return @{
-                                    IsRunningInstance = $true
-                                    Workbook = $wb
-                                    Sheet = $sh
-                                }
-                            }
+                        Write-Host "-> Da ket noi truc tiep vao file dang mo treo: $($wb.Name)!" -ForegroundColor Green
+                        return @{
+                            IsRunningInstance = $true
+                            Workbook = $wb
+                            ExcelApp = $null
                         }
                     }
                 }
@@ -255,29 +255,56 @@ function Get-StoredData {
         }
     }
 
-    # 2. Dự phòng: Nếu chưa mở treo sẵn, tự động mở đọc trực tiếp file Ovn Pro Schedule.xlsb
-    Write-Host "Khong tim thay file dang mo treo, chuyen sang che do mo doc truc tiep..." -ForegroundColor Yellow
+    # 2. Dự phòng: Nếu chưa mở treo sẵn, copy sang thư mục TEMP rồi mới mở đọc bản tạm
+    # TUYỆT ĐỐI KHÔNG mở trực tiếp file gốc trên thư mục OneDrive để tránh khóa file gây lỗi đồng bộ
+    Write-Host "Khong tim thay file dang mo treo, copy sang thu muc TEMP de doc an toan tuyet doi..." -ForegroundColor Yellow
     $schedulePath = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Nhân Lg\Schedule\Ovn Pro Schedule.xlsb"
     if (-not (Test-Path $schedulePath)) {
         $schedulePath = "$env:USERPROFILE\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Nhân Lg\Schedule\Ovn Pro Schedule.xlsb"
     }
 
     if (Test-Path $schedulePath) {
+        $tempSchedulePath = "$env:TEMP\Ovn_Pro_Schedule_Temp.xlsb"
+        try {
+            Copy-Item -Path $schedulePath -Destination $tempSchedulePath -Force
+            $openPath = $tempSchedulePath
+        } catch {
+            Write-Host "Khong the copy sang TEMP, fallback sang file goc: $_" -ForegroundColor Yellow
+            $openPath = $schedulePath
+        }
+
         $excelNew = New-Object -ComObject Excel.Application
         $excelNew.Visible = $false
         $excelNew.DisplayAlerts = $false
-        $wbNew = $excelNew.Workbooks.Open($schedulePath, 0, $true)
-        $shNew = $wbNew.Sheets.Item("STORED")
+        $wbNew = $excelNew.Workbooks.Open($openPath, 0, $true)
         return @{
             IsRunningInstance = $false
             ExcelApp = $excelNew
             Workbook = $wbNew
-            Sheet = $shNew
         }
     }
 
     return $null
 }
+
+function Get-StoredData {
+    $sched = Get-ScheduleWorkbook
+    if ($sched -and $sched.Workbook) {
+        try {
+            $sh = $sched.Workbook.Sheets.Item("STORED")
+            return @{
+                IsRunningInstance = $sched.IsRunningInstance
+                ExcelApp = $sched.ExcelApp
+                Workbook = $sched.Workbook
+                Sheet = $sh
+            }
+        } catch {
+            Write-Host "Khong tim thay sheet STORED trong file Schedule!" -ForegroundColor Red
+        }
+    }
+    return $null
+}
+
 
 # --- Main Logic ---
 try {
@@ -621,13 +648,11 @@ try {
 
     if ($runWip) {
         Write-Host "Bat dau doc va gui bao cao WIP..." -ForegroundColor Cyan
-        $WIP_EXCEL_PATH = "C:\Users\prod.public\Ortholite Vietnam\OVN Production - Documents\PRODUCTION\Nhân Lg\Schedule\Ovn Pro Schedule.xlsb"
-        if (Test-Path $WIP_EXCEL_PATH) {
-            $excelWIP = New-Object -ComObject Excel.Application
-            $excelWIP.Visible = $false
-            $excelWIP.DisplayAlerts = $false
+        $wipSched = Get-ScheduleWorkbook
+        if ($wipSched -and $wipSched.Workbook) {
+            $wbWIP = $wipSched.Workbook
+            $excelWIP = $wipSched.ExcelApp
             try {
-                $wbWIP = $excelWIP.Workbooks.Open($WIP_EXCEL_PATH, 0, $true)
                 $shWIP = $null
                 try { $shWIP = $wbWIP.Sheets.Item("Record Wip (Old)") } catch {}
                 if (-not $shWIP) {
@@ -713,10 +738,19 @@ try {
                     }
                 }
 
-                $wbWIP.Close($false)
-                $excelWIP.Quit()
-                [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelWIP) | Out-Null
-                $excelWIP = $null
+                # TUYET DOI KHONG DONG FILE NEU DANG MO TREO
+                if (-not $wipSched.IsRunningInstance) {
+                    try { $wbWIP.Close($false) } catch {}
+                    if ($excelWIP) {
+                        try { $excelWIP.Quit() } catch {}
+                        try { [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelWIP) | Out-Null } catch {}
+                        $excelWIP = $null
+                    }
+                    [System.GC]::Collect()
+                    [System.GC]::WaitForPendingFinalizers()
+                } else {
+                    Write-Host "File WIP dang mo treo: Giu nguyen nguyen ven, KHONG dong file, KHONG tac dong vao file!" -ForegroundColor Green
+                }
                 
                 $lamination = $wipValues[0] + $wipValues[1]
                 $prefitting = $wipValues[2]
@@ -810,7 +844,10 @@ try {
                 
             } catch {
                 Write-Host "Loi khi tao bao cao WIP: $_" -ForegroundColor Red
-                if ($excelWIP) { try { $excelWIP.Quit(); [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelWIP) | Out-Null } catch {} }
+                if ($wipSched -and (-not $wipSched.IsRunningInstance) -and $excelWIP) {
+                    try { $excelWIP.Quit(); [System.Runtime.Interopservices.Marshal]::ReleaseComObject($excelWIP) | Out-Null } catch {}
+                    [System.GC]::Collect()
+                }
             }
         }
     }
