@@ -1,7 +1,7 @@
 import JSZip from "jszip";
-import { MQAA_RE_AUDIT_TEMPLATE_BASE64 } from "../data/mqaaReAuditTemplateBase64";
-import { MQAA_RE_AUDIT_SECTIONS, MQAA_RE_AUDIT_CRITERIA } from "../data/mqaaReAuditCriteria";
-import { saveExcelJS } from "../lib/fileExport";
+import { MQAA_RE_AUDIT_TEMPLATE_BASE64 } from "../data/mqaaReAuditTemplateBase64.js";
+import { MQAA_RE_AUDIT_SECTIONS, MQAA_RE_AUDIT_CRITERIA } from "../data/mqaaReAuditCriteria.js";
+import { saveExcelJS } from "../lib/fileExport.js";
 
 function escapeXml(unsafe) {
     if (unsafe === null || unsafe === undefined) return "";
