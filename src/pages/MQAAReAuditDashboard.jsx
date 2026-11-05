@@ -7,13 +7,83 @@ import { exportReAuditExcel } from "../utils/mqaaReAuditExcelExport";
 const DEFAULT_AUDITOR_NAME = "Ngô Thị Bích Ngọc";
 const AUDITOR_STORAGE_KEY = "mqaa_reassessment_auditor_name";
 
+// Helper to get week bounds (Monday to Sunday) for any date string YYYY-MM-DD
+function getWeekBounds(dateStr) {
+    if (!dateStr) return { monday: "", sunday: "", mondayDate: new Date(), sundayDate: new Date() };
+    const [y, m, d] = dateStr.split("-").map(Number);
+    const date = new Date(y, m - 1, d);
+    const day = date.getDay(); // 0 is Sun, 1 is Mon...
+    const diffToMon = (day === 0 ? -6 : 1) - day;
+
+    const monday = new Date(y, m - 1, d + diffToMon);
+    const sunday = new Date(y, m - 1, d + diffToMon + 6);
+
+    const toStr = (dt) => {
+        const yr = dt.getFullYear();
+        const mo = String(dt.getMonth() + 1).padStart(2, "0");
+        const da = String(dt.getDate()).padStart(2, "0");
+        return `${yr}-${mo}-${da}`;
+    };
+
+    return {
+        monday: toStr(monday),
+        sunday: toStr(sunday),
+        mondayDate: monday,
+        sundayDate: sunday,
+    };
+}
+
+// Check if two dates are in the same ISO week
+function areInSameWeek(dateStrA, dateStrB) {
+    if (!dateStrA || !dateStrB) return false;
+    const boundsA = getWeekBounds(dateStrA);
+    return dateStrB >= boundsA.monday && dateStrB <= boundsA.sunday;
+}
+
+// Get Monday & Sunday of immediately previous week
+function getPreviousWeekBounds(dateStr) {
+    const bounds = getWeekBounds(dateStr);
+    const mon = new Date(bounds.mondayDate);
+    mon.setDate(mon.getDate() - 7);
+    const sun = new Date(bounds.sundayDate);
+    sun.setDate(sun.getDate() - 7);
+
+    const toStr = (dt) => {
+        const yr = dt.getFullYear();
+        const mo = String(dt.getMonth() + 1).padStart(2, "0");
+        const da = String(dt.getDate()).padStart(2, "0");
+        return `${yr}-${mo}-${da}`;
+    };
+
+    return {
+        monday: toStr(mon),
+        sunday: toStr(sun),
+    };
+}
+
 // Helper to get ISO week number
-function getWeekNumber(d) {
-    const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+function getWeekNumber(dateInput) {
+    let date;
+    if (typeof dateInput === "string") {
+        const [y, m, d] = dateInput.split("-").map(Number);
+        date = new Date(Date.UTC(y, m - 1, d));
+    } else {
+        date = new Date(Date.UTC(dateInput.getFullYear(), dateInput.getMonth(), dateInput.getDate()));
+    }
     date.setUTCDate(date.getUTCDate() + 4 - (date.getUTCDay() || 7));
     const yearStart = new Date(Date.UTC(date.getUTCFullYear(), 0, 1));
     const weekNo = Math.ceil(((date - yearStart) / 86400000 + 1) / 7);
     return { year: date.getUTCFullYear(), week: weekNo };
+}
+
+// Helper to format YYYY-MM-DD to DD/MM/YYYY
+function formatDateVN(dateStr) {
+    if (!dateStr) return "";
+    const parts = dateStr.split("-");
+    if (parts.length === 3) {
+        return `${parts[2]}/${parts[1]}/${parts[0]}`;
+    }
+    return dateStr;
 }
 
 // Suggest rating based on compliance ratio
@@ -36,6 +106,7 @@ export default function MQAAReAuditDashboard() {
     const [availableDates, setAvailableDates] = useState([]);
     const [selectedPresentDates, setSelectedPresentDates] = useState([]);
     const [autoPreviousDates, setAutoPreviousDates] = useState([]);
+    const [weekError, setWeekError] = useState("");
 
     // Raw logs
     const [allLogs, setAllLogs] = useState([]);
@@ -73,13 +144,7 @@ export default function MQAAReAuditDashboard() {
                 // Default: Pick the latest date's week as current week
                 if (distinctDates.length > 0) {
                     const latestDate = distinctDates[0];
-                    const latestDateObj = new Date(latestDate);
-                    const { year, week } = getWeekNumber(latestDateObj);
-
-                    const presDates = distinctDates.filter((d) => {
-                        const w = getWeekNumber(new Date(d));
-                        return w.year === year && w.week === week;
-                    });
+                    const presDates = distinctDates.filter((d) => areInSameWeek(latestDate, d));
                     setSelectedPresentDates(presDates);
                 }
             } else {
@@ -96,57 +161,64 @@ export default function MQAAReAuditDashboard() {
         }
     };
 
-    // Auto-detect previous week with data whenever selectedPresentDates changes
+    // Auto-detect previous week data based on selectedPresentDates
     useEffect(() => {
-        if (selectedPresentDates.length === 0 || allLogs.length === 0) {
+        if (selectedPresentDates.length === 0) {
             setAutoPreviousDates([]);
             return;
         }
 
-        const sortedPres = [...selectedPresentDates].sort();
-        const earliestPresDate = sortedPres[0];
+        const firstDate = selectedPresentDates[0];
+        const currentWeekInfo = getWeekNumber(firstDate);
+        const prevBounds = getPreviousWeekBounds(firstDate);
+        const prevWeekInfo = getWeekNumber(prevBounds.monday);
 
-        // Find all logs with dates strictly before earliestPresDate
-        const olderLogs = allLogs.filter((l) => l.date < earliestPresDate);
-        if (olderLogs.length === 0) {
-            setAutoPreviousDates([]);
-            return;
-        }
+        setPresWeekLabel(`Phase#2: Week ${currentWeekInfo.week}`);
+        setPrevWeekLabel(`Phase#2: Week ${prevWeekInfo.week}`);
 
-        // Get the latest date among older logs
-        const prevLatestDate = olderLogs[0].date;
-        const prevLatestObj = new Date(prevLatestDate);
-        const { year: prevYear, week: prevWeek } = getWeekNumber(prevLatestObj);
-
-        // Group all dates in that previous week
-        const distinctPrevDates = [
-            ...new Set(
-                olderLogs
-                    .filter((l) => {
-                        const w = getWeekNumber(new Date(l.date));
-                        return w.year === prevYear && w.week === prevWeek;
-                    })
-                    .map((l) => l.date)
-            ),
-        ].sort();
-
+        // Find all logs in allLogs that fall within the previous week bounds
+        const prevLogs = allLogs.filter(
+            (l) => l.date >= prevBounds.monday && l.date <= prevBounds.sunday
+        );
+        const distinctPrevDates = [...new Set(prevLogs.map((l) => l.date))].sort();
         setAutoPreviousDates(distinctPrevDates);
-
-        // Update suggested week labels
-        const presWeekInfo = getWeekNumber(new Date(earliestPresDate));
-        setPresWeekLabel(`Phase#2: Week ${presWeekInfo.week}`);
-        setPrevWeekLabel(`Phase#2: Week ${prevWeek}`);
     }, [selectedPresentDates, allLogs]);
 
-    // Handle toggling present date checkbox
-    const handleToggleDate = (d) => {
-        setSelectedPresentDates((prev) => {
-            if (prev.includes(d)) {
-                return prev.filter((x) => x !== d);
-            } else {
-                return [...prev, d].sort();
+    // Handle adding a date with same-week validation
+    const handleAddDate = (newDate) => {
+        if (!newDate) return;
+        setWeekError("");
+
+        if (selectedPresentDates.includes(newDate)) {
+            return;
+        }
+
+        if (selectedPresentDates.length > 0) {
+            const firstDate = selectedPresentDates[0];
+            if (!areInSameWeek(firstDate, newDate)) {
+                const wFirst = getWeekNumber(firstDate);
+                const wNew = getWeekNumber(newDate);
+                const bounds = getWeekBounds(firstDate);
+                setWeekError(
+                    `⚠️ Cảnh báo chọn ngày: Ngày ${newDate} (Tuần ${wNew.week}) không cùng tuần với các ngày đã chọn (${selectedPresentDates.join(", ")} - Tuần ${wFirst.week}, từ Thứ 2 ${bounds.monday} đến CN ${bounds.sunday}). Vui lòng chỉ chọn các ngày trong cùng một tuần để trung bình số liệu!`
+                );
+                return;
             }
-        });
+        }
+
+        setSelectedPresentDates((prev) => [...prev, newDate].sort());
+    };
+
+    // Handle removing a date
+    const handleRemoveDate = (d) => {
+        setWeekError("");
+        setSelectedPresentDates((prev) => prev.filter((x) => x !== d));
+    };
+
+    // Handle clear all selected dates
+    const handleClearAllDates = () => {
+        setWeekError("");
+        setSelectedPresentDates([]);
     };
 
     // Aggregate summary for a set of dates
@@ -159,19 +231,15 @@ export default function MQAAReAuditDashboard() {
         MQAA_RE_AUDIT_SECTIONS.forEach((sec) => {
             const secLogs = matchedLogs.filter((l) => l.section === sec.id);
             if (secLogs.length > 0) {
-                // Sum actual and max across matching logs
-                let totalActual = 0;
-                let totalMax = 0;
-                secLogs.forEach((l) => {
-                    totalActual += Number(l.total_level) || 0;
-                    totalMax += Number(l.total_score) || 0;
-                });
-                const ratio = totalMax > 0 ? totalActual / totalMax : 0;
+                // Calculate average actual score and max score across matching logs
+                const avgActual = secLogs.reduce((sum, l) => sum + (Number(l.total_level) || 0), 0) / secLogs.length;
+                const avgMax = secLogs.reduce((sum, l) => sum + (Number(l.total_score) || 0), 0) / secLogs.length;
+                const ratio = avgMax > 0 ? avgActual / avgMax : 0;
                 bySection[sec.id] = {
                     ratio: ratio,
                     percent: Math.round(ratio * 100),
-                    totalActual,
-                    totalMax,
+                    totalActual: avgActual,
+                    totalMax: avgMax,
                     logs: secLogs,
                 };
             }
@@ -266,18 +334,58 @@ export default function MQAAReAuditDashboard() {
     const handleExportExcel = async () => {
         setExporting(true);
         try {
-            // Gather section items from present logs
+            // Gather section items from present logs (merging if multiple days in the week)
             const evaluationDataBySection = {};
             const presentLogs = allLogs.filter((l) => selectedPresentDates.includes(l.date));
 
             MQAA_RE_AUDIT_SECTIONS.forEach((sec) => {
                 const logsForSec = presentLogs.filter((l) => l.section === sec.id);
-                if (logsForSec.length > 0) {
-                    // Use latest log or merge
-                    const latest = logsForSec[0];
-                    evaluationDataBySection[sec.id] = Array.isArray(latest.evaluation_data)
-                        ? latest.evaluation_data
+                if (logsForSec.length === 1) {
+                    evaluationDataBySection[sec.id] = Array.isArray(logsForSec[0].evaluation_data)
+                        ? logsForSec[0].evaluation_data
                         : [];
+                } else if (logsForSec.length > 1) {
+                    const criteriaMap = {};
+                    logsForSec.forEach((l) => {
+                        const evList = Array.isArray(l.evaluation_data) ? l.evaluation_data : [];
+                        evList.forEach((it) => {
+                            const key = String(it.no || it.excelRow || it.index).replace(/\*/g, "").trim();
+                            if (!key) return;
+                            if (!criteriaMap[key]) {
+                                criteriaMap[key] = {
+                                    ...it,
+                                    scoreSum: 0,
+                                    scoreCount: 0,
+                                    descriptions: [],
+                                    allImages: [],
+                                };
+                            }
+                            const sVal = it.auditScore !== undefined ? it.auditScore : (it.score !== undefined ? it.score : it.audit_score);
+                            if (sVal !== undefined && sVal !== "" && sVal !== "N/A" && !isNaN(sVal)) {
+                                criteriaMap[key].scoreSum += Number(sVal);
+                                criteriaMap[key].scoreCount += 1;
+                            }
+                            const desc = it.notes || it.description || it.problemDescription || "";
+                            if (desc && !criteriaMap[key].descriptions.includes(desc)) {
+                                criteriaMap[key].descriptions.push(desc);
+                            }
+                            const imgs = it.images || it.image_urls || it.imageUrls || (it.image_url ? [it.image_url] : []);
+                            if (Array.isArray(imgs)) {
+                                criteriaMap[key].allImages.push(...imgs);
+                            }
+                        });
+                    });
+
+                    evaluationDataBySection[sec.id] = Object.values(criteriaMap).map((cm) => {
+                        const avgScore = cm.scoreCount > 0 ? Math.round(cm.scoreSum / cm.scoreCount) : cm.auditScore;
+                        return {
+                            ...cm,
+                            auditScore: avgScore,
+                            score: avgScore,
+                            notes: cm.descriptions.join("; "),
+                            images: cm.allImages,
+                        };
+                    });
                 }
             });
 
@@ -300,8 +408,8 @@ export default function MQAAReAuditDashboard() {
             presRatMap["OVERALL"] = overallComparison.presRating;
             trendMap["OVERALL"] = overallComparison.trend;
 
-            const dateStr = selectedPresentDates.sort().join(", ");
-            const prevDateStr = autoPreviousDates.sort().join(", ");
+            const dateStr = selectedPresentDates.sort().map(formatDateVN).join(", ");
+            const prevDateStr = autoPreviousDates.sort().map(formatDateVN).join(", ");
 
             await exportReAuditExcel({
                 auditorName: auditorName || DEFAULT_AUDITOR_NAME,
@@ -384,9 +492,9 @@ export default function MQAAReAuditDashboard() {
 
             {/* Date Selection Box */}
             <div className="bg-white rounded-3xl p-6 border border-slate-200/90 shadow-sm mb-6">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
                     {/* Left: Select Current Week Dates */}
-                    <div>
+                    <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">
                             <span className="w-6 h-6 rounded-lg bg-amber-500 text-white font-black text-xs flex items-center justify-center">
                                 1
@@ -396,38 +504,121 @@ export default function MQAAReAuditDashboard() {
                             </h2>
                         </div>
                         <p className="text-xs text-slate-500 mb-3">
-                            Tick chọn các ngày bạn muốn tổng hợp điểm tuần này. Hệ thống sẽ tự động tìm tuần có data trước đó để so sánh:
+                            Chọn trực tiếp các ngày từ lịch bên dưới (hỗ trợ chọn nhiều ngày trong tuần để tính điểm trung bình):
                         </p>
 
-                        <div className="flex flex-wrap items-center gap-2">
-                            {availableDates.length > 0 ? (
-                                availableDates.map((d) => {
-                                    const isSelected = selectedPresentDates.includes(d);
-                                    return (
+                        {/* Calendar Picker & Clear Action */}
+                        <div className="flex flex-wrap items-center gap-3 mb-3">
+                            <div className="flex items-center gap-2">
+                                <label className="text-xs font-black text-slate-700 whitespace-nowrap">
+                                    Thêm ngày từ lịch:
+                                </label>
+                                <input
+                                    type="date"
+                                    className="px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-bold text-slate-800 shadow-sm focus:ring-2 focus:ring-amber-500 focus:bg-white outline-none cursor-pointer"
+                                    onChange={(e) => {
+                                        if (e.target.value) {
+                                            handleAddDate(e.target.value);
+                                            e.target.value = "";
+                                        }
+                                    }}
+                                />
+                            </div>
+
+                            {selectedPresentDates.length > 0 && (
+                                <button
+                                    type="button"
+                                    onClick={handleClearAllDates}
+                                    className="px-3 py-2 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-xl border border-rose-200 transition"
+                                >
+                                    ✕ Xóa tất cả ngày đã chọn
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Selected Dates Display */}
+                        <div className="flex flex-wrap items-center gap-2 mb-3">
+                            <span className="text-xs font-bold text-slate-500 mr-1">
+                                Đã chọn ({selectedPresentDates.length} ngày):
+                            </span>
+                            {selectedPresentDates.length > 0 ? (
+                                selectedPresentDates.map((d) => (
+                                    <div
+                                        key={d}
+                                        className="flex items-center gap-1.5 bg-amber-500 text-white px-3 py-1.5 rounded-xl text-xs font-black shadow-sm"
+                                    >
+                                        <span>📅 {formatDateVN(d)}</span>
                                         <button
-                                            key={d}
                                             type="button"
-                                            onClick={() => handleToggleDate(d)}
-                                            className={`px-3.5 py-1.5 rounded-xl text-xs font-black border transition active:scale-95 ${
-                                                isSelected
-                                                    ? "bg-amber-500 text-white border-amber-500 shadow-sm"
-                                                    : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                                            }`}
+                                            onClick={() => handleRemoveDate(d)}
+                                            className="w-4 h-4 rounded-full bg-amber-600 hover:bg-rose-600 flex items-center justify-center text-[10px] font-black transition ml-1"
+                                            title="Bỏ chọn ngày này"
                                         >
-                                            {isSelected ? "✓ " : ""}{d}
+                                            ×
                                         </button>
-                                    );
-                                })
+                                    </div>
+                                ))
                             ) : (
-                                <span className="text-xs text-slate-400 italic">
-                                    Chưa có dữ liệu đánh giá nào trong hệ thống.
+                                <span className="text-xs font-bold text-amber-700 italic">
+                                    Chưa có ngày nào được chọn. Hãy chọn một ngày từ lịch trên!
                                 </span>
                             )}
+                        </div>
+
+                        {/* Error Warning if Picking from Different Week */}
+                        {weekError && (
+                            <div className="mb-3 p-3 bg-rose-50 border border-rose-300 text-rose-800 rounded-2xl text-xs font-bold flex items-start gap-2 shadow-sm">
+                                <span className="text-base leading-none">⚠️</span>
+                                <div className="flex-1">{weekError}</div>
+                                <button
+                                    type="button"
+                                    onClick={() => setWeekError("")}
+                                    className="text-rose-500 hover:text-rose-700 font-black text-sm leading-none"
+                                >
+                                    ×
+                                </button>
+                            </div>
+                        )}
+
+                        {/* Quick Suggestions from DB / Today */}
+                        <div className="pt-2 border-t border-slate-100">
+                            <div className="text-[11px] font-bold text-slate-400 mb-1.5">
+                                Gợi ý nhanh ngày có dữ liệu trong hệ thống (Click để chọn):
+                            </div>
+                            <div className="flex flex-wrap items-center gap-1.5">
+                                <button
+                                    type="button"
+                                    onClick={() => handleAddDate(new Date().toISOString().split("T")[0])}
+                                    className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-slate-100 hover:bg-amber-100 text-slate-700 hover:text-amber-900 border border-slate-200 transition"
+                                >
+                                    + Hôm nay ({new Date().toISOString().split("T")[0]})
+                                </button>
+                                {availableDates.map((d) => (
+                                    <button
+                                        key={d}
+                                        type="button"
+                                        onClick={() => {
+                                            if (selectedPresentDates.includes(d)) {
+                                                handleRemoveDate(d);
+                                            } else {
+                                                handleAddDate(d);
+                                            }
+                                        }}
+                                        className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition ${
+                                            selectedPresentDates.includes(d)
+                                                ? "bg-amber-100 text-amber-900 border-amber-300 font-black"
+                                                : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
+                                        }`}
+                                    >
+                                        {selectedPresentDates.includes(d) ? "✓ " : "+ "}{d}
+                                    </button>
+                                ))}
+                            </div>
                         </div>
                     </div>
 
                     {/* Right: Auto Detected Previous Week Info */}
-                    <div className="lg:border-l lg:border-slate-100 lg:pl-6 shrink-0">
+                    <div className="lg:border-l lg:border-slate-100 lg:pl-6 shrink-0 lg:w-80">
                         <div className="flex items-center gap-2 mb-2">
                             <span className="w-6 h-6 rounded-lg bg-indigo-600 text-white font-black text-xs flex items-center justify-center">
                                 2
@@ -436,17 +627,38 @@ export default function MQAAReAuditDashboard() {
                                 Tuần kế trước tự động so sánh
                             </h3>
                         </div>
-                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-3 text-xs">
-                            <div className="font-bold text-slate-600 flex items-center gap-2">
-                                <span>Tuần trước:</span>
-                                <span className="font-black text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
-                                    {autoPreviousDates.length > 0 ? autoPreviousDates.join(", ") : "Không có data trước"}
+                        <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 text-xs space-y-2">
+                            <div className="flex items-center justify-between gap-2">
+                                <span className="font-bold text-slate-500">Phạm vi tuần:</span>
+                                <span className="font-black text-indigo-700 bg-indigo-50 px-2.5 py-0.5 rounded-lg border border-indigo-100">
+                                    {prevWeekLabel}
                                 </span>
                             </div>
-                            <div className="mt-1 text-[11px] text-slate-400">
-                                {autoPreviousDates.length > 0
-                                    ? `Tìm thấy ${autoPreviousDates.length} ngày chấm ở tuần kế trước.`
-                                    : "Hệ thống sẽ lấy điểm hiện tại làm mốc ban đầu."}
+                            {selectedPresentDates.length > 0 && (
+                                <div className="text-[11px] text-slate-500">
+                                    Từ <strong>{getPreviousWeekBounds(selectedPresentDates[0]).monday}</strong> đến <strong>{getPreviousWeekBounds(selectedPresentDates[0]).sunday}</strong>
+                                </div>
+                            )}
+                            <div className="pt-2 border-t border-slate-200/60">
+                                <div className="font-bold text-slate-600 mb-1">Dữ liệu tuần trước:</div>
+                                {autoPreviousDates.length > 0 ? (
+                                    <div className="space-y-1">
+                                        <div className="flex flex-wrap gap-1">
+                                            {autoPreviousDates.map((d) => (
+                                                <span key={d} className="px-2 py-0.5 bg-indigo-100 text-indigo-800 rounded font-bold text-[11px]">
+                                                    {d}
+                                                </span>
+                                            ))}
+                                        </div>
+                                        <div className="text-[11px] text-slate-400">
+                                            Đã tự động lấy và tính trung bình {autoPreviousDates.length} ngày trên.
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <span className="inline-block px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg text-[11px] font-bold">
+                                        Không có data tuần trước (Lấy tuần hiện tại làm mốc ban đầu)
+                                    </span>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -471,8 +683,20 @@ export default function MQAAReAuditDashboard() {
                         </div>
                     </div>
 
-                    <div className="text-xs text-slate-300 font-bold bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700">
-                        Auditor: <strong className="text-amber-400">{auditorName}</strong>
+                    <div className="flex items-center gap-2 text-xs text-slate-300 font-bold bg-slate-800 px-3 py-1.5 rounded-xl border border-slate-700">
+                        <span>Auditor:</span>
+                        <input
+                            type="text"
+                            value={auditorName}
+                            onChange={(e) => {
+                                const val = e.target.value;
+                                setAuditorName(val);
+                                localStorage.setItem(AUDITOR_STORAGE_KEY, val);
+                            }}
+                            className="bg-slate-900 border border-slate-600 rounded px-2 py-0.5 text-amber-400 font-black text-xs outline-none focus:border-amber-400 min-w-[150px]"
+                            placeholder="Tên Auditor"
+                            title="Tên người tái đánh giá (tự động lưu)"
+                        />
                     </div>
                 </div>
 
@@ -487,13 +711,13 @@ export default function MQAAReAuditDashboard() {
                                 <th colSpan={2} className="p-2.5 text-center border-r border-slate-200 bg-indigo-50/70 text-indigo-950">
                                     <div className="text-xs font-black">{prevWeekLabel}</div>
                                     <div className="text-[11px] font-normal text-indigo-600">
-                                        Post Date: {autoPreviousDates.join(", ") || "N/A"}
+                                        Post Date: {autoPreviousDates.map(formatDateVN).join(", ") || "N/A"}
                                     </div>
                                 </th>
                                 <th colSpan={2} className="p-2.5 text-center border-r border-slate-200 bg-amber-50/70 text-amber-950">
                                     <div className="text-xs font-black">{presWeekLabel}</div>
                                     <div className="text-[11px] font-normal text-amber-700">
-                                        Post Date: {selectedPresentDates.join(", ") || "N/A"}
+                                        Post Date: {selectedPresentDates.map(formatDateVN).join(", ") || "N/A"}
                                     </div>
                                 </th>
                                 <th rowSpan={2} className="p-3.5 text-center border-r border-slate-200 w-24">
