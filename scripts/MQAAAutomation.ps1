@@ -4,7 +4,8 @@
 
 param(
     [switch]$ManualTrigger,
-    [string]$TargetReport = ""
+    [string]$TargetReport = "",
+    [string]$TargetDate = ""
 )
 
 # === Cấu hình (Người dùng thay đổi tại đây) ===
@@ -30,51 +31,266 @@ function Write-Log {
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-# === Win32 API: ShowWindow + SetForegroundWindow ===
+# === Win32 API: OpenDesktop + EnumWindows + SetForegroundWindow cho Zalo ===
 $win32Src = @"
 using System;
+using System.Text;
+using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
-public class WinHelper {
+using System.Threading;
+
+public class WinHelperMQAA {
+    [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr OpenWindowStation(string a, bool b, uint c);
+    [DllImport("user32.dll", SetLastError = true)] public static extern bool SetProcessWindowStation(IntPtr a);
+    [DllImport("user32.dll", SetLastError = true)] public static extern IntPtr OpenDesktop(string lpszDesktop, uint dwFlags, bool fInherit, uint dwDesiredAccess);
+    [DllImport("user32.dll", SetLastError = true)] public static extern bool SetThreadDesktop(IntPtr hDesktop);
+    [DllImport("user32.dll", SetLastError = true)] public static extern bool CloseDesktop(IntPtr hDesktop);
     [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
     [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int nCmd);
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
     [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
     [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
-    // nCmd: 6 = SW_MINIMIZE, 9 = SW_RESTORE
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)] public static extern int GetWindowText(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)] public static extern int GetClassName(IntPtr hWnd, StringBuilder lpString, int nMaxCount);
+    [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
+
+    public delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern bool EnumDesktopWindows(IntPtr hDesktop, EnumWindowsProc enumProc, IntPtr lParam);
+    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumWindowsProc enumProc, IntPtr lParam);
+
+    public static IntPtr FindVisibleZalo(out uint zaloPid) {
+        uint targetPid = 0;
+        IntPtr targetHwnd = IntPtr.Zero;
+
+        Process[] procs = Process.GetProcessesByName("Zalo");
+        HashSet<uint> pids = new HashSet<uint>();
+        foreach (Process p in procs) { pids.Add((uint)p.Id); }
+
+        IntPtr hWinsta = OpenWindowStation("winsta0", false, 0x037F);
+        if (hWinsta != IntPtr.Zero) SetProcessWindowStation(hWinsta);
+        IntPtr hDesk = OpenDesktop("default", 0, false, 0x01FF);
+        if (hDesk != IntPtr.Zero) {
+            SetThreadDesktop(hDesk);
+            EnumDesktopWindows(hDesk, (hWnd, lParam) => {
+                if (IsWindowVisible(hWnd)) {
+                    uint pid;
+                    GetWindowThreadProcessId(hWnd, out pid);
+                    if (pids.Contains(pid)) {
+                        StringBuilder sbTitle = new StringBuilder(512);
+                        GetWindowText(hWnd, sbTitle, 512);
+                        StringBuilder sbClass = new StringBuilder(512);
+                        GetClassName(hWnd, sbClass, 512);
+                        string title = sbTitle.ToString();
+                        string cls = sbClass.ToString();
+
+                        if (cls == "Chrome_WidgetWin_1" && title == "Zalo") {
+                            targetHwnd = hWnd;
+                            targetPid = pid;
+                            return false;
+                        }
+                        if (targetHwnd == IntPtr.Zero && cls == "Chrome_WidgetWin_1") {
+                            targetHwnd = hWnd;
+                            targetPid = pid;
+                        }
+                    }
+                }
+                return true;
+            }, IntPtr.Zero);
+            CloseDesktop(hDesk);
+        }
+
+        if (targetHwnd == IntPtr.Zero) {
+            EnumWindows((hWnd, lParam) => {
+                if (IsWindowVisible(hWnd)) {
+                    uint pid;
+                    GetWindowThreadProcessId(hWnd, out pid);
+                    if (pids.Contains(pid)) {
+                        StringBuilder sbTitle = new StringBuilder(512);
+                        GetWindowText(hWnd, sbTitle, 512);
+                        StringBuilder sbClass = new StringBuilder(512);
+                        GetClassName(hWnd, sbClass, 512);
+                        string title = sbTitle.ToString();
+                        string cls = sbClass.ToString();
+
+                        if (cls == "Chrome_WidgetWin_1" && title == "Zalo") {
+                            targetHwnd = hWnd;
+                            targetPid = pid;
+                            return false;
+                        }
+                        if (targetHwnd == IntPtr.Zero && cls == "Chrome_WidgetWin_1") {
+                            targetHwnd = hWnd;
+                            targetPid = pid;
+                        }
+                    }
+                }
+                return true;
+            }, IntPtr.Zero);
+        }
+
+        zaloPid = targetPid;
+        return targetHwnd;
+    }
+
+    public static bool FocusZalo(out uint activePid) {
+        bool success = false;
+        uint outPid = 0;
+        Thread t = new Thread(() => {
+            IntPtr hWinsta = OpenWindowStation("winsta0", false, 0x037F);
+            if (hWinsta != IntPtr.Zero) SetProcessWindowStation(hWinsta);
+            IntPtr hDesk = OpenDesktop("default", 0, false, 0x01FF);
+            if (hDesk != IntPtr.Zero) {
+                SetThreadDesktop(hDesk);
+            }
+
+            uint targetPid;
+            IntPtr hWnd = FindVisibleZalo(out targetPid);
+            if (hWnd == IntPtr.Zero) {
+                if (hDesk != IntPtr.Zero) CloseDesktop(hDesk);
+                return;
+            }
+
+            uint zaloThread = GetWindowThreadProcessId(hWnd, out targetPid);
+            uint currentThread = GetCurrentThreadId();
+            IntPtr fgHwnd = GetForegroundWindow();
+            uint dummy;
+            uint fgThread = GetWindowThreadProcessId(fgHwnd, out dummy);
+
+            if (fgThread != zaloThread) {
+                AttachThreadInput(currentThread, zaloThread, true);
+                AttachThreadInput(fgThread, zaloThread, true);
+            }
+
+            ShowWindow(hWnd, 9); // SW_RESTORE
+            ShowWindow(hWnd, 5); // SW_SHOW
+            SetForegroundWindow(hWnd);
+
+            if (fgThread != zaloThread) {
+                AttachThreadInput(currentThread, zaloThread, false);
+                AttachThreadInput(fgThread, zaloThread, false);
+            }
+
+            Thread.Sleep(600);
+
+            IntPtr newFg = GetForegroundWindow();
+            uint newFgPid;
+            GetWindowThreadProcessId(newFg, out newFgPid);
+            outPid = newFgPid;
+
+            success = (newFgPid == targetPid);
+
+            if (hDesk != IntPtr.Zero) CloseDesktop(hDesk);
+        });
+        t.Start();
+        t.Join();
+        activePid = outPid;
+        return success;
+    }
 }
 "@
 Add-Type -TypeDefinition $win32Src -Language CSharp -ErrorAction SilentlyContinue
 
-# Handle của Zalo và cửa sổ terminal hiện tại (set trong main)
-$script:zaloHandle   = [IntPtr]::Zero
-$script:myHandle     = [IntPtr]::Zero
+# === Cơ chế Khóa Độc Quyền (Mutex/Lock) tránh xung đột giữa các báo cáo Zalo ===
+$global:zaloLockFile = Join-Path $env:TEMP "zalo_automation_active.lock"
+$global:zaloLockStream = $null
 
-# Hàm focus Zalo trước khi gửi phím
+function Acquire-ZaloLock {
+    param([int]$timeoutSeconds = 180)
+    Write-Log "Dang cho khoa Zalo Lock doc quyen (tranh dung do voi cac bao cao khac)..."
+    $startTime = Get-Date
+    while ((Get-Date) - $startTime -lt [TimeSpan]::FromSeconds($timeoutSeconds)) {
+        try {
+            $stream = [System.IO.File]::Open($global:zaloLockFile, [System.IO.FileMode]::CreateNew, [System.IO.FileAccess]::ReadWrite, [System.IO.FileShare]::None)
+            $global:zaloLockStream = $stream
+            Write-Log "Da lay duoc khoa Zalo Lock doc quyen."
+            return $true
+        } catch {
+            try {
+                if (Test-Path $global:zaloLockFile) {
+                    $fi = Get-Item $global:zaloLockFile
+                    if ((Get-Date) - $fi.LastWriteTime -gt [TimeSpan]::FromMinutes(10)) {
+                        Remove-Item $global:zaloLockFile -Force -ErrorAction SilentlyContinue
+                    }
+                }
+            } catch {}
+            Start-Sleep -Seconds 2
+        }
+    }
+    Write-Log "Qua thoi gian cho Zalo Lock ($timeoutSeconds s)!" "WARN"
+    return $false
+}
+
+function Release-ZaloLock {
+    try {
+        if ($global:zaloLockStream) {
+            $global:zaloLockStream.Close()
+            $global:zaloLockStream.Dispose()
+            $global:zaloLockStream = $null
+        }
+        if (Test-Path $global:zaloLockFile) {
+            Remove-Item $global:zaloLockFile -Force -ErrorAction SilentlyContinue
+        }
+        Write-Log "Da giai phong khoa Zalo Lock."
+    } catch {}
+}
+
 function Focus-Zalo {
-    if ($script:myHandle -ne [IntPtr]::Zero) {
-        [WinHelper]::ShowWindow($script:myHandle, 6) | Out-Null   # Minimize terminal
+    $activePid = 0
+    $focusOk = [WinHelperMQAA]::FocusZalo([ref]$activePid)
+    if (-not $focusOk) {
+        $wshell = New-Object -ComObject WScript.Shell
+        $wshell.AppActivate("Zalo") | Out-Null
+        Start-Sleep -Milliseconds 800
+        $focusOk = [WinHelperMQAA]::FocusZalo([ref]$activePid)
     }
-    
-    $zaloThread = [WinHelper]::GetWindowThreadProcessId($script:zaloHandle, [ref]0)
-    $myThread = [WinHelper]::GetCurrentThreadId()
-    $fgWindow = [WinHelper]::GetForegroundWindow()
-    $fgThread = [WinHelper]::GetWindowThreadProcessId($fgWindow, [ref]0)
-    
-    if ($fgThread -ne $zaloThread) {
-        [WinHelper]::AttachThreadInput($myThread, $zaloThread, $true) | Out-Null
-        [WinHelper]::AttachThreadInput($fgThread, $zaloThread, $true) | Out-Null
+
+    $allZaloPids = @((Get-Process -Name Zalo -ErrorAction SilentlyContinue).Id)
+    if ($allZaloPids.Count -eq 0) {
+        Write-Log "Khong tim thay ung dung Zalo dang chay tren may!" "ERROR"
+        return $false
     }
-    
-    [WinHelper]::ShowWindow($script:zaloHandle, 9) | Out-Null   # Restore
-    Start-Sleep -Milliseconds 300
-    [WinHelper]::SetForegroundWindow($script:zaloHandle) | Out-Null
-    
-    if ($fgThread -ne $zaloThread) {
-        [WinHelper]::AttachThreadInput($myThread, $zaloThread, $false) | Out-Null
-        [WinHelper]::AttachThreadInput($fgThread, $zaloThread, $false) | Out-Null
+    return $focusOk
+}
+
+# Hàm chuyển sang nhóm Zalo an toàn tuyệt đối
+function Switch-ZaloGroup {
+    param([string]$targetGroup)
+    Write-Log "Dang chuyen sang nhom Zalo: '$targetGroup'..."
+    $focusOk = Focus-Zalo
+    if (-not $focusOk) {
+        Write-Log "CANH BAO AN TOAN: Khong the focus cua so Zalo. Tu choi gui phim de tranh go nham!" "ERROR"
+        return $false
     }
-    Start-Sleep -Milliseconds 500
+
+    # Đóng mọi search popup dở
+    [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+    Start-Sleep -Milliseconds 400
+
+    # Mở ô tìm kiếm
+    [System.Windows.Forms.SendKeys]::SendWait("^f")
+    Start-Sleep -Milliseconds 800
+
+    # Copy và dán tên nhóm
+    for ($c = 0; $c -lt 5; $c++) {
+        try {
+            [System.Windows.Forms.Clipboard]::SetText($targetGroup, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+            break
+        } catch { Start-Sleep -Milliseconds 200 }
+    }
+    [System.Windows.Forms.SendKeys]::SendWait("^v")
+    Start-Sleep -Seconds 2
+
+    # Nhấn Enter để vào nhóm (Tuyệt đối không dùng DOWN)
+    [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+    Start-Sleep -Seconds 2
+
+    # Thoát thanh tìm kiếm để focus vào ô soạn thảo tin nhắn
+    [System.Windows.Forms.SendKeys]::SendWait("{ESC}")
+    Start-Sleep -Milliseconds 600
+
+    Write-Log "Da chuyen thanh cong vao nhom: '$targetGroup'"
+    return $true
 }
 
 # Các nhãn tiếng Việt
@@ -89,8 +305,15 @@ $starEmoji  = [char]0xD83D + [char]0xDCAF
 
 function Send-ZaloMessage {
     param([string]$text)
-    Focus-Zalo
-    [System.Windows.Forms.Clipboard]::SetText($text, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+    Focus-Zalo | Out-Null
+    for ($i = 0; $i -lt 5; $i++) {
+        try {
+            [System.Windows.Forms.Clipboard]::SetText($text, [System.Windows.Forms.TextDataFormat]::UnicodeText)
+            break
+        } catch {
+            Start-Sleep -Milliseconds 300
+        }
+    }
     Start-Sleep -Milliseconds 200
     [System.Windows.Forms.SendKeys]::SendWait("^v")
     Start-Sleep -Seconds 2
@@ -112,9 +335,22 @@ function Send-ZaloImageGroup {
             Invoke-WebRequest -Uri $url -OutFile $localPath -UserAgent "Mozilla/5.0"
             if (Test-Path $localPath) { [void]$filePaths.Add($localPath) }
         }
-        Focus-Zalo
-        [System.Windows.Forms.Clipboard]::SetFileDropList($filePaths)
-        Start-Sleep -Milliseconds 200
+        Focus-Zalo | Out-Null
+        $setOk = $false
+        for ($i = 0; $i -lt 5; $i++) {
+            try {
+                [System.Windows.Forms.Clipboard]::SetFileDropList($filePaths)
+                $setOk = $true
+                break
+            } catch {
+                Start-Sleep -Milliseconds 500
+            }
+        }
+        if (-not $setOk) {
+            Write-Log "Khong the copy hinh anh vao Clipboard de gui Zalo" "WARN"
+            return
+        }
+        Start-Sleep -Milliseconds 300
         [System.Windows.Forms.SendKeys]::SendWait("^v")
         Start-Sleep -Milliseconds 3000
         [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
@@ -130,6 +366,13 @@ try {
 
     Write-Log "=== BAT DAU CHAY MQAA Automation ==="
 
+    # Khoa Zalo Lock tranh xung dot voi cac bao cao khac
+    $lockAcquired = Acquire-ZaloLock -timeoutSeconds 180
+    if (-not $lockAcquired) {
+        Write-Log "Khong the lay Zalo Lock doc quyen sau 180s vi co tien trinh khac dang dung Zalo. Thoat de tranh xung dot." "ERROR"
+        exit 1
+    }
+
     # 1. Lấy cấu hình hệ thống
     $settingsUrl = "$SUPABASE_URL/rest/v1/mqaa_settings?id=eq.1"
     $settings    = Invoke-RestMethod -Uri $settingsUrl -Headers $headers -Method Get
@@ -143,20 +386,31 @@ try {
 
         # Kiểm tra Zalo đang mở
         Write-Log "Dang kiem tra Zalo PC..."
-        $zaloProcess = Get-Process -Name Zalo -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle } | Select-Object -First 1
-        if (-not $zaloProcess) {
+        $allZalo = Get-Process -Name Zalo -ErrorAction SilentlyContinue
+        if (-not $allZalo -or $allZalo.Count -eq 0) {
+            $zaloExe = "C:\Users\prod.public\AppData\Local\Programs\Zalo\Zalo.exe"
+            if (Test-Path $zaloExe) {
+                Write-Log "Zalo chua mo, dang tu dong khoi dong Zalo..."
+                Start-Process $zaloExe
+                Start-Sleep -Seconds 5
+                $allZalo = Get-Process -Name Zalo -ErrorAction SilentlyContinue
+            }
+        }
+        if (-not $allZalo -or $allZalo.Count -eq 0) {
             Write-Log "LOI: Zalo PC chua mo." "ERROR"
             throw "Hay mo Zalo PC truoc khi chay script!"
         }
-        Write-Log "Zalo dang mo: PID=$($zaloProcess.Id) | Title='$($zaloProcess.MainWindowTitle)'"
+        $zaloProcess = $allZalo | Where-Object { $_.MainWindowTitle } | Select-Object -First 1
+        if (-not $zaloProcess) { $zaloProcess = $allZalo[0] }
+        Write-Log "Zalo dang chay: $($allZalo.Count) processes | PID=$($zaloProcess.Id) | Title='$($zaloProcess.MainWindowTitle)'"
 
         # Lưu handle
         $script:zaloHandle = $zaloProcess.MainWindowHandle
         $script:myHandle   = (Get-Process -Id $PID).MainWindowHandle
 
-        # Minimize terminal + focus Zalo
-        Write-Log "Minimize terminal, focus Zalo..."
-        Focus-Zalo
+        # Focus Zalo
+        Write-Log "Focus Zalo..."
+        Focus-Zalo | Out-Null
         Start-Sleep -Seconds 2
 
         $sysSettings = $null
@@ -175,7 +429,7 @@ try {
         # PHẦN B: BÁO CÁO PATROL MQAA
         # ============================================
         if ($runPatrol) {
-            $yesterdayDate = (Get-Date).AddDays(-1).Date
+            $yesterdayDate = if ($TargetDate) { [DateTime]::ParseExact($TargetDate, "yyyy-MM-dd", $null) } else { (Get-Date).AddDays(-1).Date }
             $yesterdayStr  = $yesterdayDate.ToString("yyyy-MM-dd")
             $lastSentDate  = $settings[0].last_patrol_report_monday
             if ($ManualTrigger -or $lastSentDate -ne $yesterdayStr) {
@@ -190,18 +444,12 @@ try {
                 if ($patrolData -and $patrolData.Count -gt 0) {
                     $allSections = Invoke-RestMethod -Uri "$SUPABASE_URL/rest/v1/mqaa_patrol_sections?select=name&order=sort_order.asc" -Headers $headers -Method Get
 
-                    # Chuyển sang nhóm Zalo Patrol (Focus trước khi gửi phím)
-                    Focus-Zalo
-                    [System.Windows.Forms.SendKeys]::SendWait("^f")
-                    Start-Sleep -Milliseconds 800
-                    [System.Windows.Forms.Clipboard]::SetText($PATROL_ZALO_GROUP, [System.Windows.Forms.TextDataFormat]::UnicodeText)
-                    [System.Windows.Forms.SendKeys]::SendWait("^v")
-                    Start-Sleep -Seconds 2
-                    [System.Windows.Forms.SendKeys]::SendWait("{DOWN}")
-                    Start-Sleep -Milliseconds 500
-                    [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-    Start-Sleep -Seconds 3
-                    Write-Log "Da chuyen sang nhom Zalo: $PATROL_ZALO_GROUP"
+                    # Chuyển sang nhóm Zalo Patrol an toàn (Tự động hủy nếu không chuyển được để tránh gửi nhầm nhóm)
+                    $swOk = Switch-ZaloGroup -targetGroup $PATROL_ZALO_GROUP
+                    if (-not $swOk) {
+                        Write-Log "CANH BAO NGUY HIEM: Khong the chuyen sang nhom '$PATROL_ZALO_GROUP'. HUY BO GUI TIN DE TRANH GUI NHAM NHOM!" "ERROR"
+                        return
+                    }
 
                     $titlePatrol   = [char]0xD83D + [char]0xDCCB + " PHI" + [char]0x1EBE + "U T" + [char]0x1ED4 + "NG K" + [char]0x1EBE + "T MQAA"
                     $subTitleDaily = "(Ng" + [char]0x00E0 + "y: " + $yesterdayDate.ToString("dd/MM/yyyy") + ")"
@@ -476,24 +724,18 @@ try {
                 Write-Log "Da tao xong bao cao WIP & WIP NEW TARGET."
                 
                 $WIP_TARGET = "Daily Report"
-                # Chuyển Zalo Target
-                Focus-Zalo
-                [System.Windows.Forms.SendKeys]::SendWait("^f")
-                Start-Sleep -Milliseconds 800
-                [System.Windows.Forms.Clipboard]::SetText($WIP_TARGET, [System.Windows.Forms.TextDataFormat]::UnicodeText)
-                [System.Windows.Forms.SendKeys]::SendWait("^v")
-                Start-Sleep -Seconds 2
-                [System.Windows.Forms.SendKeys]::SendWait("{DOWN}")
-                Start-Sleep -Milliseconds 500
-                [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
-                Start-Sleep -Seconds 3
-                
-                Send-ZaloMessage -text $wipMsg
-                Write-Log "Da gui bao cao WIP vao $WIP_TARGET."
+                # Chuyển Zalo Target an toàn
+                $swWipOk = Switch-ZaloGroup -targetGroup $WIP_TARGET
+                if (-not $swWipOk) {
+                    Write-Log "CANH BAO: Khong the chuyen sang nhom '$WIP_TARGET'. Bo qua gui WIP!" "ERROR"
+                } else {
+                    Send-ZaloMessage -text $wipMsg
+                    Write-Log "Da gui bao cao WIP vao $WIP_TARGET."
 
-                Start-Sleep -Seconds 2
-                Send-ZaloMessage -text $wipNewMsg
-                Write-Log "Da gui bao cao WIP NEW TARGET vao $WIP_TARGET."
+                    Start-Sleep -Seconds 2
+                    Send-ZaloMessage -text $wipNewMsg
+                    Write-Log "Da gui bao cao WIP NEW TARGET vao $WIP_TARGET."
+                }
                 
             } catch {
                 Write-Log "Loi tao bao cao WIP: $_" "ERROR"
@@ -512,5 +754,6 @@ try {
 }
 
 finally {
+    Release-ZaloLock
     & (Join-Path $PSScriptRoot "Cleanup-Excel.ps1")
 }

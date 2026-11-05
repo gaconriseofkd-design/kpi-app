@@ -373,13 +373,23 @@ export default function MQAAPatrolSelection() {
                         </svg>
                     </button>
                     <div>
-                        <div className="flex items-center gap-2.5">
+                        <div className="flex items-center gap-2.5 flex-wrap">
                             <h1 className="text-2xl md:text-3xl font-black text-indigo-950 tracking-tight">
                                 MQAA PATROL
                             </h1>
                             <span className="bg-indigo-100 text-indigo-800 text-xs font-black px-2.5 py-0.5 rounded-full border border-indigo-200">
                                 Chuẩn Mới 2026
                             </span>
+                            <button
+                                onClick={() => navigate("/mqaa-patrol/re-audit")}
+                                className="inline-flex items-center gap-1.5 px-3 py-1 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white text-xs font-black rounded-full shadow-sm hover:shadow transition-all active:scale-95 cursor-pointer animate-pulse"
+                                title="Mở trang MQAA Tái đánh giá"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                                </svg>
+                                <span>Tái đánh giá</span>
+                            </button>
                         </div>
                         <p className="text-slate-400 text-xs md:text-sm font-bold uppercase tracking-widest mt-0.5">
                             Insole Production Quality Inspection

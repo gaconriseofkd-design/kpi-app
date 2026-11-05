@@ -122,6 +122,7 @@ function PatrolLogsTab({ navigate }) {
             let query = supabase
                 .from("mqaa_patrol_logs")
                 .select("*")
+                .neq("auditor_id", "RE_AUDIT")
                 .gte("date", filters.startDate)
                 .lte("date", filters.endDate)
                 .order("date", { ascending: false });
@@ -519,6 +520,7 @@ function PatrolSummaryTab() {
             const { data: logs, error } = await supabase
                 .from("mqaa_patrol_logs")
                 .select("section, overall_performance, date, evaluation_data")
+                .neq("auditor_id", "RE_AUDIT")
                 .gte("date", dateFrom)
                 .lte("date", dateTo);
 

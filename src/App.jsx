@@ -22,6 +22,9 @@ import MQAAPatrolEntry from "./pages/MQAAPatrolEntry";
 import MQAAPatrolReport from "./pages/MQAAPatrolReport";
 import MQAAPatrolDashboard from "./pages/MQAAPatrolDashboard";
 import MQAAPatrolGuide from "./pages/MQAAPatrolGuide";
+import MQAAReAuditSelection from "./pages/MQAAReAuditSelection";
+import MQAAReAuditEntry from "./pages/MQAAReAuditEntry";
+import MQAAReAuditDashboard from "./pages/MQAAReAuditDashboard";
 
 function MQAAPatrolRoutes() {
   return (
@@ -31,6 +34,11 @@ function MQAAPatrolRoutes() {
       <Route path="/report" element={<MQAAPatrolReport />} />
       <Route path="/dashboard" element={<MQAAPatrolDashboard />} />
       <Route path="/guide" element={<MQAAPatrolGuide />} />
+
+      {/* MQAA Tái đánh giá (Re-assessment) */}
+      <Route path="/re-audit" element={<MQAAReAuditSelection />} />
+      <Route path="/re-audit/entry/:section/:id?" element={<MQAAReAuditEntry />} />
+      <Route path="/re-audit/dashboard" element={<MQAAReAuditDashboard />} />
     </Routes>
   );
 }

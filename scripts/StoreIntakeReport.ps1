@@ -24,7 +24,8 @@ $runDaily = ($TargetReport -eq "daily_report") -or (-not $ManualTrigger -and $se
 $runHangBu = ($TargetReport -eq "hang_bu") -or (-not $ManualTrigger -and $settings -and $settings.is_hang_bu_enabled -eq $true -and (Get-Date).Hour -eq 16)
 $runDelay = ($TargetReport -eq "delay_xuat_gap") -or (-not $ManualTrigger -and $settings -and $settings.is_delay_enabled -eq $true -and ((Get-Date).Hour -eq 10 -or (Get-Date).Hour -eq 16))
 $runWip = ($TargetReport -eq "wip_report") -or (-not $ManualTrigger -and $settings -and $settings.is_wip_enabled -eq $true -and ((Get-Date).Hour -eq 8 -or (Get-Date).Hour -eq 16))
-$runEmployeesVoice = ($TargetReport -eq "employees_voice") -or (-not $ManualTrigger -and (Get-Date).Hour -eq 8)
+# Employees Voice gio chay rieng luc 09:00 qua ReportWatcher de tranh gio cao diem 08:00
+$runEmployeesVoice = ($TargetReport -eq "employees_voice")
 
 if (-not $runDaily -and -not $runHangBu -and -not $runDelay -and -not $runWip -and -not $runEmployeesVoice) {
     Write-Host "Khong co bao cao nao duoc kich hoat. Thoat." -ForegroundColor Yellow

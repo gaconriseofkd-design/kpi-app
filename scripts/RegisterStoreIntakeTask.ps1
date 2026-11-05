@@ -22,7 +22,7 @@ $settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoi
 $principal = New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive
 
 # Register Task
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger @($trigger810, $trigger10, $trigger14, $trigger16) -Settings $settings -Principal $principal -Description "Tu dong gui bao cao nhap kho & Employees Voice qua Zalo vao 8h10, 10h, 14h va 16h."
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger @($trigger810, $trigger10, $trigger14, $trigger16) -Settings $settings -Principal $principal -Description "Tu dong gui bao cao nhap kho qua Zalo vao 8h10, 10h, 14h va 16h."
 
 Write-Host "Da dang ky Task Scheduler thanh cong: $taskName" -ForegroundColor Green
 Write-Host "Thoi gian chay: 10:00, 14:00, va 16:00 moi ngay." -ForegroundColor Cyan

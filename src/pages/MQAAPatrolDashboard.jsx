@@ -87,6 +87,7 @@ export default function MQAAPatrolDashboard() {
             let query = supabase
                 .from("mqaa_patrol_logs")
                 .select("section, overall_performance, total_score, total_level, auditor_name, auditor_id, id, evaluation_data, date")
+                .neq("auditor_id", "RE_AUDIT")
                 .in("date", selectedDates);
 
             if (selectedAuditorId) {
@@ -135,6 +136,7 @@ export default function MQAAPatrolDashboard() {
             let histQuery = supabase
                 .from("mqaa_patrol_logs")
                 .select("date, section, overall_performance, evaluation_data")
+                .neq("auditor_id", "RE_AUDIT")
                 .order("date", { ascending: true });
             
             if (selectedAuditorId) {
