@@ -164,13 +164,23 @@ export default function MQAAReAuditSelection() {
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                         </svg>
-                        Dashboard & Xuất Excel
+                        Dashboard
+                    </button>
+
+                    <button
+                        onClick={() => navigate("/mqaa-patrol/report")}
+                        className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl font-bold shadow-md active:scale-95 transition text-xs md:text-sm"
+                    >
+                        Report
                     </button>
 
                     <button
                         onClick={() => navigate("/mqaa-patrol/guide")}
-                        className="bg-slate-600 hover:bg-slate-700 text-white px-3.5 py-2 rounded-xl font-bold shadow-sm active:scale-95 transition text-xs md:text-sm flex items-center gap-1"
+                        className="bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-2 rounded-xl font-bold shadow-md active:scale-95 transition text-xs md:text-sm flex items-center gap-1"
                     >
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                        </svg>
                         Guide
                     </button>
                 </div>

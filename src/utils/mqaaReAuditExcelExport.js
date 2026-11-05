@@ -1,12 +1,70 @@
-import ExcelJS from "exceljs";
+import JSZip from "jszip";
 import { MQAA_RE_AUDIT_TEMPLATE_BASE64 } from "../data/mqaaReAuditTemplateBase64";
 import { MQAA_RE_AUDIT_SECTIONS, MQAA_RE_AUDIT_CRITERIA } from "../data/mqaaReAuditCriteria";
 import { saveExcelJS } from "../lib/fileExport";
 
-/**
- * Fetch image as base64 string for Excel embedding
- */
-async function fetchImageBase64(url) {
+function escapeXml(unsafe) {
+    if (unsafe === null || unsafe === undefined) return "";
+    return String(unsafe)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&apos;");
+}
+
+function setCell(xml, cellRef, value, type = "num", style = null) {
+    // Matches either <c r="A1" ... /> OR <c r="A1" ...>...</c>
+    const cellRegex = new RegExp(`<c r="${cellRef}"(?:\\s+[^>]*?\\/>|\\s+[^>]*?>[\\s\\S]*?<\\/c>|>([\\s\\S]*?)<\\/c>|\\/>)`);
+    const match = xml.match(cellRegex);
+
+    let newCell;
+    let sAttr = style ? ` s="${style}"` : "";
+
+    if (match) {
+        // Extract existing s="..." if any
+        const sMatch = match[0].match(/\ss="(\d+)"/);
+        if (sMatch && !style) {
+            sAttr = ` s="${sMatch[1]}"`;
+        }
+    }
+
+    if (type === "str" || type === "inlineStr") {
+        const escaped = escapeXml(value);
+        newCell = `<c r="${cellRef}"${sAttr} t="inlineStr"><is><t>${escaped}</t></is></c>`;
+    } else if (type === "formula") {
+        const fEscaped = escapeXml(value.formula || value);
+        const vVal = value.value !== undefined ? `<v>${value.value}</v>` : "";
+        newCell = `<c r="${cellRef}"${sAttr}><f>${fEscaped}</f>${vVal}</c>`;
+    } else {
+        if (value === "N/A" || value === "" || value === null || value === undefined || isNaN(value)) {
+            if (value === "N/A") {
+                newCell = `<c r="${cellRef}"${sAttr} t="inlineStr"><is><t>N/A</t></is></c>`;
+            } else {
+                return xml;
+            }
+        } else {
+            const numVal = Number(value);
+            newCell = `<c r="${cellRef}"${sAttr}><v>${numVal}</v></c>`;
+        }
+    }
+
+    if (match) {
+        return xml.replace(match[0], newCell);
+    } else {
+        const rowMatch = cellRef.match(/\d+/);
+        if (!rowMatch) return xml;
+        const rowNum = rowMatch[0];
+        const rowRegex = new RegExp(`(<row r="${rowNum}"[^>]*>)([\\s\\S]*?)(<\\/row>)`);
+        const rMatch = xml.match(rowRegex);
+        if (rMatch) {
+            return xml.replace(rMatch[0], `${rMatch[1]}${rMatch[2]}${newCell}</row>`);
+        }
+    }
+    return xml;
+}
+
+async function fetchImageBuffer(url) {
     if (!url) return null;
     try {
         const controller = new AbortController();
@@ -14,30 +72,13 @@ async function fetchImageBase64(url) {
         const res = await fetch(url, { signal: controller.signal });
         clearTimeout(timeoutId);
         if (!res.ok) return null;
-        const blob = await res.blob();
-        return new Promise((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                const res = reader.result;
-                if (typeof res === "string") {
-                    const commaIdx = res.indexOf(",");
-                    resolve(commaIdx >= 0 ? res.substring(commaIdx + 1) : res);
-                } else {
-                    resolve(null);
-                }
-            };
-            reader.onerror = () => resolve(null);
-            reader.readAsDataURL(blob);
-        });
-    } catch (err) {
-        console.warn("Could not fetch image for Excel export:", url, err);
+        return await res.arrayBuffer();
+    } catch (e) {
+        console.warn("Could not fetch image for Excel:", url, e);
         return null;
     }
 }
 
-/**
- * Export consolidated Re-assessment report matching MQAA TÁI ĐÁNH GIÁ.xlsx
- */
 export async function exportReAuditExcel({
     auditorName = "Ngô Thị Bích Ngọc",
     auditDate = "",
@@ -45,95 +86,75 @@ export async function exportReAuditExcel({
     prevPostDate = "",
     presWeekLabel = "Phase#2: Week 9",
     presPostDate = "",
-    previousSummary = {}, // { [secId]: number (0.0 to 1.0) }
-    presentSummary = {},  // { [secId]: number (0.0 to 1.0) }
-    previousRatings = {}, // { [secId]: 'Acceptable'|'NI'|'Excellent' }
-    presentRatings = {},  // { [secId]: 'Acceptable'|'NI'|'Excellent' }
-    trends = {},          // { [secId]: 'Better'|'Sustain'|'Worse' }
-    evaluationDataBySection = {}, // { [secId]: Array of items with { excelRow, no, score, notes, problemDescription, imageUrls } }
+    previousSummary = {},
+    presentSummary = {},
+    previousRatings = {},
+    presentRatings = {},
+    trends = {},
+    evaluationDataBySection = {},
 }) {
-    // 1. Load clean template
-    const byteChars = atob(MQAA_RE_AUDIT_TEMPLATE_BASE64);
-    const byteNumbers = new Array(byteChars.length);
-    for (let i = 0; i < byteChars.length; i++) {
-        byteNumbers[i] = byteChars.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
+    const zip = await JSZip.loadAsync(MQAA_RE_AUDIT_TEMPLATE_BASE64, { base64: true });
+    let sheetXml = await zip.file("xl/worksheets/sheet1.xml").async("text");
 
-    const workbook = new ExcelJS.Workbook();
-    await workbook.xlsx.load(byteArray.buffer);
-    const worksheet = workbook.getWorksheet("QA.F-11 P-05") || workbook.worksheets[0];
+    // 1. Header Information
+    sheetXml = setCell(sheetXml, "C6", auditorName || "Ngô Thị Bích Ngọc", "inlineStr");
+    sheetXml = setCell(sheetXml, "K5", auditDate || new Date().toISOString().split("T")[0], "inlineStr");
 
-    // 2. Set Header Information
-    worksheet.getCell("C6").value = auditorName || "Ngô Thị Bích Ngọc";
-    worksheet.getCell("K5").value = auditDate || new Date().toISOString().split("T")[0];
-
-    // 3. Set Audit Summary Table (Rows 12 to 25)
-    if (prevWeekLabel) worksheet.getCell("D12").value = prevWeekLabel;
-    if (prevPostDate) worksheet.getCell("D13").value = `Post Date:  : ${prevPostDate}`;
-    if (presWeekLabel) worksheet.getCell("F12").value = presWeekLabel;
-    if (presPostDate) worksheet.getCell("F13").value = `Post Date:  : ${presPostDate}`;
+    // 2. Audit Summary Table
+    if (prevWeekLabel) sheetXml = setCell(sheetXml, "D12", prevWeekLabel, "inlineStr");
+    if (prevPostDate) sheetXml = setCell(sheetXml, "D13", `Post Date:  : ${prevPostDate}`, "inlineStr");
+    if (presWeekLabel) sheetXml = setCell(sheetXml, "F12", presWeekLabel, "inlineStr");
+    if (presPostDate) sheetXml = setCell(sheetXml, "F13", `Post Date:  : ${presPostDate}`, "inlineStr");
 
     let prevSum = 0;
     let prevCount = 0;
-    let presSum = 0;
-    let presCount = 0;
 
     MQAA_RE_AUDIT_SECTIONS.forEach((sec) => {
         const row = sec.excelSumRow;
         if (!row) return;
 
-        // Previous Week Compliance %
+        // Previous compliance %
         const pScore = previousSummary[sec.id];
-        if (pScore !== undefined && pScore !== null && pScore !== "") {
+        if (pScore !== undefined && pScore !== null && pScore !== "" && !isNaN(pScore)) {
             const pVal = Number(pScore);
-            worksheet.getCell(`D${row}`).value = pVal;
+            sheetXml = setCell(sheetXml, `D${row}`, pVal, "num");
             prevSum += pVal;
             prevCount++;
         }
 
-        // Previous Rating
+        // Ratings & Trend
         if (previousRatings[sec.id]) {
-            worksheet.getCell(`E${row}`).value = previousRatings[sec.id];
+            sheetXml = setCell(sheetXml, `E${row}`, previousRatings[sec.id], "inlineStr");
         }
-
-        // Present Rating
         if (presentRatings[sec.id]) {
-            worksheet.getCell(`G${row}`).value = presentRatings[sec.id];
+            sheetXml = setCell(sheetXml, `G${row}`, presentRatings[sec.id], "inlineStr");
         }
-
-        // Trend
         if (trends[sec.id]) {
-            worksheet.getCell(`H${row}`).value = trends[sec.id];
-        }
-
-        const presScore = presentSummary[sec.id];
-        if (presScore !== undefined && presScore !== null && presScore !== "") {
-            presSum += Number(presScore);
-            presCount++;
+            sheetXml = setCell(sheetXml, `H${row}`, trends[sec.id], "inlineStr");
         }
     });
 
-    // Overall row 25
+    // Overall Row 25
     if (prevCount > 0) {
-        worksheet.getCell("D25").value = prevSum / prevCount;
+        sheetXml = setCell(sheetXml, "D25", prevSum / prevCount, "num");
     }
     if (previousRatings["OVERALL"]) {
-        worksheet.getCell("E25").value = previousRatings["OVERALL"];
+        sheetXml = setCell(sheetXml, "E25", previousRatings["OVERALL"], "inlineStr");
     }
     if (presentRatings["OVERALL"]) {
-        worksheet.getCell("G25").value = presentRatings["OVERALL"];
+        sheetXml = setCell(sheetXml, "G25", presentRatings["OVERALL"], "inlineStr");
     }
     if (trends["OVERALL"]) {
-        worksheet.getCell("H25").value = trends["OVERALL"];
+        sheetXml = setCell(sheetXml, "H25", trends["OVERALL"], "inlineStr");
     }
 
-    // 4. Fill Detail Evaluation for each Section
+    // 3. Detail rows for each Section
+    const imagesToEmbed = []; // { targetRow, buffer, ext }
+
     for (const sec of MQAA_RE_AUDIT_SECTIONS) {
         const secItems = evaluationDataBySection[sec.id] || [];
         const criteriaItems = MQAA_RE_AUDIT_CRITERIA[sec.id]?.items || [];
 
-        // Build a lookup map by item No or excelRow
         const scoredByRow = {};
         secItems.forEach((it) => {
             if (it.excelRow) scoredByRow[it.excelRow] = it;
@@ -147,50 +168,113 @@ export async function exportReAuditExcel({
             const scored = scoredByRow[targetRow] || scoredByRow[String(crit.no).replace(/\*/g, "").trim()];
             if (!scored) continue;
 
-            // Col H: Audit Score (Col 8)
-            const scoreVal = scored.score !== undefined ? scored.score : scored.audit_score;
+            // Col H: Audit Score
+            const scoreVal = scored.auditScore !== undefined ? scored.auditScore : (scored.score !== undefined ? scored.score : scored.audit_score);
             if (scoreVal !== undefined && scoreVal !== null && scoreVal !== "") {
                 if (scoreVal === "N/A" || crit.maxScore === "N/A") {
-                    worksheet.getCell(targetRow, 8).value = "N/A";
+                    sheetXml = setCell(sheetXml, `H${targetRow}`, "N/A", "inlineStr");
                 } else {
-                    worksheet.getCell(targetRow, 8).value = Number(scoreVal);
+                    sheetXml = setCell(sheetXml, `H${targetRow}`, Number(scoreVal), "num");
                 }
             }
 
-            // Col K: Problem description (Col 11)
-            const probDesc = scored.problemDescription || scored.problem_description || scored.notes || scored.note || "";
+            // Col K: Problem description
+            const probDesc = scored.notes || scored.problemDescription || scored.problem_description || scored.note || "";
             if (probDesc) {
-                worksheet.getCell(targetRow, 11).value = probDesc;
+                sheetXml = setCell(sheetXml, `K${targetRow}`, probDesc, "inlineStr");
             }
 
-            // Col J: Images (Col 10)
-            const imgUrls = scored.imageUrls || scored.image_urls || (scored.image_url ? [scored.image_url] : []);
-            if (Array.isArray(imgUrls) && imgUrls.length > 0) {
-                const firstImg = imgUrls[0];
-                const base64Data = await fetchImageBase64(firstImg);
-                if (base64Data) {
-                    try {
-                        const imageId = workbook.addImage({
-                            base64: base64Data,
-                            extension: "jpeg",
-                        });
-                        worksheet.addImage(imageId, {
-                            tl: { col: 9.05, row: targetRow - 1 + 0.05 },
-                            ext: { width: 60, height: 45 },
-                        });
-                        worksheet.getRow(targetRow).height = Math.max(worksheet.getRow(targetRow).height || 22, 40);
-                    } catch (imgErr) {
-                        console.warn("Error embedding image into Excel cell:", imgErr);
-                    }
-                }
+            // Col J: Images
+            const rawImages = scored.images || scored.image_urls || scored.imageUrls || (scored.image_url ? [scored.image_url] : []);
+            let firstUrl = null;
+            if (Array.isArray(rawImages) && rawImages.length > 0) {
+                firstUrl = typeof rawImages[0] === "string" ? rawImages[0] : rawImages[0]?.url;
+            }
+            if (firstUrl && firstUrl.startsWith("http")) {
+                imagesToEmbed.push({ targetRow, url: firstUrl });
             }
         }
     }
 
-    // 5. Generate and download file
-    const buffer = await workbook.xlsx.writeBuffer();
+    // 4. Embed Images if any
+    if (imagesToEmbed.length > 0) {
+        const relationships = [];
+        const anchors = [];
+
+        let imgIndex = 1;
+        for (const imgItem of imagesToEmbed) {
+            const buf = await fetchImageBuffer(imgItem.url);
+            if (!buf) continue;
+
+            const fileName = `image${imgIndex}.jpg`;
+            zip.file(`xl/media/${fileName}`, buf);
+
+            const rId = `rId${imgIndex}`;
+            relationships.push(
+                `<Relationship Id="${rId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/${fileName}"/>`
+            );
+
+            const row0 = imgItem.targetRow - 1;
+            anchors.push(`
+  <xdr:twoCellAnchor editAs="oneCell">
+    <xdr:from>
+      <xdr:col>9</xdr:col>
+      <xdr:colOff>10000</xdr:colOff>
+      <xdr:row>${row0}</xdr:row>
+      <xdr:rowOff>10000</xdr:rowOff>
+    </xdr:from>
+    <xdr:to>
+      <xdr:col>10</xdr:col>
+      <xdr:colOff>0</xdr:colOff>
+      <xdr:row>${row0 + 1}</xdr:row>
+      <xdr:rowOff>0</xdr:rowOff>
+    </xdr:to>
+    <xdr:pic>
+      <xdr:nvPicPr>
+        <xdr:cNvPr id="${imgIndex + 10}" name="Picture ${imgIndex}"/>
+        <xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr>
+      </xdr:nvPicPr>
+      <xdr:blipFill>
+        <a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="${rId}"/>
+        <a:stretch><a:fillRect/></a:stretch>
+      </xdr:blipFill>
+      <xdr:spPr>
+        <a:xfrm><a:off x="0" y="0"/><a:ext cx="100000" cy="100000"/></a:xfrm>
+        <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+      </xdr:spPr>
+    </xdr:pic>
+    <xdr:clientData/>
+  </xdr:twoCellAnchor>`);
+            imgIndex++;
+        }
+
+        if (relationships.length > 0) {
+            const relsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\r\n${relationships.join("\r\n")}\r\n</Relationships>`;
+            zip.file("xl/drawings/_rels/drawing1.xml.rels", relsXml);
+
+            const drXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">\r\n${anchors.join("\r\n")}\r\n</xdr:wsDr>`;
+            zip.file("xl/drawings/drawing1.xml", drXml);
+
+            let ct = await zip.file("[Content_Types].xml").async("text");
+            if (!ct.includes('Extension="jpg"')) {
+                ct = ct.replace(
+                    "</Types>",
+                    '<Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="jpeg" ContentType="image/jpeg"/></Types>'
+                );
+                zip.file("[Content_Types].xml", ct);
+            }
+        }
+    }
+
+    zip.file("xl/worksheets/sheet1.xml", sheetXml);
+
+    const outBuffer = await zip.generateAsync({
+        type: "arraybuffer",
+        mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        compression: "DEFLATE",
+    });
+
     const cleanDate = (auditDate || new Date().toISOString().split("T")[0]).replace(/[/\\:]/g, "-");
     const filename = `MQAA_TAI_DANH_GIA_${cleanDate}.xlsx`;
-    saveExcelJS(buffer, filename);
+    saveExcelJS(outBuffer, filename);
 }
-

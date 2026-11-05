@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "../lib/supabaseClient";
 import { MQAA_RE_AUDIT_SECTIONS, MQAA_RE_AUDIT_CRITERIA } from "../data/mqaaReAuditCriteria";
-import { usePatrolScoreSettings, DEFAULT_NORMAL_SCORES, DEFAULT_CRITICAL_SCORES } from "../utils/mqaaSettings";
+import { usePatrolTarget, usePatrolScoreSettings, DEFAULT_NORMAL_SCORES, DEFAULT_CRITICAL_SCORES } from "../utils/mqaaSettings";
 
 const DEFAULT_AUDITOR_NAME = "Ngô Thị Bích Ngọc";
 const AUDITOR_STORAGE_KEY = "mqaa_reassessment_auditor_name";
@@ -12,19 +12,17 @@ export default function MQAAReAuditEntry() {
     const navigate = useNavigate();
     const section = decodeURIComponent(rawSection || "");
 
+    const { targetScore } = usePatrolTarget();
     const { normalScores, criticalScores } = usePatrolScoreSettings();
 
-    // Section Meta
-    const sectionMeta = useMemo(() => {
-        return MQAA_RE_AUDIT_SECTIONS.find((s) => s.id === section) || {
-            id: section,
-            name: section,
-            vnName: section,
-        };
+    // Section Meta & Header config from criteria
+    const sectionConfig = useMemo(() => {
+        return MQAA_RE_AUDIT_CRITERIA[section] || { header: { title: section }, items: [] };
     }, [section]);
 
     // Header State
     const [headerData, setHeaderData] = useState(() => ({
+        auditorId: "RE_AUDIT",
         auditor: localStorage.getItem(AUDITOR_STORAGE_KEY) || DEFAULT_AUDITOR_NAME,
         date: new Date().toISOString().split("T")[0],
     }));
@@ -32,6 +30,7 @@ export default function MQAAReAuditEntry() {
     const [rows, setRows] = useState([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [viewMode, setViewMode] = useState(() => (typeof window !== "undefined" && window.innerWidth < 768 ? "card" : "table"));
     const [previewImage, setPreviewImage] = useState(null);
 
     useEffect(() => {
@@ -41,8 +40,7 @@ export default function MQAAReAuditEntry() {
     const loadData = async () => {
         setLoading(true);
         try {
-            // Get base criteria for this section
-            const baseItems = MQAA_RE_AUDIT_CRITERIA[section]?.items || [];
+            const baseItems = sectionConfig.items || [];
 
             let initialRows = baseItems.map((item, idx) => ({
                 index: idx + 1,
@@ -52,12 +50,12 @@ export default function MQAAReAuditEntry() {
                 titleEn: item.titleEn,
                 maxScore: item.maxScore,
                 isCritical: Boolean(item.isCritical),
-                score: item.maxScore === "N/A" ? "N/A" : "",
+                auditScore: item.maxScore === "N/A" ? "N/A" : "",
                 notes: "",
                 images: [], // { file, url }
             }));
 
-            // If editing an existing record by id
+            // Edit Mode: Fetch existing record by id
             if (id) {
                 const { data: record, error } = await supabase
                     .from("mqaa_patrol_logs")
@@ -67,13 +65,14 @@ export default function MQAAReAuditEntry() {
 
                 if (!error && record) {
                     setHeaderData({
+                        auditorId: "RE_AUDIT",
                         auditor: record.auditor_name || DEFAULT_AUDITOR_NAME,
                         date: record.date || new Date().toISOString().split("T")[0],
                     });
 
-                    const savedItems = Array.isArray(record.evaluation_data) ? record.evaluation_data : [];
+                    const savedData = Array.isArray(record.evaluation_data) ? record.evaluation_data : [];
                     const savedByNo = {};
-                    savedItems.forEach((si) => {
+                    savedData.forEach((si) => {
                         const cleanNo = String(si.no || "").replace(/\*/g, "").trim();
                         if (cleanNo) savedByNo[cleanNo] = si;
                         if (si.excelRow) savedByNo[si.excelRow] = si;
@@ -92,7 +91,7 @@ export default function MQAAReAuditEntry() {
                                 : [];
                             return {
                                 ...r,
-                                score: found.score !== undefined ? found.score : r.score,
+                                auditScore: found.auditScore !== undefined ? found.auditScore : (found.score !== undefined ? found.score : r.auditScore),
                                 notes: found.notes || found.problemDescription || found.problem_description || "",
                                 images: rawUrls.map((u) => ({ file: null, url: u })),
                             };
@@ -101,7 +100,7 @@ export default function MQAAReAuditEntry() {
                     });
                 }
             } else {
-                // Check if there is already a record for today for this section
+                // Check if already submitted today
                 const { data: existingToday } = await supabase
                     .from("mqaa_patrol_logs")
                     .select("id")
@@ -124,57 +123,59 @@ export default function MQAAReAuditEntry() {
         }
     };
 
-    // Calculate score totals
-    const calculation = useMemo(() => {
-        let totalMax = 0;
-        let totalActual = 0;
-        let answeredCount = 0;
-        let totalScorable = 0;
+    // Score calculations
+    const totals = useMemo(() => {
+        let totalMaxScore = 0;
+        let totalAuditScore = 0;
+        let totalEvaluatedItems = 0;
+        let scoredItemsCount = 0;
 
         rows.forEach((r) => {
             if (r.maxScore === "N/A") return;
             const maxVal = Number(r.maxScore) || 4;
-            totalMax += maxVal;
-            totalScorable++;
+            totalMaxScore += maxVal;
+            totalEvaluatedItems++;
 
-            if (r.score !== "" && r.score !== "N/A" && r.score !== undefined) {
-                totalActual += Number(r.score);
-                answeredCount++;
+            if (r.auditScore !== "" && r.auditScore !== "N/A" && r.auditScore !== undefined) {
+                totalAuditScore += Number(r.auditScore);
+                scoredItemsCount++;
             }
         });
 
-        const percent = totalMax > 0 ? Math.round((totalActual / totalMax) * 100) : 0;
-        const isComplete = totalScorable > 0 && answeredCount >= totalScorable;
+        const performance = totalMaxScore > 0 ? ((totalAuditScore / totalMaxScore) * 100).toFixed(0) : 0;
+        const isComplete = totalEvaluatedItems > 0 && scoredItemsCount >= totalEvaluatedItems;
 
         return {
-            totalMax,
-            totalActual,
-            percent,
+            totalMaxScore,
+            totalAuditScore,
+            performance,
             isComplete,
-            answeredCount,
-            totalScorable,
+            totalEvaluatedItems,
+            scoredItemsCount,
         };
     }, [rows]);
 
-    // Handle Score change
-    const handleScoreSelect = (idx, scoreVal) => {
+    const isPerformancePass = Number(totals.performance) >= Number(targetScore);
+
+    // Audit Score Change
+    const handleAuditScoreChange = (index, value) => {
         setRows((prev) => {
             const next = [...prev];
-            next[idx] = { ...next[idx], score: scoreVal };
+            next[index] = { ...next[index], auditScore: value };
             return next;
         });
     };
 
-    // Handle Notes change
-    const handleNotesChange = (idx, val) => {
+    // Notes / Problem Description Change
+    const handleNotesChange = (index, value) => {
         setRows((prev) => {
             const next = [...prev];
-            next[idx] = { ...next[idx], notes: val };
+            next[index] = { ...next[index], notes: value };
             return next;
         });
     };
 
-    // Compress Image
+    // Compress image
     const compressImage = (file) => {
         return new Promise((resolve, reject) => {
             const img = new Image();
@@ -220,7 +221,7 @@ export default function MQAAReAuditEntry() {
         });
     };
 
-    // Handle Images
+    // Handle Image uploads
     const handleImageChange = (index, e) => {
         const files = Array.from(e.target.files);
         if (files.length === 0) return;
@@ -256,30 +257,35 @@ export default function MQAAReAuditEntry() {
 
     // Quick score actions
     const handleQuickScoreAll = (scoreVal) => {
-        setRows((prev) =>
-            prev.map((r) => {
-                if (r.maxScore === "N/A") return r;
-                let s = scoreVal;
-                if (scoreVal === "max") {
-                    s = Number(r.maxScore) || 4;
-                }
-                return { ...r, score: s };
-            })
-        );
+        const newRows = rows.map((r) => {
+            if (r.maxScore === "N/A") return r;
+            let target;
+            if (scoreVal === "max") {
+                const isCrit = Boolean(r.isCritical);
+                const scoreList = isCrit ? criticalScores : normalScores;
+                target = scoreList && scoreList.length > 0 ? Math.max(...scoreList) : (Number(r.maxScore) || 4);
+            } else {
+                target = scoreVal;
+            }
+            return {
+                ...r,
+                auditScore: target,
+            };
+        });
+        setRows(newRows);
     };
 
     // Save
     const handleSave = async () => {
-        if (!calculation.isComplete) {
+        if (!totals.isComplete) {
             const confirmSave = confirm(
-                `Bạn chưa chấm hết tất cả các tiêu chí (${calculation.answeredCount}/${calculation.totalScorable}). Bạn có chắc muốn lưu tạm không?`
+                `Bạn chưa chấm hết tất cả các mục (${totals.scoredItemsCount}/${totals.totalEvaluatedItems}). Bạn có chắc chắn muốn lưu phiếu này không?`
             );
             if (!confirmSave) return;
         }
 
         setSaving(true);
         try {
-            // Save auditor name to localStorage
             const finalAuditor = headerData.auditor.trim() || DEFAULT_AUDITOR_NAME;
             localStorage.setItem(AUDITOR_STORAGE_KEY, finalAuditor);
 
@@ -322,7 +328,8 @@ export default function MQAAReAuditEntry() {
                     titleEn: row.titleEn,
                     maxScore: row.maxScore,
                     isCritical: row.isCritical,
-                    score: row.score,
+                    auditScore: row.auditScore,
+                    score: row.auditScore,
                     notes: row.notes,
                     problemDescription: row.notes,
                     image_urls: finalUrls,
@@ -336,9 +343,9 @@ export default function MQAAReAuditEntry() {
                 auditor_id: "RE_AUDIT",
                 auditor_name: finalAuditor,
                 date: headerData.date,
-                total_score: calculation.totalMax,
-                total_level: calculation.totalActual,
-                overall_performance: calculation.percent,
+                total_score: totals.totalMaxScore,
+                total_level: totals.totalAuditScore,
+                overall_performance: totals.performance,
                 evaluation_data: processedRows,
             };
 
@@ -364,337 +371,680 @@ export default function MQAAReAuditEntry() {
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-slate-100 flex items-center justify-center p-4">
-                <div className="bg-white p-6 rounded-2xl shadow-sm text-center">
-                    <div className="w-10 h-10 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
-                    <p className="text-slate-600 font-bold text-sm">Đang tải biểu mẫu Tái đánh giá...</p>
-                </div>
+            <div className="max-w-[1360px] mx-auto p-12 text-center">
+                <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 mb-4"></div>
+                <div className="text-slate-600 font-bold text-sm">Đang tải dữ liệu Tái đánh giá...</div>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-slate-100 pb-28 font-sans">
-            {/* Header Sticky Bar */}
-            <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-md border-b border-slate-200 px-4 md:px-8 py-3.5 shadow-sm">
-                <div className="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => navigate("/mqaa-patrol/re-audit")}
-                            className="p-2 hover:bg-slate-100 rounded-xl transition text-slate-500"
-                            title="Quay lại danh sách"
-                        >
-                            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-                            </svg>
-                        </button>
-                        <div>
-                            <div className="flex items-center gap-2">
-                                <span className="bg-amber-100 text-amber-800 text-[11px] font-black px-2 py-0.5 rounded-full border border-amber-200">
-                                    TÁI ĐÁNH GIÁ
-                                </span>
-                                <h1 className="text-lg md:text-xl font-black text-slate-800">
-                                    {section}
-                                </h1>
-                            </div>
-                            <p className="text-xs font-bold text-slate-400">{sectionMeta.vnName}</p>
+        <div className="max-w-[1360px] mx-auto p-4 md:p-6 bg-white shadow-2xl rounded-2xl my-6 border border-slate-100 font-sans">
+            {/* Modal preview image */}
+            {previewImage && (
+                <div
+                    className="fixed inset-0 bg-black/75 z-50 flex items-center justify-center p-4 backdrop-blur-sm"
+                    onClick={() => setPreviewImage(null)}
+                >
+                    <div
+                        className="relative max-w-4xl max-h-[90vh] bg-white rounded-2xl overflow-hidden shadow-2xl p-2"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <img
+                            src={previewImage}
+                            alt="Enlarged preview"
+                            className="max-h-[80vh] w-auto mx-auto object-contain rounded-lg"
+                        />
+                        <div className="flex justify-between items-center px-4 py-2 mt-1">
+                            <span className="text-xs text-slate-500 font-medium">Click ngoài để đóng</span>
+                            <button
+                                onClick={() => setPreviewImage(null)}
+                                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white text-xs font-bold rounded-lg transition"
+                            >
+                                Đóng
+                            </button>
                         </div>
                     </div>
+                </div>
+            )}
 
-                    {/* Metadata & Quick Score */}
-                    <div className="flex flex-wrap items-center gap-3">
-                        <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold">
-                            <span className="text-slate-400">Auditor:</span>
-                            <input
-                                type="text"
-                                value={headerData.auditor}
-                                onChange={(e) => setHeaderData((p) => ({ ...p, auditor: e.target.value }))}
-                                className="bg-transparent font-black text-amber-950 focus:outline-none w-36"
-                                title="Tên Auditor tái đánh giá (tự lưu)"
-                            />
+            {/* Top Navigation */}
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-4 border-b border-slate-200">
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => navigate("/mqaa-patrol/re-audit")}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-700 p-2.5 rounded-xl transition shadow-sm"
+                        title="Quay lại danh sách Section Tái đánh giá"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                        </svg>
+                    </button>
+                    <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="bg-amber-100 text-amber-800 text-xs font-black px-2.5 py-0.5 rounded-full border border-amber-300">
+                                TÁI ĐÁNH GIÁ
+                            </span>
+                            <h1 className="text-xl md:text-2xl font-black text-indigo-950 uppercase tracking-tight">
+                                {id ? "CHỈNH SỬA" : "PHIẾU"} ĐÁNH GIÁ - {section}
+                            </h1>
+                        </div>
+                        <p className="text-xs font-semibold text-slate-400 mt-0.5">
+                            OrthoLite Insole Quality Audit Standard Checklist • Re-assessment
+                        </p>
+                    </div>
+                </div>
+
+                {/* Section Selector Dropdown (10 Sections) */}
+                <div className="flex items-center gap-2 bg-slate-50 p-2 rounded-xl border border-slate-200">
+                    <span className="text-xs font-bold text-slate-500 whitespace-nowrap pl-1">Đổi Section:</span>
+                    <select
+                        value={section}
+                        onChange={(e) => navigate(`/mqaa-patrol/re-audit/entry/${encodeURIComponent(e.target.value)}`)}
+                        className="bg-white border border-slate-300 text-indigo-900 font-bold text-sm rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-indigo-500 outline-none cursor-pointer shadow-sm"
+                    >
+                        {MQAA_RE_AUDIT_SECTIONS.map((sec) => (
+                            <option key={sec.id} value={sec.id}>
+                                {sec.name}
+                            </option>
+                        ))}
+                    </select>
+                </div>
+            </div>
+
+            {/* Section Header Objective from Excel */}
+            {sectionConfig.header && (
+                <div className="mb-6 bg-gradient-to-r from-indigo-50 via-slate-50 to-indigo-50/50 p-4 md:p-5 rounded-2xl border border-indigo-100 shadow-sm">
+                    <div className="whitespace-pre-line text-slate-800 font-bold text-sm md:text-base leading-relaxed">
+                        {sectionConfig.header.title}
+                    </div>
+                </div>
+            )}
+
+            {/* Auditor & Inspection Metadata Card */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6 bg-slate-50 p-5 rounded-2xl border border-slate-200">
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Mã số Auditor (ID):</label>
+                    <input
+                        type="text"
+                        readOnly
+                        className="p-2.5 border border-slate-200 rounded-xl bg-slate-100 font-black text-amber-800 cursor-not-allowed shadow-inner"
+                        value="RE_AUDIT (Tái Đánh Giá)"
+                    />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Tên người đánh giá:</label>
+                    <input
+                        type="text"
+                        className="p-2.5 border border-slate-300 rounded-xl bg-white shadow-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                        value={headerData.auditor}
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            setHeaderData({ ...headerData, auditor: val });
+                            localStorage.setItem(AUDITOR_STORAGE_KEY, val);
+                        }}
+                        placeholder="Mặc định: Ngô Thị Bích Ngọc"
+                        title="Tự động lưu vào hệ thống"
+                    />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Ngày đánh giá (Date):</label>
+                    <input
+                        type="date"
+                        className="p-2.5 border border-slate-300 rounded-xl bg-white shadow-sm font-bold text-slate-800 focus:ring-2 focus:ring-indigo-500 outline-none transition"
+                        value={headerData.date}
+                        onChange={(e) => setHeaderData({ ...headerData, date: e.target.value })}
+                    />
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-bold text-slate-600 uppercase tracking-wider">Section Đánh giá:</label>
+                    <div className="p-2.5 border border-slate-200 rounded-xl bg-slate-200/70 font-black text-indigo-900 text-sm truncate">
+                        {section}
+                    </div>
+                </div>
+
+                {/* Score Summary Quick Bar */}
+                <div className="sm:col-span-2 lg:col-span-4 flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-slate-200 mt-1">
+                    <div className="flex items-center gap-4 text-xs font-bold text-slate-600">
+                        <span>
+                            Điểm chuẩn: <strong className="text-indigo-700 text-sm">{totals.totalMaxScore}</strong>
+                        </span>
+                        <span>
+                            Điểm đạt: <strong className="text-emerald-700 text-sm">{totals.totalAuditScore}</strong>
+                        </span>
+                        <span>
+                            Đã chấm: <strong className="text-slate-900">{totals.scoredItemsCount}/{totals.totalEvaluatedItems}</strong> mục
+                        </span>
+                        <span className="text-slate-400">
+                            | Mục tiêu: <strong>≥ {targetScore}%</strong>
+                        </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                        <span className="text-xs font-bold text-slate-500 hidden md:inline">Chấm nhanh:</span>
+                        <div className="flex gap-1.5">
+                            <button
+                                type="button"
+                                onClick={() => handleQuickScoreAll("max")}
+                                className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold rounded-lg transition border border-indigo-200"
+                                title="Gán tất cả mục bằng điểm tối đa"
+                            >
+                                Max Điểm
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => handleQuickScoreAll(0)}
+                                className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-600 text-xs font-bold rounded-lg transition border border-slate-200"
+                                title="Reset tất cả điểm về 0"
+                            >
+                                Về 0
+                            </button>
                         </div>
 
-                        <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-bold">
-                            <span className="text-slate-400">Ngày:</span>
-                            <input
-                                type="date"
-                                value={headerData.date}
-                                onChange={(e) => setHeaderData((p) => ({ ...p, date: e.target.value }))}
-                                className="bg-transparent font-black text-slate-800 focus:outline-none"
-                            />
+                        <div className="flex items-center gap-2 pl-3 border-l border-slate-200">
+                            <span className="text-xs font-black text-slate-700 uppercase tracking-wider">Tuân thủ:</span>
+                            <span
+                                className={`text-base font-black px-3 py-1 rounded-xl shadow-sm transition-colors ${
+                                    isPerformancePass
+                                        ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                        : "bg-rose-100 text-rose-800 border border-rose-300"
+                                }`}
+                                title={isPerformancePass ? "Đạt mục tiêu" : `Chưa đạt mục tiêu (${targetScore}%)`}
+                            >
+                                {totals.performance}%
+                            </span>
                         </div>
-
-                        {/* Quick score button */}
-                        <button
-                            type="button"
-                            onClick={() => handleQuickScoreAll("max")}
-                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 px-3 py-1.5 rounded-xl font-black text-xs transition active:scale-95"
-                            title="Chấm 4 điểm cho tất cả"
-                        >
-                            ⚡ Chấm 4 Tất Cả
-                        </button>
                     </div>
                 </div>
             </div>
 
-            {/* Main Checklist Container */}
-            <div className="max-w-7xl mx-auto px-4 md:px-8 pt-6">
-                <div className="bg-white rounded-3xl border border-slate-200/90 shadow-sm overflow-hidden">
-                    <div className="p-4 md:p-6 border-b border-slate-100 bg-slate-50/50 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                        <div>
-                            <h2 className="text-base font-black text-slate-800">
-                                Bảng Tiêu Chí Chấm Điểm
-                            </h2>
-                            <p className="text-xs font-medium text-slate-500 mt-0.5">
-                                Điểm tối đa mỗi mục là 4. Hạng mục trọng yếu có đánh dấu (*).
-                            </p>
-                        </div>
+            {/* View Mode Toggle (Mobile Cards vs Full Table) */}
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-slate-50 p-2.5 rounded-2xl border border-slate-200">
+                <div className="flex items-center gap-1.5 bg-white p-1 rounded-xl border border-slate-200 shadow-sm">
+                    <button
+                        type="button"
+                        onClick={() => setViewMode("card")}
+                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            viewMode === "card"
+                                ? "bg-indigo-600 text-white shadow-sm"
+                                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                        }`}
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                        <span>📱 Dạng Thẻ (Dễ chấm trên ĐT)</span>
+                    </button>
 
-                        {/* Live Score Summary Badge */}
-                        <div className="flex items-center gap-3 bg-white px-4 py-2 rounded-2xl border border-slate-200 shadow-sm">
-                            <div className="text-right">
-                                <div className="text-[10px] uppercase font-bold text-slate-400">Điểm Đạt / Tối Đa</div>
-                                <div className="text-sm font-black text-slate-800">
-                                    {calculation.totalActual} / {calculation.totalMax}
-                                </div>
-                            </div>
-                            <div className="h-8 w-px bg-slate-200"></div>
-                            <div className="text-center">
-                                <div className="text-[10px] uppercase font-bold text-slate-400">Tuân Thủ</div>
-                                <div className={`text-base font-black ${calculation.percent >= 80 ? "text-emerald-600" : "text-rose-600"}`}>
-                                    {calculation.percent}%
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                    <button
+                        type="button"
+                        onClick={() => setViewMode("table")}
+                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                            viewMode === "table"
+                                ? "bg-indigo-600 text-white shadow-sm"
+                                : "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+                        }`}
+                    >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 10h18M3 14h18M3 6h18M3 18h18" />
+                        </svg>
+                        <span>📋 Dạng Bảng (Xem toàn bộ)</span>
+                    </button>
+                </div>
 
-                    {/* Table / Cards */}
-                    <div className="divide-y divide-slate-100">
-                        {rows.map((row, idx) => {
-                            const isCrit = row.isCritical;
-                            const isNA = row.maxScore === "N/A";
-                            const scoreOptions = isNA
-                                ? ["N/A"]
-                                : isCrit
-                                ? (criticalScores?.length ? criticalScores : DEFAULT_CRITICAL_SCORES)
-                                : (normalScores?.length ? normalScores : DEFAULT_NORMAL_SCORES);
+                <div className="text-[11px] font-semibold text-slate-500 pr-2">
+                    {viewMode === "card"
+                        ? "✨ Hiển thị trọn vẹn màn hình - Chấm điểm cuộn dọc không cần kéo ngang"
+                        : "💡 Kéo thanh trượt ngang để xem các cột bảng"}
+                </div>
+            </div>
 
-                            return (
-                                <div
-                                    key={row.excelRow || idx}
-                                    className={`p-4 md:p-6 transition ${
-                                        row.score === 0 || row.score === -4 || (row.score !== "" && row.score < 4 && !isNA)
-                                            ? "bg-amber-50/30"
-                                            : "hover:bg-slate-50/50"
-                                    }`}
-                                >
-                                    <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
-                                        {/* Left: Criteria text */}
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2 mb-2 flex-wrap">
-                                                <span className="font-mono text-xs font-black px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-                                                    {row.no}
-                                                </span>
-                                                {isCrit && (
-                                                    <span className="bg-rose-100 text-rose-800 text-[10px] font-black px-2 py-0.5 rounded-full border border-rose-200">
-                                                        ★ Trọng Yếu (Critical)
-                                                    </span>
-                                                )}
-                                                {isNA && (
-                                                    <span className="bg-slate-100 text-slate-500 text-[10px] font-black px-2 py-0.5 rounded-full">
-                                                        N/A
-                                                    </span>
-                                                )}
-                                            </div>
+            {/* Content Display: Card View or Table View */}
+            {viewMode === "card" ? (
+                <div className="space-y-4">
+                    {rows.map((row, idx) => {
+                        const isNA = row.maxScore === "N/A";
+                        const isCrit = Boolean(row.isCritical);
+                        const scoreOptions = isCrit
+                            ? (criticalScores?.length ? criticalScores : DEFAULT_CRITICAL_SCORES)
+                            : (normalScores?.length ? normalScores : DEFAULT_NORMAL_SCORES);
 
-                                            <h3 className="text-sm font-bold text-slate-800 leading-snug">
-                                                {row.titleVn}
-                                            </h3>
-                                            {row.titleEn && (
-                                                <p className="text-xs font-normal text-slate-500 mt-1 italic">
-                                                    {row.titleEn}
-                                                </p>
-                                            )}
+                        return (
+                            <div
+                                key={idx}
+                                className={`p-4 rounded-2xl border transition-all shadow-sm ${
+                                    isCrit
+                                        ? "bg-emerald-50/70 border-emerald-300 border-l-4 border-l-emerald-600"
+                                        : "bg-white border-slate-200 hover:border-indigo-200"
+                                }`}
+                            >
+                                {/* Header: STT & Criteria Content */}
+                                <div className="flex items-start gap-2.5 mb-3">
+                                    <span className="flex-shrink-0 min-w-[32px] h-7 px-2 bg-indigo-100 text-indigo-900 rounded-lg flex items-center justify-center font-black text-xs">
+                                        {row.no || idx + 1}
+                                    </span>
+                                    <div className="flex-1">
+                                        <div className="font-bold text-slate-800 text-sm leading-snug">
+                                            {row.titleVn}
                                         </div>
-
-                                        {/* Right: Score Options */}
-                                        <div className="shrink-0 flex flex-col items-end gap-2">
-                                            <div className="text-[11px] font-bold text-slate-400">Điểm đánh giá:</div>
-                                            <div className="flex items-center gap-1.5 flex-wrap">
-                                                {scoreOptions.map((opt) => {
-                                                    const isSelected = String(row.score) === String(opt);
-                                                    let btnStyle = "bg-white text-slate-700 border-slate-200 hover:border-amber-400";
-                                                    if (isSelected) {
-                                                        if (opt === 4 || opt === "4") {
-                                                            btnStyle = "bg-emerald-600 text-white border-emerald-600 shadow-sm";
-                                                        } else if (opt === 0 || opt === "0" || opt === -4 || opt === "-4") {
-                                                            btnStyle = "bg-rose-600 text-white border-rose-600 shadow-sm";
-                                                        } else {
-                                                            btnStyle = "bg-amber-500 text-white border-amber-500 shadow-sm";
-                                                        }
-                                                    }
-
-                                                    return (
-                                                        <button
-                                                            key={opt}
-                                                            type="button"
-                                                            onClick={() => handleScoreSelect(idx, opt)}
-                                                            className={`w-11 h-9 rounded-xl font-black text-xs border transition active:scale-95 ${btnStyle}`}
-                                                        >
-                                                            {opt}
-                                                        </button>
-                                                    );
-                                                })}
+                                        {row.titleEn && (
+                                            <div className="text-xs italic text-blue-700 font-medium mt-1 leading-relaxed">
+                                                {row.titleEn}
                                             </div>
-                                        </div>
+                                        )}
+                                        {isCrit && (
+                                            <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                                <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                </svg>
+                                                Hạng mục trọng yếu
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Scoring row: Max Score & Score Buttons */}
+                                <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-slate-50/90 rounded-xl border border-slate-200/80 mb-3">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[11px] font-bold text-slate-500 uppercase">Điểm chuẩn:</span>
+                                        <span className="text-sm font-black px-2.5 py-0.5 bg-indigo-100 text-indigo-800 rounded-lg border border-indigo-200">
+                                            {isNA ? "N/A" : row.maxScore}
+                                        </span>
                                     </div>
 
-                                    {/* Issue Notes & Image Attachment Area */}
-                                    <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-wider block mb-1">
-                                                Mô tả vấn đề / Ghi chú lỗi (Cột K)
-                                            </label>
-                                            <input
-                                                type="text"
-                                                value={row.notes}
-                                                onChange={(e) => handleNotesChange(idx, e.target.value)}
-                                                placeholder={row.score === 0 || row.score === -4 || (row.score !== "" && row.score < 4 && !isNA) ? "Bắt buộc: Nhập mô tả lỗi phát hiện..." : "Ghi chú bổ sung (nếu có)..."}
-                                                className={`w-full px-3 py-2 text-xs rounded-xl border focus:outline-none focus:ring-1 transition ${
-                                                    (row.score === 0 || row.score === -4 || (row.score !== "" && row.score < 4 && !isNA)) && !row.notes
-                                                        ? "border-amber-400 bg-amber-50/50 focus:ring-amber-500"
-                                                        : "border-slate-200 bg-white focus:ring-slate-400"
-                                                }`}
-                                            />
-                                        </div>
-
-                                        <div>
-                                            <div className="flex items-center justify-between mb-1">
-                                                <label className="text-[11px] font-black text-slate-400 uppercase tracking-wider">
-                                                    Hình ảnh hiện trạng (Cột J)
-                                                </label>
-                                                <span className="text-[11px] text-slate-400">
-                                                    {row.images?.length || 0}/5 ảnh
-                                                </span>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[11px] font-bold text-slate-500 uppercase">Chấm điểm:</span>
+                                        {isNA ? (
+                                            <span className="px-3 py-1 bg-slate-200 text-slate-500 rounded-lg text-xs font-black">
+                                                N/A
+                                            </span>
+                                        ) : (
+                                            <div className="flex items-center gap-1.5">
+                                                {scoreOptions.map((pts) => (
+                                                    <button
+                                                        key={pts}
+                                                        type="button"
+                                                        onClick={() => handleAuditScoreChange(idx, pts)}
+                                                        className={`min-w-[38px] h-9 px-2 flex items-center justify-center text-sm font-black rounded-xl border transition-all ${
+                                                            row.auditScore !== "" && Number(row.auditScore) === pts
+                                                                ? "bg-indigo-600 text-white border-indigo-600 shadow-md scale-105"
+                                                                : "bg-white hover:bg-slate-100 text-slate-700 border-slate-300 shadow-sm active:scale-95"
+                                                        }`}
+                                                    >
+                                                        {pts}
+                                                    </button>
+                                                ))}
                                             </div>
+                                        )}
+                                    </div>
+                                </div>
 
-                                            <div className="flex items-center gap-2 flex-wrap">
-                                                {/* Upload button */}
+                                {/* Images & Notes Section */}
+                                <div className="space-y-3 pt-1">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        {(!row.images || row.images.length < 5) && (
+                                            <label className="cursor-pointer bg-white border border-slate-300 hover:border-indigo-400 px-3 py-2 rounded-xl text-xs hover:bg-indigo-50 flex items-center gap-1.5 shadow-sm font-bold text-slate-700 transition">
+                                                <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                                                </svg>
+                                                <span>+ Chụp / Thêm ảnh ({row.images ? row.images.length : 0}/5)</span>
+                                                <input
+                                                    type="file"
+                                                    className="hidden"
+                                                    accept="image/*"
+                                                    multiple
+                                                    onChange={(e) => handleImageChange(idx, e)}
+                                                />
+                                            </label>
+                                        )}
+
+                                        {row.images && row.images.length > 0 && (
+                                            <div className="flex flex-wrap gap-2">
+                                                {row.images.map((img, imgIdx) => (
+                                                    <div
+                                                        key={imgIdx}
+                                                        className="relative w-12 h-12 border border-slate-200 rounded-xl shadow-inner overflow-hidden group cursor-pointer"
+                                                        onClick={() => setPreviewImage(img.url)}
+                                                        title="Click để phóng to ảnh"
+                                                    >
+                                                        <img
+                                                            src={img.url}
+                                                            className="w-full h-full object-cover group-hover:scale-110 transition"
+                                                            alt={`ref-${imgIdx}`}
+                                                        />
+                                                        <button
+                                                            type="button"
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                handleRemoveImage(idx, imgIdx);
+                                                            }}
+                                                            className="absolute top-0 right-0 bg-red-600 hover:bg-red-700 text-white w-4 h-4 flex items-center justify-center text-[11px] font-black rounded-bl shadow"
+                                                            title="Xoá ảnh"
+                                                        >
+                                                            ×
+                                                        </button>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+
+                                    <div>
+                                        <textarea
+                                            rows={2}
+                                            className="w-full p-2.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:bg-white focus:ring-2 focus:ring-indigo-500 outline-none transition resize-none font-medium placeholder-slate-400"
+                                            placeholder="Mô tả vấn đề / Ghi chú (Nếu có)..."
+                                            value={row.notes}
+                                            onChange={(e) => handleNotesChange(idx, e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        );
+                    })}
+
+                    {/* Mobile Summary Bottom Sticky Box */}
+                    <div className="bg-amber-50 p-4 rounded-2xl border border-amber-200 mt-6 shadow-sm">
+                        <div className="flex justify-between items-center text-xs font-bold text-slate-700 mb-2">
+                            <span>Đã chấm:</span>
+                            <span className="font-black text-indigo-950">{totals.scoredItemsCount}/{totals.totalEvaluatedItems} mục</span>
+                        </div>
+                        <div className="flex justify-between items-center text-xs font-bold text-slate-700 mb-2">
+                            <span>Điểm đạt / Tổng điểm:</span>
+                            <span className="font-black text-emerald-800">{totals.totalAuditScore} / {totals.totalMaxScore}</span>
+                        </div>
+                        <div className="flex justify-between items-center pt-2 border-t border-amber-200/60">
+                            <span className="text-xs font-black text-indigo-950 uppercase">Tuân thủ tổng thể:</span>
+                            <span className={`text-xl font-black px-4 py-1 rounded-xl shadow-sm ${
+                                isPerformancePass ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
+                            }`}>
+                                {totals.performance}%
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            ) : (
+                /* Main Evaluation Table */
+                <div className="overflow-x-auto shadow-sm border border-slate-200 rounded-2xl bg-white">
+                    <table className="w-full border-collapse text-left text-xs md:text-sm min-w-[900px]">
+                        <thead>
+                            <tr className="bg-indigo-700 text-white font-bold divide-x divide-indigo-600 select-none">
+                                <th className="p-3 w-14 text-center">STT</th>
+                                <th className="p-3 min-w-[340px]">
+                                    Hạng mục & Nội dung đánh giá
+                                    <div className="text-[11px] font-normal text-indigo-200">
+                                        (Tiêu chuẩn Việt - Anh)
+                                    </div>
+                                </th>
+                                <th className="p-3 w-24 text-center">
+                                    Điểm chuẩn
+                                    <div className="text-[11px] font-normal text-indigo-200">Max Score (G)</div>
+                                </th>
+                                <th className="p-3 w-32 text-center">
+                                    Điểm đạt
+                                    <div className="text-[11px] font-normal text-indigo-200">Audit Score (H)</div>
+                                </th>
+                                <th className="p-3 w-28 text-center">
+                                    Trọng yếu
+                                    <div className="text-[11px] font-normal text-indigo-200">Critical (I)</div>
+                                </th>
+                                <th className="p-3 w-36 text-center">
+                                    Ảnh hiện trạng
+                                    <div className="text-[11px] font-normal text-indigo-200">Images (J)</div>
+                                </th>
+                                <th className="p-3 min-w-[200px]">
+                                    Ghi chú / Mô tả vấn đề
+                                    <div className="text-[11px] font-normal text-indigo-200">Description (K)</div>
+                                </th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-200">
+                            {rows.map((row, idx) => {
+                                const isNA = row.maxScore === "N/A";
+                                const isCrit = Boolean(row.isCritical);
+                                const scoreOptions = isCrit
+                                    ? (criticalScores?.length ? criticalScores : DEFAULT_CRITICAL_SCORES)
+                                    : (normalScores?.length ? normalScores : DEFAULT_NORMAL_SCORES);
+
+                                return (
+                                    <tr
+                                        key={idx}
+                                        className={`transition-colors divide-x divide-slate-100 ${
+                                            isCrit
+                                                ? "bg-emerald-50/80 hover:bg-emerald-100/70 border-l-4 border-l-emerald-500"
+                                                : "hover:bg-slate-50/80"
+                                        }`}
+                                    >
+                                        {/* STT */}
+                                        <td className="p-3 text-center font-black text-slate-600 align-top">
+                                            {row.no || idx + 1}
+                                        </td>
+
+                                        {/* Title & Criteria */}
+                                        <td className="p-3 align-top">
+                                            <div className="font-bold text-slate-800 leading-snug">
+                                                {row.titleVn}
+                                            </div>
+                                            {row.titleEn && (
+                                                <div className="text-xs italic text-blue-700 font-medium mt-1 leading-relaxed">
+                                                    {row.titleEn}
+                                                </div>
+                                            )}
+                                            {isCrit && (
+                                                <span className="inline-flex items-center gap-1 mt-1.5 px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                                    <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                                                        <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                                    </svg>
+                                                    Hạng mục trọng yếu
+                                                </span>
+                                            )}
+                                        </td>
+
+                                        {/* Max Score (G) */}
+                                        <td className="p-3 text-center font-bold align-top">
+                                            {isNA ? (
+                                                <span className="inline-block px-2.5 py-1 rounded-lg bg-slate-200 text-slate-500 font-black text-xs">
+                                                    N/A
+                                                </span>
+                                            ) : (
+                                                <span className="inline-block px-3 py-1 rounded-lg bg-indigo-50 text-indigo-800 font-black text-sm border border-indigo-100">
+                                                    {row.maxScore}
+                                                </span>
+                                            )}
+                                        </td>
+
+                                        {/* Audit Score (H) */}
+                                        <td className="p-3 text-center align-top">
+                                            {isNA ? (
+                                                <div className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-400 font-black text-xs cursor-not-allowed">
+                                                    N/A
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-wrap justify-center gap-1.5 w-full">
+                                                    {scoreOptions.map((pts) => (
+                                                        <button
+                                                            key={pts}
+                                                            type="button"
+                                                            onClick={() => handleAuditScoreChange(idx, pts)}
+                                                            className={`w-7 h-7 flex items-center justify-center text-xs font-black rounded border transition ${
+                                                                row.auditScore !== "" && Number(row.auditScore) === pts
+                                                                    ? "bg-indigo-600 text-white border-indigo-600 shadow-md transform scale-105"
+                                                                    : "bg-white hover:bg-slate-100 text-slate-600 border-slate-300 shadow-sm"
+                                                            }`}
+                                                        >
+                                                            {pts}
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </td>
+
+                                        {/* Critical Column (I) */}
+                                        <td className="p-3 text-center align-top">
+                                            {isCrit ? (
+                                                <span className="inline-block px-3 py-1 bg-emerald-600 text-white font-black text-xs rounded-lg shadow-sm">
+                                                    Yes
+                                                </span>
+                                            ) : (
+                                                <span className="text-slate-300 font-bold text-xs">—</span>
+                                            )}
+                                        </td>
+
+                                        {/* Images (J) */}
+                                        <td className="p-3 text-center align-top">
+                                            <div className="flex flex-col items-center gap-1.5">
                                                 {(!row.images || row.images.length < 5) && (
-                                                    <label className="cursor-pointer bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 hover:border-amber-400 text-slate-600 px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition">
-                                                        <svg className="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" />
-                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                    <label className="cursor-pointer bg-white border border-slate-300 hover:border-indigo-400 px-2.5 py-1.5 rounded-xl text-xs hover:bg-indigo-50 flex items-center gap-1 shadow-sm font-bold text-slate-700 transition">
+                                                        <svg className="w-3.5 h-3.5 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                                                         </svg>
-                                                        <span>Thêm ảnh</span>
+                                                        <span>Ảnh ({row.images ? row.images.length : 0}/5)</span>
                                                         <input
                                                             type="file"
+                                                            className="hidden"
                                                             accept="image/*"
                                                             multiple
-                                                            className="hidden"
                                                             onChange={(e) => handleImageChange(idx, e)}
                                                         />
                                                     </label>
                                                 )}
 
-                                                {/* Thumbnail preview list */}
-                                                {row.images && row.images.map((img, imgIdx) => (
-                                                    <div key={imgIdx} className="relative group/thumb w-10 h-10 rounded-lg overflow-hidden border border-slate-200 shadow-sm shrink-0">
-                                                        <img
-                                                            src={img.url}
-                                                            alt="condition"
-                                                            className="w-full h-full object-cover cursor-pointer"
-                                                            onClick={() => setPreviewImage(img.url)}
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => handleRemoveImage(idx, imgIdx)}
-                                                            className="absolute top-0 right-0 bg-rose-600 text-white w-4 h-4 rounded-bl text-[10px] flex items-center justify-center opacity-0 group-hover/thumb:opacity-100 transition"
-                                                            title="Xóa ảnh"
-                                                        >
-                                                            ✕
-                                                        </button>
+                                                {row.images && row.images.length > 0 && (
+                                                    <div className="flex flex-wrap justify-center gap-1 mt-1 max-w-[140px]">
+                                                        {row.images.map((img, imgIdx) => (
+                                                            <div
+                                                                key={imgIdx}
+                                                                className="relative w-10 h-10 border border-slate-200 rounded-lg shadow-inner overflow-hidden group cursor-pointer"
+                                                                onClick={() => setPreviewImage(img.url)}
+                                                                title="Click để phóng to ảnh"
+                                                            >
+                                                                <img
+                                                                    src={img.url}
+                                                                    className="w-full h-full object-cover group-hover:scale-110 transition"
+                                                                    alt={`ref-${imgIdx}`}
+                                                                />
+                                                                <button
+                                                                    type="button"
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        handleRemoveImage(idx, imgIdx);
+                                                                    }}
+                                                                    className="absolute top-0 right-0 bg-red-600 hover:bg-red-700 text-white w-4 h-4 flex items-center justify-center text-[11px] font-black rounded-bl shadow"
+                                                                    title="Xoá ảnh"
+                                                                >
+                                                                    ×
+                                                                </button>
+                                                            </div>
+                                                        ))}
                                                     </div>
-                                                ))}
+                                                )}
                                             </div>
-                                        </div>
+                                        </td>
+
+                                        {/* Problem description (K) */}
+                                        <td className="p-3 align-top">
+                                            <textarea
+                                                rows={2}
+                                                className="w-full p-2 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 outline-none transition text-xs font-medium placeholder-slate-300 resize-none bg-slate-50/50 focus:bg-white"
+                                                placeholder="Mô tả vấn đề / Ghi chú (Nếu có)..."
+                                                value={row.notes}
+                                                onChange={(e) => handleNotesChange(idx, e.target.value)}
+                                            />
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+
+                            {/* Excel Row Summary Footer */}
+                            <tr className="bg-yellow-100/90 font-black border-t-2 border-indigo-400 text-slate-900 divide-x divide-yellow-200 select-none">
+                                <td colSpan="2" className="p-4 text-right">
+                                    <div className="text-xs uppercase text-slate-600 font-extrabold">
+                                        {sectionConfig.footer?.sectionName || section}
                                     </div>
-                                </div>
-                            );
-                        })}
-                    </div>
-                </div>
-            </div>
+                                    <div className="text-sm md:text-base font-black text-indigo-950 uppercase mt-0.5">
+                                        {sectionConfig.footer?.label?.replace(/\r?\n/g, " ") || "XẾP HẠNG TUÂN THỦ TỔNG THỂ % / OVERALL COMPLIANCE RATING:"}
+                                    </div>
+                                </td>
 
-            {/* Bottom Floating Save Bar */}
-            <div className="fixed bottom-0 left-0 right-0 z-40 bg-white/95 backdrop-blur-md border-t border-slate-200 px-4 md:px-8 py-3.5 shadow-lg">
-                <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-                    <button
-                        type="button"
-                        onClick={() => navigate("/mqaa-patrol/re-audit")}
-                        className="px-4 py-2.5 rounded-xl border border-slate-200 text-slate-600 font-bold text-xs md:text-sm hover:bg-slate-50 transition"
-                    >
-                        Hủy / Quay lại
-                    </button>
+                                {/* Max Score Total (G) */}
+                                <td className="p-4 text-center">
+                                    <div className="text-[10px] text-slate-500 uppercase">Tổng chuẩn (G)</div>
+                                    <div className="text-lg font-black text-indigo-900">{totals.totalMaxScore}</div>
+                                </td>
 
-                    <div className="flex items-center gap-3">
-                        <div className="hidden sm:block text-right">
-                            <span className="text-xs text-slate-400 font-bold">Tiến độ: </span>
-                            <span className="text-xs font-black text-slate-700">
-                                {calculation.answeredCount}/{calculation.totalScorable} mục
-                            </span>
-                        </div>
+                                {/* Audit Score Total (H) */}
+                                <td className="p-4 text-center">
+                                    <div className="text-[10px] text-slate-500 uppercase">Tổng đạt (H)</div>
+                                    <div className="text-lg font-black text-emerald-900">{totals.totalAuditScore}</div>
+                                </td>
 
-                        <button
-                            type="button"
-                            onClick={handleSave}
-                            disabled={saving}
-                            className={`px-6 py-2.5 rounded-xl font-black text-sm text-white shadow-md active:scale-95 transition flex items-center gap-2 ${
-                                saving
-                                    ? "bg-slate-400 cursor-not-allowed"
-                                    : "bg-amber-600 hover:bg-amber-700 shadow-amber-200"
-                            }`}
-                        >
-                            {saving ? (
-                                <>
-                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                    <span>Đang lưu...</span>
-                                </>
-                            ) : (
-                                <>
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
-                                    </svg>
-                                    <span>Lưu Phiếu Tái Đánh Giá</span>
-                                </>
-                            )}
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* Preview Image Modal */}
-            {previewImage && (
-                <div
-                    className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm"
-                    onClick={() => setPreviewImage(null)}
-                >
-                    <div className="relative max-w-4xl max-h-[90vh]">
-                        <img
-                            src={previewImage}
-                            alt="preview"
-                            className="max-w-full max-h-[85vh] rounded-2xl object-contain shadow-2xl"
-                        />
-                        <button
-                            onClick={() => setPreviewImage(null)}
-                            className="absolute -top-3 -right-3 w-8 h-8 rounded-full bg-white text-slate-800 font-black shadow-lg flex items-center justify-center"
-                        >
-                            ✕
-                        </button>
-                    </div>
+                                {/* Overall % result = (H / G) * 100% */}
+                                <td colSpan="3" className="p-4 text-center bg-yellow-200/80">
+                                    <div className="flex flex-col md:flex-row items-center justify-center gap-2">
+                                        <span className="text-xs uppercase font-extrabold text-indigo-950">
+                                            % Kết quả (Cột F = H/G):
+                                        </span>
+                                        <span
+                                            className={`text-xl md:text-2xl font-black px-4 py-1 rounded-xl shadow-md transition-colors ${
+                                                isPerformancePass
+                                                    ? "bg-emerald-600 text-white"
+                                                    : "bg-rose-600 text-white"
+                                            }`}
+                                        >
+                                            {totals.performance}%
+                                        </span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
                 </div>
             )}
+
+            {/* Bottom Actions */}
+            <div className="mt-8 pt-6 border-t border-slate-200 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <button
+                    type="button"
+                    onClick={() => navigate("/mqaa-patrol/re-audit")}
+                    className="w-full sm:w-auto px-8 py-3 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl font-bold transition shadow-sm"
+                >
+                    ← QUAY LẠI
+                </button>
+
+                <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            if (confirm("Làm mới lại tất cả điểm đã nhập trên biểu mẫu này?")) {
+                                const resetRows = rows.map((r) => ({
+                                    ...r,
+                                    auditScore: r.maxScore === "N/A" ? "N/A" : "",
+                                    images: [],
+                                    notes: "",
+                                }));
+                                setRows(resetRows);
+                            }
+                        }}
+                        className="px-6 py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold transition text-sm"
+                    >
+                        LÀM MỚI
+                    </button>
+
+                    <button
+                        type="button"
+                        onClick={handleSave}
+                        disabled={saving}
+                        className={`px-10 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-black transition-all shadow-xl shadow-indigo-200 transform hover:scale-[1.02] active:scale-95 ${
+                            saving ? "opacity-50 cursor-not-allowed" : ""
+                        }`}
+                    >
+                        {saving ? "ĐANG LƯU..." : (id ? "CẬP NHẬT ĐÁNH GIÁ" : "LƯU ĐÁNH GIÁ")}
+                    </button>
+                </div>
+            </div>
         </div>
     );
 }
-

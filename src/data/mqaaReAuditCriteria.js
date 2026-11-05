@@ -169,7 +169,10 @@ export const MQAA_RE_AUDIT_CRITERIA = {
         "titleEn": "",
         "rawText": "*1.1.16. Kho có sơ đồ quản lý kệ theo chủng loại, màu sắc và khách hàng không? Kiểm tra ngẫu nhiên sản phẩm thực tế so với sơ đồ quản lý. Does the warehouse have a rack management layout organized by product type, color, and customer? Conduct random checks comparing actual products against the management layout."
       }
-    ]
+    ],
+    "header": {
+      "title": "1. Kho Nguyên Liệu & Thành Phẩm / Raw Material & Finished Goods Warehouse"
+    }
   },
   "Lamination": {
     "meta": {
@@ -388,7 +391,10 @@ export const MQAA_RE_AUDIT_CRITERIA = {
         "titleEn": "Are the regulations regarding lighting standards for the product visual inspection stage being complied with?",
         "rawText": "*2.1.23. Có tuân thủ quy định về tiêu chuẩn ánh sáng ở công đoạn kiểm tra ngoại quan sản phẩm không?\nAre the regulations regarding lighting standards for the product visual inspection stage being complied with?"
       }
-    ]
+    ],
+    "header": {
+      "title": "2. Công đoạn dán / Lamination"
+    }
   },
   "Saw Cutting (Pre-fitting)": {
     "meta": {
@@ -499,7 +505,10 @@ export const MQAA_RE_AUDIT_CRITERIA = {
         "titleEn": "Are work-in-process arranged and covered in accordance with regulations after cutting?",
         "rawText": "3.1.11. Bán thành phẩm sau cắt có được sắp đặt và che chắn theo quy định không?\nAre work-in-process arranged and covered in accordance with regulations after cutting?"
       }
-    ]
+    ],
+    "header": {
+      "title": "3. Công đoạn cắt tấm / Saw Cutting (Pre-fitting)"
+    }
   },
   "Moulding (Hot-Press)": {
     "meta": {
@@ -691,7 +700,10 @@ export const MQAA_RE_AUDIT_CRITERIA = {
         "titleEn": "Are the regulations regarding the placement, storage, and use of mold release agents being followed?",
         "rawText": "*4.1.20. Có tuân thủ quy định đặt để, bảo quản và sử dụng chất chống bám dính trên khuôn không?\nAre the regulations regarding the placement, storage, and use of mold release agents being followed?"
       }
-    ]
+    ],
+    "header": {
+      "title": "4. Công đoạn thành hình / Moulding (Hot-Press)"
+    }
   },
   "Cutting Pairs": {
     "meta": {
@@ -847,7 +859,10 @@ export const MQAA_RE_AUDIT_CRITERIA = {
         "titleEn": "",
         "rawText": "5.1.16. Dao chặt có được sắp xếp gọn gàng, đặt đúng vị trí theo quy định, tránh mặt dao tiếp xúc với bề mặt kim loại khác không? Are the cutting die arranged neatly and placed in their designated locations, ensuring the blade does not come into contact with other metal surfaces?"
       }
-    ]
+    ],
+    "header": {
+      "title": "5. Công đoạn chặt đôi / Cutting Pairs"
+    }
   },
   "Logo Printing": {
     "meta": {
@@ -1048,7 +1063,10 @@ export const MQAA_RE_AUDIT_CRITERIA = {
         "titleEn": "Are there work instructions and safety precautions for replacing high-temperature printing bar?",
         "rawText": "*6.1.21. Có hướng dẫn công việc và lưu ý an toàn khi thay thế trục in ở nhiệt độ cao không?\nAre there work instructions and safety precautions for replacing high-temperature printing bar?"
       }
-    ]
+    ],
+    "header": {
+      "title": "6. Công đoạn In Logo / Logo Printing"
+    }
   },
   "Packing": {
     "meta": {
@@ -1222,7 +1240,10 @@ export const MQAA_RE_AUDIT_CRITERIA = {
         "titleEn": "",
         "rawText": "*7.1.18. Có tuân thủ quy định số lượng loại sản phẩm khác nhau được phép sản xuất trên chuyền tại cùng 1 thời điểm không? Is there compliance with the regulations regarding the number of different product types permitted to be produced on the line simultaneously?"
       }
-    ]
+    ],
+    "header": {
+      "title": "7. Công đoạn Đóng gói / Packing"
+    }
   },
   "Cutting Die & Board Management": {
     "meta": {
@@ -1288,7 +1309,10 @@ export const MQAA_RE_AUDIT_CRITERIA = {
         "titleEn": "Are the regulations regarding the disposal of cutting dies for customers who have stopped placing orders for over a year being followed?",
         "rawText": "8.1.6. Có tuân thủ quy định hủy dao chặt của những khách hàng đã ngừng đặt hàng hơn 1 năm không?\nAre the regulations regarding the disposal of cutting dies for customers who have stopped placing orders for over a year being followed?"
       }
-    ]
+    ],
+    "header": {
+      "title": "8. Quản lý Dao, thớt chặt / Cutting Die and Board Management"
+    }
   },
   "Logo WIP Inventory Management": {
     "meta": {
@@ -1336,7 +1360,10 @@ export const MQAA_RE_AUDIT_CRITERIA = {
         "titleEn": "",
         "rawText": "9.1.4. Phòng lưu trữ logo tồn trong sản xuất có tuân thủ quy định nhiệt độ phòng: 27 +/- 2°C; RH (%): 50 +/- 10% và tránh ánh nắng mặt trời chiếu trực tiếp vào logo không? Does the production logo storage room comply with the specified conditions—temperature: 27 ± 2°C; relative humidity (RH): 50 ± 10%—and is it protected from direct sunlight?"
       }
-    ]
+    ],
+    "header": {
+      "title": "9. Quản lý Logo tồn ở Sản xuất / Logo WIP Inventory Management"
+    }
   },
   "Laboratory": {
     "meta": {
@@ -1546,6 +1573,9 @@ export const MQAA_RE_AUDIT_CRITERIA = {
         "titleEn": "Ensure that records are clear, easy to understand, and complete. Raw data and original reports must be retained for at least one year and remain easily retrievable. Test results must be uploaded to the system within 24 hours of test completion.",
         "rawText": "10.1.22. Có đảm bảo Hồ sơ rõ ràng, dễ hiểu và đầy đủ. Dữ liệu thô và báo cáo gốc được lưu trữ trong ít nhất 1 năm và đảm bảo khả năng truy xuất dễ dàng. Kết quả thử nghiệm phải được tải lên hệ thống trong vòng 24 giờ sau khi hoàn tất thử nghiệm.\nEnsure that records are clear, easy to understand, and complete. Raw data and original reports must be retained for at least one year and remain easily retrievable. Test results must be uploaded to the system within 24 hours of test completion."
       }
-    ]
+    ],
+    "header": {
+      "title": "10. Phòng thí nghiệm / Laboratory"
+    }
   }
 };
