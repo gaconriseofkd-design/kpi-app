@@ -31,7 +31,7 @@ function setCell(xml, cellRef, value, type = "num", style = null) {
 
     if (type === "str" || type === "inlineStr") {
         const escaped = escapeXml(value);
-        newCell = `<c r="${cellRef}"${sAttr} t="inlineStr"><is><t>${escaped}</t></is></c>`;
+        newCell = `<c r="${cellRef}"${sAttr} t="inlineStr"><is><t xml:space="preserve">${escaped}</t></is></c>`;
     } else if (type === "formula") {
         const fEscaped = escapeXml(value.formula || value);
         const vVal = value.value !== undefined ? `<v>${value.value}</v>` : "";
@@ -219,27 +219,27 @@ export async function exportReAuditExcel({
   <xdr:twoCellAnchor editAs="oneCell">
     <xdr:from>
       <xdr:col>9</xdr:col>
-      <xdr:colOff>10000</xdr:colOff>
+      <xdr:colOff>0</xdr:colOff>
       <xdr:row>${row0}</xdr:row>
-      <xdr:rowOff>10000</xdr:rowOff>
+      <xdr:rowOff>0</xdr:rowOff>
     </xdr:from>
     <xdr:to>
-      <xdr:col>10</xdr:col>
-      <xdr:colOff>0</xdr:colOff>
-      <xdr:row>${row0 + 1}</xdr:row>
-      <xdr:rowOff>0</xdr:rowOff>
+      <xdr:col>9</xdr:col>
+      <xdr:colOff>1016000</xdr:colOff>
+      <xdr:row>${row0}</xdr:row>
+      <xdr:rowOff>762000</xdr:rowOff>
     </xdr:to>
     <xdr:pic>
       <xdr:nvPicPr>
-        <xdr:cNvPr id="${imgIndex + 10}" name="Picture ${imgIndex}"/>
-        <xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr>
+        <xdr:cNvPr id="${imgIndex + 2}" name="Picture ${imgIndex}"/>
+        <xdr:cNvPicPr><a:picLocks/></xdr:cNvPicPr>
       </xdr:nvPicPr>
       <xdr:blipFill>
         <a:blip xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" r:embed="${rId}"/>
         <a:stretch><a:fillRect/></a:stretch>
       </xdr:blipFill>
       <xdr:spPr>
-        <a:xfrm><a:off x="0" y="0"/><a:ext cx="100000" cy="100000"/></a:xfrm>
+        <a:xfrm><a:off x="0" y="0"/><a:ext cx="1016000" cy="762000"/></a:xfrm>
         <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
       </xdr:spPr>
     </xdr:pic>
@@ -252,14 +252,14 @@ export async function exportReAuditExcel({
             const relsXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\r\n${relationships.join("\r\n")}\r\n</Relationships>`;
             zip.file("xl/drawings/_rels/drawing1.xml.rels", relsXml);
 
-            const drXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">\r\n${anchors.join("\r\n")}\r\n</xdr:wsDr>`;
+            const drXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\r\n<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">${anchors.join("")}\r\n</xdr:wsDr>`;
             zip.file("xl/drawings/drawing1.xml", drXml);
 
             let ct = await zip.file("[Content_Types].xml").async("text");
             if (!ct.includes('Extension="jpg"')) {
                 ct = ct.replace(
-                    "</Types>",
-                    '<Default Extension="jpg" ContentType="image/jpeg"/><Default Extension="jpeg" ContentType="image/jpeg"/></Types>'
+                    "<Override",
+                    '<Default Extension="jpg" ContentType="image/jpeg"/><Override'
                 );
                 zip.file("[Content_Types].xml", ct);
             }
