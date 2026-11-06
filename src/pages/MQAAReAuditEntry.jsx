@@ -40,7 +40,41 @@ export default function MQAAReAuditEntry() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const baseItems = sectionConfig.items || [];
+            // 1. Fetch dynamic criteria from Supabase for this Re-Audit section
+            const dbSectionId = `RE_AUDIT__${section}`;
+            const { data: dbCriteria, error: critErr } = await supabase
+                .from("mqaa_patrol_criteria")
+                .select("*")
+                .eq("section_id", dbSectionId)
+                .order("sort_order", { ascending: true });
+
+            let baseItems = [];
+            if (dbCriteria && dbCriteria.length > 0) {
+                // Map static excelRow lookup if available
+                const staticMap = {};
+                (sectionConfig.items || []).forEach((it) => {
+                    const clean = String(it.no || "").replace(/\*/g, "").trim();
+                    if (clean) staticMap[clean] = it.excelRow;
+                });
+
+                baseItems = dbCriteria.map((c, idx) => {
+                    const isCrit = Boolean(c.is_header || (c.no && c.no.startsWith("*")));
+                    const isNA = c.max_score <= 0;
+                    const cleanNo = String(c.no || "").replace(/\*/g, "").trim();
+                    const excelRow = staticMap[cleanNo] || (sectionConfig.meta?.start_row ? sectionConfig.meta.start_row + idx : undefined);
+
+                    return {
+                        excelRow: excelRow,
+                        no: c.no,
+                        titleVn: c.label,
+                        titleEn: c.sub_label || "",
+                        maxScore: isNA ? "N/A" : c.max_score,
+                        isCritical: isCrit,
+                    };
+                });
+            } else {
+                baseItems = sectionConfig.items || [];
+            }
 
             let initialRows = baseItems.map((item, idx) => ({
                 index: idx + 1,

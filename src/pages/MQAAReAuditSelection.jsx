@@ -3,6 +3,8 @@ import { useState, useEffect } from "react";
 import { supabase } from "../lib/supabaseClient";
 import { MQAA_RE_AUDIT_SECTIONS, MQAA_RE_AUDIT_CRITERIA } from "../data/mqaaReAuditCriteria";
 import { usePatrolTarget } from "../utils/mqaaSettings";
+import PasswordModal from "../components/PasswordModal";
+import MQAASettingsModal from "../components/MQAASettingsModal";
 
 const DEFAULT_AUDITOR_NAME = "Ngô Thị Bích Ngọc";
 const AUDITOR_STORAGE_KEY = "mqaa_reassessment_auditor_name";
@@ -10,6 +12,8 @@ const AUDITOR_STORAGE_KEY = "mqaa_reassessment_auditor_name";
 export default function MQAAReAuditSelection() {
     const navigate = useNavigate();
     const { targetScore } = usePatrolTarget();
+    const [showSettings, setShowSettings] = useState(false);
+    const [showPasswordModal, setShowPasswordModal] = useState(false);
 
     // Auditor State (persisted to localStorage)
     const [auditorName, setAuditorName] = useState(() => {
@@ -63,6 +67,20 @@ export default function MQAAReAuditSelection() {
 
     return (
         <div className="min-h-screen bg-slate-100 p-4 md:p-8 font-sans">
+            <PasswordModal
+                isOpen={showPasswordModal}
+                onClose={() => setShowPasswordModal(false)}
+                onSuccess={() => setShowSettings(true)}
+                initialTitle="Cài đặt hệ thống MQAA"
+            />
+
+            <MQAASettingsModal
+                isOpen={showSettings}
+                onClose={() => setShowSettings(false)}
+                initialTab="form"
+                initialFormMode="re_audit"
+            />
+
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
                 <div className="flex items-center gap-4">
@@ -182,6 +200,17 @@ export default function MQAAReAuditSelection() {
                             <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
                         </svg>
                         Guide
+                    </button>
+
+                    <button
+                        onClick={() => setShowPasswordModal(true)}
+                        className="p-2.5 bg-white text-slate-500 hover:text-amber-600 rounded-xl border border-slate-200 shadow-sm transition"
+                        title="Cài đặt hệ thống (Manage Forms)"
+                    >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37a1.724 1.724 0 002.572-1.065z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        </svg>
                     </button>
                 </div>
             </div>
